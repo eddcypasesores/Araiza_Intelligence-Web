@@ -2,6 +2,69 @@
 import sqlite3
 import pandas as pd  # puede usarse en otros helpers
 from .config import DB_PATH
+from .config import ROUTES_CSV
+import csv
+
+def _seed_routes_if_empty(conn):
+    cur = conn.cursor()
+    # ¿ya hay vías/plazas?
+    vcount = cur.execute("SELECT COUNT(*) FROM vias").fetchone()[0]
+    pcount = cur.execute("SELECT COUNT(*) FROM plazas").fetchone()[0]
+    if vcount > 0 or pcount > 0:
+        return  # ya está cargado
+
+    # Cargar CSV (de tu repo)
+    try:
+        path = ROUTES_CSV
+        if not path.exists():
+            print(f"[ETL] No se encontró archivo de rutas: {path}")
+            return
+        print(f"[ETL] Sembrando vías/plazas desde: {path}")
+
+        # Estructura esperada mínima:
+        # ruta, via, orden, plaza, lat, lon, clase, tarifa_mxn
+        with open(path, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            vias_cache = {}  # nombre -> id
+            for row in reader:
+                via_nom   = (row.get("via") or "").strip()
+                plaza_nom = (row.get("plaza") or "").strip()
+                orden     = int(float(row.get("orden") or 0))
+                lat       = float(row.get("lat") or 0) if row.get("lat") else None
+                lon       = float(row.get("lon") or 0) if row.get("lon") else None
+                clase     = (row.get("clase") or "").strip().upper()
+                tarifa    = float(row.get("tarifa_mxn") or 0)
+
+                if not via_nom or not plaza_nom:
+                    continue
+
+                # via
+                via_id = vias_cache.get(via_nom)
+                if via_id is None:
+                    cur.execute("INSERT OR IGNORE INTO vias(nombre) VALUES(?)", (via_nom,))
+                    via_id = cur.execute("SELECT id FROM vias WHERE nombre=?", (via_nom,)).fetchone()[0]
+                    vias_cache[via_nom] = via_id
+
+                # plaza
+                cur.execute("""
+                    INSERT OR IGNORE INTO plazas(via_id, nombre, orden, lat, lon)
+                    VALUES(?,?,?,?,?)
+                """, (via_id, plaza_nom, orden, lat, lon))
+                plaza_id = cur.execute("""
+                    SELECT id FROM plazas WHERE via_id=? AND nombre=?
+                """, (via_id, plaza_nom)).fetchone()[0]
+
+                # tarifa (si viene clase/tarifa)
+                if clase:
+                    cur.execute("""
+                        INSERT OR REPLACE INTO plaza_tarifas(plaza_id, clase, tarifa_mxn)
+                        VALUES(?,?,?)
+                    """, (plaza_id, clase, tarifa))
+        conn.commit()
+        print("[ETL] Sembrado de vías/plazas/tarifas completado.")
+    except Exception as e:
+        print(f"[ETL] Error sembrando rutas: {e}")
+
 
 # =========================
 # Conexión
@@ -87,6 +150,16 @@ def ensure_schema(conn):
     _ensure_column(conn, "trabajadores", "numero_economico",   "numero_economico TEXT")
     _ensure_column(conn, "trabajadores", "fecha_registro",     "fecha_registro TEXT")
     _ensure_column(conn, "trabajadores", "salario_diario",     "salario_diario REAL DEFAULT 0")
+    # Campos esperados por 3_Trabajadores.py
+    _ensure_column(conn, "trabajadores", "nombre",                "nombre TEXT")
+    _ensure_column(conn, "trabajadores", "salario_mensual",       "salario_mensual REAL DEFAULT 0")
+    _ensure_column(conn, "trabajadores", "imss_pct",              "imss_pct REAL DEFAULT 0")
+    _ensure_column(conn, "trabajadores", "carga_social_pct",      "carga_social_pct REAL DEFAULT 0")
+    _ensure_column(conn, "trabajadores", "aguinaldo_dias",        "aguinaldo_dias REAL DEFAULT 0")
+    _ensure_column(conn, "trabajadores", "prima_vacacional_pct",  "prima_vacacional_pct REAL DEFAULT 0")
+    _ensure_column(conn, "trabajadores", "horas_por_dia",         "horas_por_dia REAL DEFAULT 8")
+    _ensure_column(conn, "trabajadores", "dias_laborales_mes",    "dias_laborales_mes REAL DEFAULT 30")
+
     conn.execute("""
       CREATE TABLE IF NOT EXISTS usuario_trabajador(
         usuario_id INTEGER NOT NULL UNIQUE,
