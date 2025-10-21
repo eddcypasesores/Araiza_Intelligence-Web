@@ -1,0 +1,43 @@
+/* styles.css — diseño de secciones unificadas */
+.block-container {padding-top: 1.25rem; padding-bottom: 2rem;}
+.hero-title{
+  text-transform:uppercase;
+  font-size:2.1rem; font-weight:900; letter-spacing:.8px;
+  margin:.2rem 0 1.0rem;
+}
+.section{
+  border:1px solid #eaeaea; border-radius:1rem; padding:1rem 1.2rem;
+  background:white; margin-bottom:1rem;
+}
+.section-head{
+  display:flex; align-items:center; gap:.65rem; margin-bottom:.6rem;
+}
+.section-head .icon{font-size:28px; line-height:1;}
+.section-head .title{
+  text-transform:uppercase;
+  font-weight:800; letter-spacing:.6px; font-size:1.25rem;
+}
+.section-divider{
+  border:0; height:3px; background:#0b57d0; margin:1rem 0 1.2rem; border-radius:4px;
+}
+.total-right{
+  width:100%; display:flex; justify-content:flex-end; align-items:center;
+}
+.total-pill{
+  font-weight:900; font-size:1.15rem;
+  padding:.48rem .72rem; border-radius:.55rem;
+  background:#cfe4ff; color:#0b3c91;
+  border:1px solid rgba(11,60,145,.2);
+}
+.small-note{font-size:12px; opacity:.75;}
+
+/* Icono por imagen */
+.icon-img{
+  width:28px; height:28px; object-fit:contain; display:inline-block;
+}
+
+/* Línea divisora (usamos div en lugar de <hr>) */
+.section-divider{
+  height:3px; background:#0b57d0; border-radius:4px; margin:1rem 0 1.2rem;
+}
+
