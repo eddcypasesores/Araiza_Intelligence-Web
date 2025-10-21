@@ -7,9 +7,13 @@ from .config import DB_PATH
 # Conexión
 # =========================
 def get_conn():
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.execute("PRAGMA foreign_keys = ON")
+    conn = sqlite3.connect(str(DB_PATH), timeout=30)  # + tiempo de espera
+    conn.execute("PRAGMA journal_mode = WAL;")        # lecturas concurrentes
+    conn.execute("PRAGMA synchronous = NORMAL;")
+    conn.execute("PRAGMA busy_timeout = 8000;")       # espera hasta 8s si está bloqueada
+    conn.execute("PRAGMA foreign_keys = ON;")
     return conn
+
 
 def _column_exists(conn, table: str, col: str) -> bool:
     cur = conn.execute(f"PRAGMA table_info({table})")
@@ -227,33 +231,73 @@ def clear_usuario_trabajador(conn, username: str):
 
 # ---------- NUEVO: helpers de parámetros ----------
 def _seed_parametros_v1(conn):
-    """
-    Inserta una versión v1 con valores razonables (alineados a tu Excel ejemplo).
-    Puedes ajustarlos luego desde la pantalla Admin.
-    """
     cur = conn.cursor()
-    cur.execute("INSERT INTO param_costeo_version(nombre, vigente_desde, notas) VALUES(?,?,?)",
-                ("v1", None, "Versión inicial sembrada automáticamente"))
-    vid = cur.lastrowid
 
-    cur.execute("INSERT INTO param_diesel VALUES (?,?,?)", (vid, 2.8, 26.5))
-    cur.execute("INSERT INTO param_def VALUES (?,?,?)", (vid, 0.04, 20.0))
-    cur.execute("INSERT INTO param_tag VALUES (?,?)", (vid, 0.02))
-    cur.execute("INSERT INTO param_costos_km VALUES (?,?,?)", (vid, 1.80, 1.50))
-    cur.execute("INSERT INTO param_depreciacion VALUES (?,?,?,?,?)", (vid, 2500000.0, 250000.0, 5, 100000))
-    cur.execute("INSERT INTO param_seguros VALUES (?,?,?)", (vid, 120000.0, 100000))
-    cur.execute("INSERT INTO param_financiamiento VALUES (?,?,?)", (vid, 0.25, 30))
-    cur.execute("INSERT INTO param_overhead VALUES (?,?)", (vid, 0.10))
-    cur.execute("INSERT INTO param_utilidad VALUES (?,?)", (vid, 0.00))
-    # ✅ bien: columnas explícitas y 4 placeholders
+    # 1) Crear/obtener versión v1
     cur.execute("""
-        INSERT INTO param_otros (version_id, viatico_dia, permiso_viaje, custodia_km)
+        INSERT OR IGNORE INTO param_costeo_version(nombre, vigente_desde, notas)
+        VALUES(?,?,?)
+    """, ("v1", None, "Versión inicial sembrada automáticamente"))
+    vid = cur.execute("SELECT id FROM param_costeo_version WHERE nombre=?", ("v1",)).fetchone()[0]
+
+    # 2) Insertar cada bloque SOLO si no existe (clave = version_id)
+    cur.execute("""
+        INSERT OR IGNORE INTO param_diesel(version_id, rendimiento_km_l, precio_litro)
+        VALUES (?,?,?)
+    """, (vid, 2.8, 26.5))
+
+    cur.execute("""
+        INSERT OR IGNORE INTO param_def(version_id, pct_def, precio_def_litro)
+        VALUES (?,?,?)
+    """, (vid, 0.04, 20.0))
+
+    cur.execute("""
+        INSERT OR IGNORE INTO param_tag(version_id, pct_comision_tag)
+        VALUES (?,?)
+    """, (vid, 0.02))
+
+    cur.execute("""
+        INSERT OR IGNORE INTO param_costos_km(version_id, costo_llantas_km, costo_mantto_km)
+        VALUES (?,?,?)
+    """, (vid, 1.80, 1.50))
+
+    cur.execute("""
+        INSERT OR IGNORE INTO param_depreciacion(version_id, costo_adq, valor_residual, vida_anios, km_anuales)
+        VALUES (?,?,?,?,?)
+    """, (vid, 2500000.0, 250000.0, 5, 100000))
+
+    cur.execute("""
+        INSERT OR IGNORE INTO param_seguros(version_id, prima_anual, km_anuales)
+        VALUES (?,?,?)
+    """, (vid, 120000.0, 100000))
+
+    cur.execute("""
+        INSERT OR IGNORE INTO param_financiamiento(version_id, tasa_anual, dias_cobro)
+        VALUES (?,?,?)
+    """, (vid, 0.25, 30))
+
+    cur.execute("""
+        INSERT OR IGNORE INTO param_overhead(version_id, pct_overhead)
+        VALUES (?,?)
+    """, (vid, 0.10))
+
+    cur.execute("""
+        INSERT OR IGNORE INTO param_utilidad(version_id, pct_utilidad)
+        VALUES (?,?)
+    """, (vid, 0.00))
+
+    cur.execute("""
+        INSERT OR IGNORE INTO param_otros(version_id, viatico_dia, permiso_viaje, custodia_km)
         VALUES (?,?,?,?)
     """, (vid, 900.0, 500.0, 0.0))
 
-    cur.execute("INSERT INTO param_politicas VALUES (?,?)",
-                (vid, '["peajes","diesel","llantas","mantto","depreciacion","seguros","viaticos","permisos","def","custodia","tag"]'))
+    cur.execute("""
+        INSERT OR IGNORE INTO param_politicas(version_id, incluye_en_base)
+        VALUES (?,?)
+    """, (vid, '["peajes","diesel","llantas","mantto","depreciacion","seguros","viaticos","permisos","def","custodia","tag"]'))
+
     conn.commit()
+
 
 def get_active_version_id(conn) -> int:
     """
