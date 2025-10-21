@@ -14,30 +14,33 @@ def _seed_routes_if_empty(conn):
     if vcount > 0 or pcount > 0:
         return
 
-    # 1) Intentar desde CSV
+    CLASES = ["MOTO","AUTOMOVIL","B2","B3","B4","T2","T3","T4","T5","T6","T7","T8","T9"]
+
     try:
         path = ROUTES_CSV
         if path.exists():
-            vias_cache = {}
             with open(path, newline="", encoding="utf-8") as f:
                 reader = csv.DictReader(f)
+                vias_cache = {}
+
                 for row in reader:
-                    via_nom   = (row.get("via") or "").strip()
-                    plaza_nom = (row.get("plaza") or "").strip()
+                    via_nom   = (row.get("via") or row.get("VIA") or "").strip()
+                    plaza_nom = (row.get("plaza") or row.get("PLAZA") or "").strip()
                     if not via_nom or not plaza_nom:
                         continue
-                    orden = int(float(row.get("orden") or 0))
-                    lat   = float(row.get("lat") or 0) if row.get("lat") else None
-                    lon   = float(row.get("lon") or 0) if row.get("lon") else None
-                    clase = (row.get("clase") or "").strip().upper()
-                    tarifa= float(row.get("tarifa_mxn") or 0)
 
+                    orden = int(float(row.get("orden") or row.get("ORDEN") or 0))
+                    lat   = float(row.get("lat") or row.get("LAT") or 0) if (row.get("lat") or row.get("LAT")) else None
+                    lon   = float(row.get("lon") or row.get("LON") or 0) if (row.get("lon") or row.get("LON")) else None
+
+                    # upsert vía
                     via_id = vias_cache.get(via_nom)
                     if via_id is None:
                         cur.execute("INSERT OR IGNORE INTO vias(nombre) VALUES(?)", (via_nom,))
                         via_id = cur.execute("SELECT id FROM vias WHERE nombre=?", (via_nom,)).fetchone()[0]
                         vias_cache[via_nom] = via_id
 
+                    # upsert plaza
                     cur.execute("""
                         INSERT OR IGNORE INTO plazas(via_id, nombre, orden, lat, lon)
                         VALUES(?,?,?,?,?)
@@ -46,17 +49,54 @@ def _seed_routes_if_empty(conn):
                         SELECT id FROM plazas WHERE via_id=? AND nombre=?
                     """, (via_id, plaza_nom)).fetchone()[0]
 
-                    if clase:
-                        cur.execute("""
-                            INSERT OR REPLACE INTO plaza_tarifas(plaza_id, clase, tarifa_mxn)
-                            VALUES(?,?,?)
-                        """, (plaza_id, clase, tarifa))
+                    # --- tarifas: soporta CSV "alto" o "ancho" ---
+
+                    # Formato "alto": columnas 'clase' y 'tarifa_mxn'
+                    clase_alta = (row.get("clase") or row.get("CLASE") or "").strip().upper()
+                    tarifa_alta = row.get("tarifa_mxn") or row.get("TARIFA_MXN")
+
+                    inserted = 0
+                    if clase_alta and tarifa_alta is not None:
+                        try:
+                            cur.execute("""
+                                INSERT OR REPLACE INTO plaza_tarifas(plaza_id, clase, tarifa_mxn)
+                                VALUES(?,?,?)
+                            """, (plaza_id, clase_alta, float(tarifa_alta or 0)))
+                            inserted += 1
+                        except Exception:
+                            pass
+
+                    # Formato "ancho": columnas por clase (MOTO, AUTOMOVIL, T2..T9)
+                    ancho_inserto = 0
+                    for c in CLASES:
+                        val = row.get(c) or row.get(c.upper())
+                        if val is None or str(val).strip() == "":
+                            continue
+                        try:
+                            cur.execute("""
+                                INSERT OR REPLACE INTO plaza_tarifas(plaza_id, clase, tarifa_mxn)
+                                VALUES(?,?,?)
+                            """, (plaza_id, c, float(val)))
+                            ancho_inserto += 1
+                        except Exception:
+                            pass
+
+                    if inserted == 0 and ancho_inserto == 0:
+                        # si no hubo tarifas en ninguna forma, al menos deja AUTOMOVIL/T5=0
+                        for c in ("AUTOMOVIL","T5"):
+                            cur.execute("""
+                                INSERT OR IGNORE INTO plaza_tarifas(plaza_id, clase, tarifa_mxn)
+                                VALUES(?,?,?)
+                            """, (plaza_id, c, 0.0))
             conn.commit()
+            print("[ETL] Rutas/plazas/tarifas cargadas desde CSV.")
             return
+        else:
+            print(f"[ETL] CSV no encontrado en {path}")
     except Exception as e:
         print(f"[ETL] Error leyendo CSV: {e}")
 
-    # 2) Fallback mínimo (para que la app no quede bloqueada)
+    # Fallback mínimo (si no hay CSV)
     try:
         cur.execute("INSERT OR IGNORE INTO vias(nombre) VALUES(?)", ("VIA GENÉRICA",))
         via_id = cur.execute("SELECT id FROM vias WHERE nombre=?", ("VIA GENÉRICA",)).fetchone()[0]
@@ -66,16 +106,15 @@ def _seed_routes_if_empty(conn):
         """, (via_id, "PLAZA DEMO", 1, None, None))
         plaza_id = cur.execute("SELECT id FROM plazas WHERE via_id=? AND nombre=?",
                                (via_id, "PLAZA DEMO")).fetchone()[0]
-        for clase in ("T5", "AUTOMOVIL"):
+        for c in ("AUTOMOVIL","T5"):
             cur.execute("""
                 INSERT OR REPLACE INTO plaza_tarifas(plaza_id, clase, tarifa_mxn)
                 VALUES(?,?,?)
-            """, (plaza_id, clase, 100.0))
+            """, (plaza_id, c, 100.0))
         conn.commit()
         print("[ETL] Seed de rutas mínimo creado (sin CSV).")
     except Exception as e:
         print(f"[ETL] Fallback de rutas falló: {e}")
-
 
 # =========================
 # Conexión

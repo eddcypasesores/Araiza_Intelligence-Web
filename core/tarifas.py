@@ -17,16 +17,23 @@ def resolve_plaza_candidates(conn, input_name: str) -> list[str]:
     return relaxed[:5]
 
 def tarifa_por_plaza(conn, plaza_nombre: str, clase: str) -> float:
-    cand = resolve_plaza_candidates(conn, plaza_nombre)
-    if not cand:
-        return 0.0
-    placeholders = ",".join(["?"] * len(cand))
-    sql = f"""
-        SELECT MAX(CAST(t.tarifa_mxn AS REAL)) AS tarifa
-        FROM plazas p
-        JOIN plaza_tarifas t ON t.plaza_id = p.id AND t.clase = ?
-        WHERE p.nombre IN ({placeholders})
-    """
-    df = pd.read_sql_query(sql, conn, params=[clase, *cand])
-    val = df.iloc[0]["tarifa"]
-    return float(val) if val is not None else 0.0
+    c = clase.strip().upper()
+    cur = conn.cursor()
+    row = cur.execute("""
+        SELECT pt.tarifa_mxn
+        FROM plaza_tarifas pt
+        JOIN plazas p ON p.id = pt.plaza_id
+        WHERE p.nombre = ? AND pt.clase = ?
+    """, (plaza_nombre, c)).fetchone()
+    if row: 
+        return float(row[0] or 0.0)
+
+    # fallback a AUTOMOVIL si no existe la clase pedida
+    row = cur.execute("""
+        SELECT pt.tarifa_mxn
+        FROM plaza_tarifas pt
+        JOIN plazas p ON p.id = pt.plaza_id
+        WHERE p.nombre = ? AND pt.clase = 'AUTOMOVIL'
+    """, (plaza_nombre,)).fetchone()
+    return float(row[0] or 0.0) if row else 0.0
+
