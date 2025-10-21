@@ -1,0 +1,6 @@
+# Ignorar la base de datos (si no quieres que se suba)
+db/tolls.db
+
+# Archivos de caché de Python
+__pycache__/
+*.pyc
