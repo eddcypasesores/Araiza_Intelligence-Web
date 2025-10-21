@@ -7,11 +7,18 @@ from .config import DB_PATH
 # Conexión
 # =========================
 def get_conn():
-    conn = sqlite3.connect(str(DB_PATH), timeout=30)  # + tiempo de espera
-    conn.execute("PRAGMA journal_mode = WAL;")        # lecturas concurrentes
-    conn.execute("PRAGMA synchronous = NORMAL;")
-    conn.execute("PRAGMA busy_timeout = 8000;")       # espera hasta 8s si está bloqueada
-    conn.execute("PRAGMA foreign_keys = ON;")
+    # Garantiza que exista el directorio contenedor de la BD
+    DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+
+    # Abre conexión con margen de espera y PRAGMAs seguros para web
+    conn = sqlite3.connect(str(DB_PATH), timeout=30)
+    try:
+        conn.execute("PRAGMA journal_mode = WAL;")    # lecturas concurrentes
+        conn.execute("PRAGMA synchronous = NORMAL;")
+        conn.execute("PRAGMA busy_timeout = 8000;")   # esperar si está ocupada
+        conn.execute("PRAGMA foreign_keys = ON;")
+    except Exception:
+        pass
     return conn
 
 
