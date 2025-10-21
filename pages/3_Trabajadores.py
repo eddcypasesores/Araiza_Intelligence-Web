@@ -68,16 +68,25 @@ with st.expander("🔎 Filtros y búsqueda", expanded=True):
         rol_sel = st.selectbox("Rol de usuario", rol_ops)
 
     with c4:
+        # Suponiendo que df es el DataFrame que lees de 'trabajadores'
+        # Si la tabla está vacía, creamos defaults seguros
         if df.empty:
-            min_sal, max_sal = 0.0, 0.0
+            min_sal = 0.0
+            max_sal = 50000.0
         else:
-            min_sal = float(df["salario_mensual"].min())
-            max_sal = float(df["salario_mensual"].max())
+            min_sal = float(df["salario_mensual"].min() or 0.0)
+            max_sal = float(df["salario_mensual"].max() or 0.0)
+            # Garantiza min < max
+            if max_sal <= min_sal:
+                # si todos son 0 o iguales, abre un rango "usable"
+                min_sal = 0.0
+                max_sal = max(50000.0, (df["salario_mensual"].mean() or 0.0) + 10000.0)
+
         rango = st.slider(
             "Rango de salario mensual (MXN)",
-            min_value=0.0,
-            max_value=max(0.0, round(max_sal, 2)),
-            value=(min_sal, max_sal) if max_sal >= min_sal else (0.0, 0.0),
+            min_value=min_sal,
+            max_value=max_sal,
+            value=(min_sal, max_sal),
             step=100.0,
         )
 

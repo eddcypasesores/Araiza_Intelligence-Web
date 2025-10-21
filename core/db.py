@@ -1,84 +1,92 @@
 # core/db.py
 import sqlite3
 import pandas as pd  # puede usarse en otros helpers
-from .config import DB_PATH
-from .config import ROUTES_CSV
+from .config import DB_PATH, ROUTES_CSV
 import csv
 
+# -------------------------
+# ETL inicial de rutas
+# -------------------------
 def _seed_routes_if_empty(conn):
     cur = conn.cursor()
-    # ¿ya hay vías/plazas?
     vcount = cur.execute("SELECT COUNT(*) FROM vias").fetchone()[0]
     pcount = cur.execute("SELECT COUNT(*) FROM plazas").fetchone()[0]
     if vcount > 0 or pcount > 0:
-        return  # ya está cargado
+        return
 
-    # Cargar CSV (de tu repo)
+    # 1) Intentar desde CSV
     try:
         path = ROUTES_CSV
-        if not path.exists():
-            print(f"[ETL] No se encontró archivo de rutas: {path}")
-            return
-        print(f"[ETL] Sembrando vías/plazas desde: {path}")
+        if path.exists():
+            vias_cache = {}
+            with open(path, newline="", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    via_nom   = (row.get("via") or "").strip()
+                    plaza_nom = (row.get("plaza") or "").strip()
+                    if not via_nom or not plaza_nom:
+                        continue
+                    orden = int(float(row.get("orden") or 0))
+                    lat   = float(row.get("lat") or 0) if row.get("lat") else None
+                    lon   = float(row.get("lon") or 0) if row.get("lon") else None
+                    clase = (row.get("clase") or "").strip().upper()
+                    tarifa= float(row.get("tarifa_mxn") or 0)
 
-        # Estructura esperada mínima:
-        # ruta, via, orden, plaza, lat, lon, clase, tarifa_mxn
-        with open(path, newline="", encoding="utf-8") as f:
-            reader = csv.DictReader(f)
-            vias_cache = {}  # nombre -> id
-            for row in reader:
-                via_nom   = (row.get("via") or "").strip()
-                plaza_nom = (row.get("plaza") or "").strip()
-                orden     = int(float(row.get("orden") or 0))
-                lat       = float(row.get("lat") or 0) if row.get("lat") else None
-                lon       = float(row.get("lon") or 0) if row.get("lon") else None
-                clase     = (row.get("clase") or "").strip().upper()
-                tarifa    = float(row.get("tarifa_mxn") or 0)
+                    via_id = vias_cache.get(via_nom)
+                    if via_id is None:
+                        cur.execute("INSERT OR IGNORE INTO vias(nombre) VALUES(?)", (via_nom,))
+                        via_id = cur.execute("SELECT id FROM vias WHERE nombre=?", (via_nom,)).fetchone()[0]
+                        vias_cache[via_nom] = via_id
 
-                if not via_nom or not plaza_nom:
-                    continue
-
-                # via
-                via_id = vias_cache.get(via_nom)
-                if via_id is None:
-                    cur.execute("INSERT OR IGNORE INTO vias(nombre) VALUES(?)", (via_nom,))
-                    via_id = cur.execute("SELECT id FROM vias WHERE nombre=?", (via_nom,)).fetchone()[0]
-                    vias_cache[via_nom] = via_id
-
-                # plaza
-                cur.execute("""
-                    INSERT OR IGNORE INTO plazas(via_id, nombre, orden, lat, lon)
-                    VALUES(?,?,?,?,?)
-                """, (via_id, plaza_nom, orden, lat, lon))
-                plaza_id = cur.execute("""
-                    SELECT id FROM plazas WHERE via_id=? AND nombre=?
-                """, (via_id, plaza_nom)).fetchone()[0]
-
-                # tarifa (si viene clase/tarifa)
-                if clase:
                     cur.execute("""
-                        INSERT OR REPLACE INTO plaza_tarifas(plaza_id, clase, tarifa_mxn)
-                        VALUES(?,?,?)
-                    """, (plaza_id, clase, tarifa))
-        conn.commit()
-        print("[ETL] Sembrado de vías/plazas/tarifas completado.")
+                        INSERT OR IGNORE INTO plazas(via_id, nombre, orden, lat, lon)
+                        VALUES(?,?,?,?,?)
+                    """, (via_id, plaza_nom, orden, lat, lon))
+                    plaza_id = cur.execute("""
+                        SELECT id FROM plazas WHERE via_id=? AND nombre=?
+                    """, (via_id, plaza_nom)).fetchone()[0]
+
+                    if clase:
+                        cur.execute("""
+                            INSERT OR REPLACE INTO plaza_tarifas(plaza_id, clase, tarifa_mxn)
+                            VALUES(?,?,?)
+                        """, (plaza_id, clase, tarifa))
+            conn.commit()
+            return
     except Exception as e:
-        print(f"[ETL] Error sembrando rutas: {e}")
+        print(f"[ETL] Error leyendo CSV: {e}")
+
+    # 2) Fallback mínimo (para que la app no quede bloqueada)
+    try:
+        cur.execute("INSERT OR IGNORE INTO vias(nombre) VALUES(?)", ("VIA GENÉRICA",))
+        via_id = cur.execute("SELECT id FROM vias WHERE nombre=?", ("VIA GENÉRICA",)).fetchone()[0]
+        cur.execute("""
+            INSERT OR IGNORE INTO plazas(via_id, nombre, orden, lat, lon)
+            VALUES(?,?,?,?,?)
+        """, (via_id, "PLAZA DEMO", 1, None, None))
+        plaza_id = cur.execute("SELECT id FROM plazas WHERE via_id=? AND nombre=?",
+                               (via_id, "PLAZA DEMO")).fetchone()[0]
+        for clase in ("T5", "AUTOMOVIL"):
+            cur.execute("""
+                INSERT OR REPLACE INTO plaza_tarifas(plaza_id, clase, tarifa_mxn)
+                VALUES(?,?,?)
+            """, (plaza_id, clase, 100.0))
+        conn.commit()
+        print("[ETL] Seed de rutas mínimo creado (sin CSV).")
+    except Exception as e:
+        print(f"[ETL] Fallback de rutas falló: {e}")
 
 
 # =========================
 # Conexión
 # =========================
 def get_conn():
-    # Garantiza que exista el directorio contenedor de la BD
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-
-    # Abre conexión con margen de espera y PRAGMAs seguros para web
     conn = sqlite3.connect(str(DB_PATH), timeout=30)
     try:
-        conn.execute("PRAGMA journal_mode = WAL;")    # lecturas concurrentes
+        conn.execute("PRAGMA journal_mode = WAL;")
         conn.execute("PRAGMA synchronous = NORMAL;")
-        conn.execute("PRAGMA busy_timeout = 8000;")   # esperar si está ocupada
+        conn.execute("PRAGMA busy_timeout = 8000;")
         conn.execute("PRAGMA foreign_keys = ON;")
     except Exception:
         pass
@@ -91,10 +99,6 @@ def _column_exists(conn, table: str, col: str) -> bool:
 
 
 def _ensure_column(conn, table: str, col: str, decl_sql: str):
-    """
-    Agrega una columna si no existe.
-    decl_sql debe ser 'columna TYPE [DEFAULT const]' (sin 'ADD COLUMN').
-    """
     if not _column_exists(conn, table, col):
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {decl_sql}")
 
@@ -102,7 +106,7 @@ def _ensure_column(conn, table: str, col: str, decl_sql: str):
 # Esquema / Migración
 # =========================
 def ensure_schema(conn):
-    # ---- EXISTENTE: dominio de peajes/usuarios/trabajadores ----
+    # ---- dominio peajes/usuarios/trabajadores ----
     conn.execute("""
       CREATE TABLE IF NOT EXISTS vias(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -146,11 +150,10 @@ def ensure_schema(conn):
     _ensure_column(conn, "trabajadores", "apellido_materno",   "apellido_materno TEXT")
     _ensure_column(conn, "trabajadores", "edad",               "edad INTEGER DEFAULT 0")
     _ensure_column(conn, "trabajadores", "rol_trabajador",     "rol_trabajador TEXT")
-    # IMPORTANTE: sin UNIQUE aquí (SQLite no permite ADD COLUMN UNIQUE)
     _ensure_column(conn, "trabajadores", "numero_economico",   "numero_economico TEXT")
     _ensure_column(conn, "trabajadores", "fecha_registro",     "fecha_registro TEXT")
     _ensure_column(conn, "trabajadores", "salario_diario",     "salario_diario REAL DEFAULT 0")
-    # Campos esperados por 3_Trabajadores.py
+    # Campos requeridos por 3_Trabajadores.py
     _ensure_column(conn, "trabajadores", "nombre",                "nombre TEXT")
     _ensure_column(conn, "trabajadores", "salario_mensual",       "salario_mensual REAL DEFAULT 0")
     _ensure_column(conn, "trabajadores", "imss_pct",              "imss_pct REAL DEFAULT 0")
@@ -170,15 +173,13 @@ def ensure_schema(conn):
       );
     """)
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_plaza_clase ON plaza_tarifas(plaza_id, clase)")
-
-    # Índice único (parcial) para respetar unicidad de numero_economico, ignorando NULL/''.
     conn.execute("""
       CREATE UNIQUE INDEX IF NOT EXISTS ux_trab_numeco
       ON trabajadores(numero_economico)
       WHERE numero_economico IS NOT NULL AND numero_economico <> '';
     """)
 
-    # ---- NUEVO: PARÁMETROS VERSIONADOS DE COSTEO ----
+    # ---- parámetros versionados ----
     conn.execute("""
       CREATE TABLE IF NOT EXISTS param_costeo_version(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -271,7 +272,7 @@ def ensure_schema(conn):
     conn.execute("""
       CREATE TABLE IF NOT EXISTS param_politicas(
         version_id INTEGER PRIMARY KEY,
-        incluye_en_base TEXT NOT NULL, -- JSON con lista de conceptos
+        incluye_en_base TEXT NOT NULL,
         FOREIGN KEY(version_id) REFERENCES param_costeo_version(id) ON DELETE CASCADE
       );
     """)
@@ -291,11 +292,14 @@ def ensure_schema(conn):
     if (cur.fetchone() or [0])[0] == 0:
         _seed_parametros_v1(conn)
 
+    # >>> IMPORTANTE: cargar rutas/plazas/tarifas si está vacío
+    _seed_routes_if_empty(conn)
+
+
 # ---------- Helpers de autenticación / relación ----------
 def validar_usuario(conn, username: str, password: str):
     cur = conn.cursor()
     cur.execute("SELECT rol FROM usuarios WHERE username=? AND password=?", (username, password))
-    row = cur.fetchone
     row = cur.fetchone()
     return row[0] if row else None
 
@@ -323,81 +327,32 @@ def clear_usuario_trabajador(conn, username: str):
     conn.execute("DELETE FROM usuario_trabajador WHERE usuario_id=?", (u[0],))
     conn.commit()
 
-# ---------- NUEVO: helpers de parámetros ----------
+
+# ---------- Seeds y versión ----------
 def _seed_parametros_v1(conn):
     cur = conn.cursor()
-
-    # 1) Crear/obtener versión v1
     cur.execute("""
         INSERT OR IGNORE INTO param_costeo_version(nombre, vigente_desde, notas)
         VALUES(?,?,?)
     """, ("v1", None, "Versión inicial sembrada automáticamente"))
     vid = cur.execute("SELECT id FROM param_costeo_version WHERE nombre=?", ("v1",)).fetchone()[0]
 
-    # 2) Insertar cada bloque SOLO si no existe (clave = version_id)
-    cur.execute("""
-        INSERT OR IGNORE INTO param_diesel(version_id, rendimiento_km_l, precio_litro)
-        VALUES (?,?,?)
-    """, (vid, 2.8, 26.5))
-
-    cur.execute("""
-        INSERT OR IGNORE INTO param_def(version_id, pct_def, precio_def_litro)
-        VALUES (?,?,?)
-    """, (vid, 0.04, 20.0))
-
-    cur.execute("""
-        INSERT OR IGNORE INTO param_tag(version_id, pct_comision_tag)
-        VALUES (?,?)
-    """, (vid, 0.02))
-
-    cur.execute("""
-        INSERT OR IGNORE INTO param_costos_km(version_id, costo_llantas_km, costo_mantto_km)
-        VALUES (?,?,?)
-    """, (vid, 1.80, 1.50))
-
-    cur.execute("""
-        INSERT OR IGNORE INTO param_depreciacion(version_id, costo_adq, valor_residual, vida_anios, km_anuales)
-        VALUES (?,?,?,?,?)
-    """, (vid, 2500000.0, 250000.0, 5, 100000))
-
-    cur.execute("""
-        INSERT OR IGNORE INTO param_seguros(version_id, prima_anual, km_anuales)
-        VALUES (?,?,?)
-    """, (vid, 120000.0, 100000))
-
-    cur.execute("""
-        INSERT OR IGNORE INTO param_financiamiento(version_id, tasa_anual, dias_cobro)
-        VALUES (?,?,?)
-    """, (vid, 0.25, 30))
-
-    cur.execute("""
-        INSERT OR IGNORE INTO param_overhead(version_id, pct_overhead)
-        VALUES (?,?)
-    """, (vid, 0.10))
-
-    cur.execute("""
-        INSERT OR IGNORE INTO param_utilidad(version_id, pct_utilidad)
-        VALUES (?,?)
-    """, (vid, 0.00))
-
-    cur.execute("""
-        INSERT OR IGNORE INTO param_otros(version_id, viatico_dia, permiso_viaje, custodia_km)
-        VALUES (?,?,?,?)
-    """, (vid, 900.0, 500.0, 0.0))
-
-    cur.execute("""
-        INSERT OR IGNORE INTO param_politicas(version_id, incluye_en_base)
-        VALUES (?,?)
-    """, (vid, '["peajes","diesel","llantas","mantto","depreciacion","seguros","viaticos","permisos","def","custodia","tag"]'))
-
+    cur.execute("""INSERT OR IGNORE INTO param_diesel(version_id, rendimiento_km_l, precio_litro) VALUES (?,?,?)""", (vid, 2.8, 26.5))
+    cur.execute("""INSERT OR IGNORE INTO param_def(version_id, pct_def, precio_def_litro) VALUES (?,?,?)""", (vid, 0.04, 20.0))
+    cur.execute("""INSERT OR IGNORE INTO param_tag(version_id, pct_comision_tag) VALUES (?,?)""", (vid, 0.02))
+    cur.execute("""INSERT OR IGNORE INTO param_costos_km(version_id, costo_llantas_km, costo_mantto_km) VALUES (?,?,?)""", (vid, 1.80, 1.50))
+    cur.execute("""INSERT OR IGNORE INTO param_depreciacion(version_id, costo_adq, valor_residual, vida_anios, km_anuales) VALUES (?,?,?,?,?)""", (vid, 2500000.0, 250000.0, 5, 100000))
+    cur.execute("""INSERT OR IGNORE INTO param_seguros(version_id, prima_anual, km_anuales) VALUES (?,?,?)""", (vid, 120000.0, 100000))
+    cur.execute("""INSERT OR IGNORE INTO param_financiamiento(version_id, tasa_anual, dias_cobro) VALUES (?,?,?)""", (vid, 0.25, 30))
+    cur.execute("""INSERT OR IGNORE INTO param_overhead(version_id, pct_overhead) VALUES (?,?)""", (vid, 0.10))
+    cur.execute("""INSERT OR IGNORE INTO param_utilidad(version_id, pct_utilidad) VALUES (?,?)""", (vid, 0.00))
+    cur.execute("""INSERT OR IGNORE INTO param_otros(version_id, viatico_dia, permiso_viaje, custodia_km) VALUES (?,?,?,?)""", (vid, 900.0, 500.0, 0.0))
+    cur.execute("""INSERT OR IGNORE INTO param_politicas(version_id, incluye_en_base) VALUES (?,?)""",
+                (vid, '["peajes","diesel","llantas","mantto","depreciacion","seguros","viaticos","permisos","def","custodia","tag"]'))
     conn.commit()
 
 
 def get_active_version_id(conn) -> int:
-    """
-    Devuelve la versión vigente (la primera con vigente_desde no nulo y vigente_hasta nulo),
-    o si ninguna está marcada, devuelve la más reciente creada.
-    """
     cur = conn.cursor()
     row = cur.execute("""
       SELECT id FROM param_costeo_version
@@ -411,16 +366,12 @@ def get_active_version_id(conn) -> int:
 
 
 def clone_version(conn, base_version_id: int, new_name: str) -> int:
-    """
-    Clona todos los parámetros de base_version_id a una nueva versión con nombre 'new_name'.
-    """
     cur = conn.cursor()
     cur.execute("INSERT INTO param_costeo_version(nombre) VALUES(?)", (new_name,))
     new_vid = cur.lastrowid
 
     def _copy(table, cols):
         cols_csv = ",".join(cols)
-        # Reemplaza la columna version_id por el nuevo id
         select_cols = ",".join(["? AS version_id" if c == "version_id" else c for c in cols])
         cur.execute(f"""
           INSERT INTO {table} ({cols_csv})
@@ -444,17 +395,12 @@ def clone_version(conn, base_version_id: int, new_name: str) -> int:
 
 
 def publish_version(conn, version_id: int):
-    """
-    Marca una versión como vigente desde hoy y cierra la anterior, si existe.
-    """
     cur = conn.cursor()
-    # Cerrar vigente previa (si la hay)
     cur.execute("""
       UPDATE param_costeo_version
       SET vigente_hasta = DATE('now')
       WHERE vigente_desde IS NOT NULL AND (vigente_hasta IS NULL OR vigente_hasta='')
     """)
-    # Publicar nueva
     cur.execute("""
       UPDATE param_costeo_version
       SET vigente_desde = DATE('now'), vigente_hasta = NULL
