@@ -26,7 +26,12 @@ def _column_exists(conn, table: str, col: str) -> bool:
     cur = conn.execute(f"PRAGMA table_info({table})")
     return any(r[1] == col for r in cur.fetchall())
 
+
 def _ensure_column(conn, table: str, col: str, decl_sql: str):
+    """
+    Agrega una columna si no existe.
+    decl_sql debe ser 'columna TYPE [DEFAULT const]' (sin 'ADD COLUMN').
+    """
     if not _column_exists(conn, table, col):
         conn.execute(f"ALTER TABLE {table} ADD COLUMN {decl_sql}")
 
