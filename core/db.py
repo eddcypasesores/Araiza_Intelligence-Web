@@ -1,6 +1,6 @@
 # core/db.py
 import sqlite3
-import pandas as pd
+import pandas as pd  # puede usarse en otros helpers
 from .config import DB_PATH
 
 # =========================
@@ -83,7 +83,8 @@ def ensure_schema(conn):
     _ensure_column(conn, "trabajadores", "apellido_materno",   "apellido_materno TEXT")
     _ensure_column(conn, "trabajadores", "edad",               "edad INTEGER DEFAULT 0")
     _ensure_column(conn, "trabajadores", "rol_trabajador",     "rol_trabajador TEXT")
-    _ensure_column(conn, "trabajadores", "numero_economico",   "numero_economico TEXT UNIQUE")
+    # IMPORTANTE: sin UNIQUE aquí (SQLite no permite ADD COLUMN UNIQUE)
+    _ensure_column(conn, "trabajadores", "numero_economico",   "numero_economico TEXT")
     _ensure_column(conn, "trabajadores", "fecha_registro",     "fecha_registro TEXT")
     _ensure_column(conn, "trabajadores", "salario_diario",     "salario_diario REAL DEFAULT 0")
     conn.execute("""
@@ -97,7 +98,14 @@ def ensure_schema(conn):
     """)
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS ux_plaza_clase ON plaza_tarifas(plaza_id, clase)")
 
-    # ---- NUEVO: PARAMETROS VERSIONADOS DE COSTEO ----
+    # Índice único (parcial) para respetar unicidad de numero_economico, ignorando NULL/''.
+    conn.execute("""
+      CREATE UNIQUE INDEX IF NOT EXISTS ux_trab_numeco
+      ON trabajadores(numero_economico)
+      WHERE numero_economico IS NOT NULL AND numero_economico <> '';
+    """)
+
+    # ---- NUEVO: PARÁMETROS VERSIONADOS DE COSTEO ----
     conn.execute("""
       CREATE TABLE IF NOT EXISTS param_costeo_version(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -205,7 +213,7 @@ def ensure_schema(conn):
                     ("admin", "1234", "admin"))
         conn.commit()
 
-    # Seed parámetros v1 si no hay versiones
+    # Seed parámetros v1 (idempotente)
     cur.execute("SELECT COUNT(*) FROM param_costeo_version")
     if (cur.fetchone() or [0])[0] == 0:
         _seed_parametros_v1(conn)
@@ -214,6 +222,7 @@ def ensure_schema(conn):
 def validar_usuario(conn, username: str, password: str):
     cur = conn.cursor()
     cur.execute("SELECT rol FROM usuarios WHERE username=? AND password=?", (username, password))
+    row = cur.fetchone
     row = cur.fetchone()
     return row[0] if row else None
 
@@ -322,9 +331,11 @@ def get_active_version_id(conn) -> int:
       WHERE vigente_desde IS NOT NULL AND (vigente_hasta IS NULL OR vigente_hasta='')
       ORDER BY id DESC LIMIT 1
     """).fetchone()
-    if row: return row[0]
+    if row:
+        return row[0]
     row = cur.execute("SELECT id FROM param_costeo_version ORDER BY id DESC LIMIT 1").fetchone()
     return row[0] if row else None
+
 
 def clone_version(conn, base_version_id: int, new_name: str) -> int:
     """
@@ -336,38 +347,41 @@ def clone_version(conn, base_version_id: int, new_name: str) -> int:
 
     def _copy(table, cols):
         cols_csv = ",".join(cols)
+        # Reemplaza la columna version_id por el nuevo id
+        select_cols = ",".join(["? AS version_id" if c == "version_id" else c for c in cols])
         cur.execute(f"""
           INSERT INTO {table} ({cols_csv})
-          SELECT {",".join(["? AS version_id" if c=="version_id" else c for c in cols])}
+          SELECT {select_cols}
           FROM {table} WHERE version_id=?""", (new_vid, base_version_id))
 
-    _copy("param_diesel", ["version_id","rendimiento_km_l","precio_litro"])
-    _copy("param_def", ["version_id","pct_def","precio_def_litro"])
-    _copy("param_tag", ["version_id","pct_comision_tag"])
-    _copy("param_costos_km", ["version_id","costo_llantas_km","costo_mantto_km"])
-    _copy("param_depreciacion", ["version_id","costo_adq","valor_residual","vida_anios","km_anuales"])
-    _copy("param_seguros", ["version_id","prima_anual","km_anuales"])
-    _copy("param_financiamiento", ["version_id","tasa_anual","dias_cobro"])
-    _copy("param_overhead", ["version_id","pct_overhead"])
-    _copy("param_utilidad", ["version_id","pct_utilidad"])
-    _copy("param_otros", ["version_id","viatico_dia","permiso_viaje","custodia_km"])
-    _copy("param_politicas", ["version_id","incluye_en_base"])
+    _copy("param_diesel",        ["version_id","rendimiento_km_l","precio_litro"])
+    _copy("param_def",           ["version_id","pct_def","precio_def_litro"])
+    _copy("param_tag",           ["version_id","pct_comision_tag"])
+    _copy("param_costos_km",     ["version_id","costo_llantas_km","costo_mantto_km"])
+    _copy("param_depreciacion",  ["version_id","costo_adq","valor_residual","vida_anios","km_anuales"])
+    _copy("param_seguros",       ["version_id","prima_anual","km_anuales"])
+    _copy("param_financiamiento",["version_id","tasa_anual","dias_cobro"])
+    _copy("param_overhead",      ["version_id","pct_overhead"])
+    _copy("param_utilidad",      ["version_id","pct_utilidad"])
+    _copy("param_otros",         ["version_id","viatico_dia","permiso_viaje","custodia_km"])
+    _copy("param_politicas",     ["version_id","incluye_en_base"])
 
     conn.commit()
     return new_vid
+
 
 def publish_version(conn, version_id: int):
     """
     Marca una versión como vigente desde hoy y cierra la anterior, si existe.
     """
     cur = conn.cursor()
-    # cerrar vigente previa
+    # Cerrar vigente previa (si la hay)
     cur.execute("""
       UPDATE param_costeo_version
       SET vigente_hasta = DATE('now')
       WHERE vigente_desde IS NOT NULL AND (vigente_hasta IS NULL OR vigente_hasta='')
     """)
-    # publicar nueva
+    # Publicar nueva
     cur.execute("""
       UPDATE param_costeo_version
       SET vigente_desde = DATE('now'), vigente_hasta = NULL
