@@ -1,7 +1,8 @@
 import pandas as pd
 import streamlit as st
 
-from utils import _cols_trabajadores
+from core.utils import _cols_trabajadores
+
 if "usuario" not in st.session_state or "rol" not in st.session_state:
     st.warning("⚠️ Debes iniciar sesión primero.")
     try:

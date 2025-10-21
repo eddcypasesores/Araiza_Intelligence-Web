@@ -58,54 +58,114 @@ st.divider()
 # Edición de parámetros
 params = read_params(conn, current_vid)
 
-def num(name, value, step=0.01, minv=0.0, help_txt=None):
-    return st.number_input(name, value=float(value), step=step, min_value=minv, help=help_txt)
+def num(name, value, step=0.01, minv=0.0, help_txt=None, key=None):
+    """Number input en float (evita tipos mixtos y permite key único)."""
+    v = 0.0 if value is None else float(value)
+    stp = float(step)
+    mn = float(minv)
+    return st.number_input(
+        name, value=v, step=stp, min_value=mn,
+        format="%.2f", help=help_txt, key=key
+    )
 
+# ------------------ DIÉSEL ------------------
 st.subheader("Diésel")
 c1, c2 = st.columns(2)
-with c1: r_km_l = num("Rendimiento (km/L)", params["diesel"]["rendimiento_km_l"], 0.1, 0.1)
-with c2: p_litro = num("Precio por litro ($/L)", params["diesel"]["precio_litro"], 0.1, 0.0)
+with c1:
+    r_km_l = num("Rendimiento (km/L)", params["diesel"]["rendimiento_km_l"],
+                 0.1, 0.1, key="diesel_rend")
+with c2:
+    p_litro = num("Precio por litro ($/L)", params["diesel"]["precio_litro"],
+                  0.1, 0.0, key="diesel_precio")
 
+# ------------------ DEF ------------------
 st.subheader("DEF")
 c1, c2 = st.columns(2)
-with c1: pct_def = num("% DEF sobre litros", params["def"]["pct_def"], 0.001, 0.0)
-with c2: p_def = num("Precio DEF ($/L)", params["def"]["precio_def_litro"], 0.1, 0.0)
+with c1:
+    pct_def = num("% DEF sobre litros", params["def"]["pct_def"],
+                  0.001, 0.0, key="def_pct")
+with c2:
+    p_def = num("Precio DEF ($/L)", params["def"]["precio_def_litro"],
+                0.1, 0.0, key="def_precio")
 
+# ------------------ COMISIÓN TAG ------------------
 st.subheader("Comisión TAG")
-pct_tag = num("% comisión TAG sobre peajes", params["tag"]["pct_comision_tag"], 0.001, 0.0)
+pct_tag = num("% comisión TAG sobre peajes",
+              params["tag"]["pct_comision_tag"],
+              0.001, 0.0, key="tag_pct")
 
+# ------------------ COSTOS POR KM ------------------
 st.subheader("Costos por km")
 c1, c2 = st.columns(2)
-with c1: costo_ll = num("Llantas ($/km)", params["costos_km"]["costo_llantas_km"], 0.01, 0.0)
-with c2: costo_mt = num("Mantenimiento ($/km)", params["costos_km"]["costo_mantto_km"], 0.01, 0.0)
+with c1:
+    costo_ll = num("Llantas ($/km)", params["costos_km"]["costo_llantas_km"],
+                   0.01, 0.0, key="ck_llantas")
+with c2:
+    costo_mt = num("Mantenimiento ($/km)", params["costos_km"]["costo_mantto_km"],
+                   0.01, 0.0, key="ck_mantto")
 
+# ------------------ DEPRECIACIÓN ------------------
 st.subheader("Depreciación")
 c1, c2, c3, c4 = st.columns(4)
-with c1: costo_adq = num("Costo adquisición ($)", params["depreciacion"]["costo_adq"], 1000, 0)
-with c2: val_res = num("Valor residual ($)", params["depreciacion"]["valor_residual"], 1000, 0)
-with c3: vida = st.number_input("Vida (años)", value=int(params["depreciacion"]["vida_anios"]), min_value=1, step=1)
-with c4: km_an = st.number_input("Km anuales", value=int(params["depreciacion"]["km_anuales"]), min_value=1, step=1000)
+with c1:
+    costo_adq = num("Costo adquisición ($)", params["depreciacion"]["costo_adq"],
+                    1000.0, 0.0, key="dep_costo_adq")
+with c2:
+    val_res = num("Valor residual ($)", params["depreciacion"]["valor_residual"],
+                  1000.0, 0.0, key="dep_val_res")
+with c3:
+    vida = st.number_input("Vida (años)",
+                           value=int(params["depreciacion"]["vida_anios"]),
+                           min_value=1, step=1, key="dep_vida")
+with c4:
+    km_an = st.number_input("Km anuales",
+                            value=int(params["depreciacion"]["km_anuales"]),
+                            min_value=1, step=1000, key="dep_km_anuales")
 
+# ------------------ SEGUROS ------------------
 st.subheader("Seguros")
 c1, c2 = st.columns(2)
-with c1: prima = num("Prima anual ($)", params["seguros"]["prima_anual"], 100, 0)
-with c2: km_seguros = st.number_input("Km anuales", value=int(params["seguros"]["km_anuales"]), min_value=1, step=1000)
+with c1:
+    prima = num("Prima anual ($)", params["seguros"]["prima_anual"],
+                100.0, 0.0, key="seg_prima")
+with c2:
+    km_seguros = st.number_input("Km anuales",
+                                 value=int(params["seguros"]["km_anuales"]),
+                                 min_value=1, step=1000, key="seg_km_anuales")
 
+# ------------------ FINANCIAMIENTO ------------------
 st.subheader("Financiamiento")
 c1, c2 = st.columns(2)
-with c1: tasa = num("Tasa anual", params["financiamiento"]["tasa_anual"], 0.001, 0.0)
-with c2: dias_cobro = st.number_input("Días de cobro", value=int(params["financiamiento"]["dias_cobro"]), min_value=1, step=1)
+with c1:
+    tasa = num("Tasa anual", params["financiamiento"]["tasa_anual"],
+               0.001, 0.0, key="fin_tasa")
+with c2:
+    dias_cobro = st.number_input("Días de cobro",
+                                 value=int(params["financiamiento"]["dias_cobro"]),
+                                 min_value=1, step=1, key="fin_dias")
 
+# ------------------ OVERHEAD Y UTILIDAD ------------------
 st.subheader("Overhead y Utilidad")
 c1, c2 = st.columns(2)
-with c1: pct_ov = num("% Overhead", params["overhead"]["pct_overhead"], 0.001, 0.0)
-with c2: pct_ut = num("% Utilidad", params["utilidad"]["pct_utilidad"], 0.001, 0.0)
+with c1:
+    pct_ov = num("% Overhead", params["overhead"]["pct_overhead"],
+                 0.001, 0.0, key="ov_pct")
+with c2:
+    pct_ut = num("% Utilidad", params["utilidad"]["pct_utilidad"],
+                 0.001, 0.0, key="ut_pct")
 
+# ------------------ OTROS ------------------
 st.subheader("Otros")
 c1, c2, c3 = st.columns(3)
-with c1: viatico_dia = num("Viático por día ($)", params["otros"]["viatico_dia"], 10, 0)
-with c2: permiso_viaje = num("Permiso por viaje ($)", params["otros"]["permiso_viaje"], 10, 0)
-with c3: custodia_km = num("Custodia ($/km)", params["otros"]["custodia_km"], 0.01, 0)
+with c1:
+    viatico_dia = num("Viático por día ($)", params["otros"]["viatico_dia"],
+                      10.0, 0.0, key="ot_viatico")
+with c2:
+    permiso_viaje = num("Permiso por viaje ($)", params["otros"]["permiso_viaje"],
+                        10.0, 0.0, key="ot_permiso")
+with c3:
+    custodia_km = num("Custodia ($/km)", params["otros"]["custodia_km"],
+                      0.01, 0.0, key="ot_custodia")
 
 st.subheader("Políticas (Base para financiamiento/overhead/utilidad)")
 base_opts = ["peajes","diesel","llantas","mantto","depreciacion","seguros","viaticos","permisos","def","custodia","tag"]

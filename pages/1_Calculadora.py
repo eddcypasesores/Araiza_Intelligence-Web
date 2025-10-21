@@ -50,20 +50,20 @@ hr {margin: .8rem 0;}
 }
 
 /* Paletas por sección */
-.peajes-tag{ background:#e3f2fd; color:#0d47a1; }        /* azul claro */
+.peajes-tag{ background:#e3f2fd; color:#0d47a1; }
 .peajes-val{ background:#bbdefb; color:#0b3c91; }
 
-.comb-tag { background:#fff3e0; color:#e65100; }         /* ámbar */
+.comb-tag { background:#fff3e0; color:#e65100; }
 .comb-val { background:#ffe0b2; color:#bf5d00; }
 
-.cond-tag { background:#e8f5e9; color:#1b5e20; }         /* verde */
+.cond-tag { background:#e8f5e9; color:#1b5e20; }
 .cond-val { background:#c8e6c9; color:#124a17; }
 
-/* Viáticos (opcional para consistencia visual) */
-.via-tag  { background:#f3e5f5; color:#6a1b9a; }         /* morado */
+/* Viáticos */
+.via-tag  { background:#f3e5f5; color:#6a1b9a; }
 .via-val  { background:#e1bee7; color:#54157a; }
 
-/* Total general (más énfasis) */
+/* Total general */
 .total-row{
   width:100%;
   display:flex; justify-content:flex-end; align-items:center; gap:.8rem;
@@ -124,7 +124,6 @@ from core.tarifas import tarifa_por_plaza
 from core.utils import is_excluded, set_excluded, normalize_name
 from core.pdf import build_pdf_cotizacion
 from core.driver_costs import read_trabajadores, costo_diario_trabajador_auto
-
 
 # -------------------------------
 # Conexión y datos base
@@ -227,19 +226,141 @@ st.markdown(
 )
 st.markdown('</div>', unsafe_allow_html=True)
 
-# --- NUEVO: leer versión vigente y parámetros ---
+# ===============================
+# 2) COMBUSTIBLE
+# ===============================
+st.markdown('<div class="card">', unsafe_allow_html=True)
+cl, cr = st.columns([0.12, 0.88])
+with cl:
+    st.markdown("<div class='logo-col'>", unsafe_allow_html=True)
+    safe_logo("Logo_Diesel.png", "⛽", width=120)
+    st.markdown("</div>", unsafe_allow_html=True)
+with cr:
+    st.markdown('<div class="section-title">Combustible</div>', unsafe_allow_html=True)
+
+cc1, cc2, cc3, cc4 = st.columns([1.0, 1.0, 1.0, 1.0])
+with cc1:
+    distancia_km = st.number_input("DISTANCIA (KM)", min_value=0.0, value=0.0, step=1.0)
+with cc2:
+    rendimiento = st.number_input("RENDIMIENTO (KM/L)", min_value=0.1, value=30.0, step=0.1)
+with cc3:
+    precio_litro = st.number_input("PRECIO POR LITRO ($/L)", min_value=0.0, value=26.5, step=0.1)
+with cc4:
+    viaje_redondo = st.checkbox("VIAJE REDONDO", value=False)
+
+km_totales = float(distancia_km or 0.0) * (2 if viaje_redondo else 1)
+litros_estimados = (km_totales / float(rendimiento or 1.0)) if float(rendimiento or 0) > 0 else 0.0
+subtotal_combustible = float(litros_estimados) * float(precio_litro or 0.0)
+
+with st.expander("DESGLOSE (SOLO LITROS ESTIMADOS)", expanded=False):
+    st.write(f"**Litros estimados:** {litros_estimados:,.2f} L")
+
+st.markdown(
+    f"""
+    <div class="subtotal-row">
+      <div class="subtotal-tag comb-tag">Subtotal Combustible</div>
+      <div class="subtotal-val comb-val">${subtotal_combustible:,.2f}</div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+st.markdown('</div>', unsafe_allow_html=True)
+
+# ===============================
+# 3) CONDUCTOR (método Edwin)
+# ===============================
+st.markdown('<div class="card">', unsafe_allow_html=True)
+dl, dr = st.columns([0.12, 0.88])
+with dl:
+    st.markdown("<div class='logo-col'>", unsafe_allow_html=True)
+    safe_logo("logo_Trabajador.png", "👷‍♂️", width=120)
+    st.markdown("</div>", unsafe_allow_html=True)
+with dr:
+    st.markdown('<div class="section-title">Conductor</div>', unsafe_allow_html=True)
+
+trab_df = read_trabajadores(conn)
+trab_opc = ["(Sin conductor)"] + [f"{r['nombre_completo']} — {r['numero_economico']}" for _, r in trab_df.iterrows()]
+
+cT1, cT2 = st.columns([1.6, .8])
+with cT1:
+    trab_show = st.selectbox("SELECCIONAR CONDUCTOR", trab_opc, index=0)
+with cT2:
+    dias_sugeridos = max(1.0, round((km_totales or 0.0)/600.0, 1))
+    dias_est = st.number_input("DÍAS ESTIMADOS", min_value=1.0, step=0.5, value=dias_sugeridos)
+
+trabajador_sel = None
+if trab_show != "(Sin conductor)":
+    for _, r in trab_df.iterrows():
+        if f"{r['nombre_completo']} — {r['numero_economico']}" == trab_show:
+            trabajador_sel = r.to_dict()
+            break
+
+subtotal_conductor = 0.0
+costo_diario_total = 0.0
+anios = 1
+if trabajador_sel:
+    mano_obra_dia, impuestos_dia, costo_diario_total, anios = costo_diario_trabajador_auto(trabajador_sel)
+    subtotal_conductor = float(dias_est) * float(costo_diario_total)
+
+with st.expander("COSTO DIARIO TOTAL (MÉTODO EDWIN)", expanded=False):
+    if trabajador_sel:
+        st.write(f"**Costo diario total para la empresa:** ${costo_diario_total:,.2f}")
+        st.caption(f"Antigüedad estimada: {anios} año(s) · Salario diario base: ${float(trabajador_sel.get('salario_diario',0)):,.2f}")
+    else:
+        st.caption("Selecciona un conductor para calcular el costo diario total.")
+
+st.markdown(
+    f"""
+    <div class="subtotal-row">
+      <div class="subtotal-tag cond-tag">Subtotal Conductor</div>
+      <div class="subtotal-val cond-val">${subtotal_conductor:,.2f}</div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+st.markdown('</div>', unsafe_allow_html=True)
+
+# ===============================
+# 4) VIÁTICOS
+# ===============================
+st.markdown('<div class="card">', unsafe_allow_html=True)
+vl, vr = st.columns([0.12, 0.88])
+with vl:
+    st.markdown("<div class='logo-col'>", unsafe_allow_html=True)
+    safe_logo("Logo_Viaticos.png", "💵", width=120)
+    st.markdown("</div>", unsafe_allow_html=True)
+with vr:
+    st.markdown('<div class="section-title">Viáticos</div>', unsafe_allow_html=True)
+
+viaticos_mxn = st.number_input("VIÁTICOS (MXN)", min_value=0.0, value=0.0, step=50.0, format="%.2f")
+st.caption("Este monto no tiene desglose y se suma directamente al total.")
+
+st.markdown(
+    f"""
+    <div class="subtotal-row">
+      <div class="subtotal-tag via-tag">Viáticos</div>
+      <div class="subtotal-val via-val">${viaticos_mxn:,.2f}</div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+st.markdown('</div>', unsafe_allow_html=True)
+
+# ===============================
+# 5) PARÁMETROS VERSIONADOS + CARGOS ADICIONALES
+# ===============================
 from core.db import get_active_version_id
 from core.params import read_params
 
 vid = get_active_version_id(conn)
 PARAMS = read_params(conn, vid)
 
-# Variables de apoyo
-km_base = float(distancia_km or 0.0) * (2 if viaje_redondo else 1)
-km_totales = km_base  # ya lo usas arriba para combustible
+# Apoyos
 peajes_ajustados = float(subtotal_peajes or 0.0)
-
-# --- Subtotales adicionales (alineados al Excel) ---
+km_totales = float(km_totales or 0.0)
+rendimiento = float(rendimiento or 1.0)
+precio_litro = float(precio_litro or 0.0)
+litros_estimados = (km_totales / rendimiento) if rendimiento > 0 else 0.0
 
 # Comisión TAG
 pct_tag = float(PARAMS["tag"]["pct_comision_tag"] or 0.0)
@@ -248,7 +369,6 @@ sub_tag = peajes_ajustados * pct_tag
 # DEF
 pct_def = float(PARAMS["def"]["pct_def"] or 0.0)
 precio_def = float(PARAMS["def"]["precio_def_litro"] or 0.0)
-litros_estimados = (km_totales / float(rendimiento or 1.0)) if float(rendimiento or 0) > 0 else 0.0
 litros_def = litros_estimados * pct_def
 sub_def = litros_def * precio_def
 
@@ -267,28 +387,28 @@ seg = PARAMS["seguros"]
 seg_km = float(seg["prima_anual"]) / max(int(seg["km_anuales"]),1)
 sub_seg = seg_km * km_totales
 
-# Viáticos/Permisos/Custodia (además del input manual viaticos_mxn)
+# Permisos / Custodia
 otros = PARAMS["otros"]
 sub_permiso  = float(otros["permiso_viaje"] or 0.0)
 sub_custodia = km_totales * float(otros["custodia_km"] or 0.0)
-# (nota: viaticos_mxn ya viene de input; si quieres sumar viático parametrizado por día, haz: viaticos_mxn += dias_est*otros["viatico_dia"])
+# (si quisieras viático parametrizado por día, podrías hacer: viaticos_mxn = viaticos_mxn + dias_est*otros["viatico_dia"])
 
 # Base para financiamiento/overhead/utilidad (según política)
 base_conceptos = set(PARAMS["politicas"]["incluye_en_base"])
 base_val = 0.0
-if "peajes" in base_conceptos:      base_val += peajes_ajustados
-if "diesel" in base_conceptos:      base_val += subtotal_combustible
-if "llantas" in base_conceptos:     base_val += sub_llantas
-if "mantto" in base_conceptos:      base_val += sub_mantto
-if "depreciacion" in base_conceptos:base_val += sub_dep
-if "seguros" in base_conceptos:     base_val += sub_seg
-if "viaticos" in base_conceptos:    base_val += viaticos_mxn
-if "permisos" in base_conceptos:    base_val += sub_permiso
-if "def" in base_conceptos:         base_val += sub_def
-if "custodia" in base_conceptos:    base_val += sub_custodia
-if "tag" in base_conceptos:         base_val += sub_tag
+if "peajes" in base_conceptos:       base_val += peajes_ajustados
+if "diesel" in base_conceptos:       base_val += float(subtotal_combustible or 0.0)
+if "llantas" in base_conceptos:      base_val += sub_llantas
+if "mantto" in base_conceptos:       base_val += sub_mantto
+if "depreciacion" in base_conceptos: base_val += sub_dep
+if "seguros" in base_conceptos:      base_val += sub_seg
+if "viaticos" in base_conceptos:     base_val += float(viaticos_mxn or 0.0)
+if "permisos" in base_conceptos:     base_val += sub_permiso
+if "def" in base_conceptos:          base_val += sub_def
+if "custodia" in base_conceptos:     base_val += sub_custodia
+if "tag" in base_conceptos:          base_val += sub_tag
 if trabajador_sel and "conductor" in base_conceptos:
-    base_val += subtotal_conductor  # si decides incluir conductor en la base, añade "conductor" en políticas
+    base_val += float(subtotal_conductor or 0.0)
 
 # Financiamiento / Overhead / Utilidad
 tasa = float(PARAMS["financiamiento"]["tasa_anual"] or 0.0)
@@ -301,7 +421,6 @@ sub_ov = base_val * pct_ov
 pct_ut = float(PARAMS["utilidad"]["pct_utilidad"] or 0.0)
 sub_ut = (base_val + sub_ov) * pct_ut
 
-# --- Mostrar (opcional) chips de subtotales extra como en tus estilos ---
 with st.expander("CARGOS ADICIONALES (TAG / DEF / LLANTAS / ...)", expanded=False):
     st.write(f"Comisión TAG: ${sub_tag:,.2f}")
     st.write(f"DEF: ${sub_def:,.2f}  (Litros DEF: {litros_def:,.2f})")
@@ -316,21 +435,17 @@ with st.expander("CARGOS ADICIONALES (TAG / DEF / LLANTAS / ...)", expanded=Fals
     st.write(f"Overhead: ${sub_ov:,.2f}")
     st.write(f"Utilidad: ${sub_ut:,.2f}")
 
-# --- NUEVO total general (suma todo) ---
+# ===============================
+# 6) TOTAL GENERAL (EXTENDIDO) + PDF
+# ===============================
 total_general = (
-    float(subtotal_peajes)
-    + float(subtotal_combustible)
-    + float(subtotal_conductor)
-    + float(viaticos_mxn)
+    float(subtotal_peajes or 0.0)
+    + float(subtotal_combustible or 0.0)
+    + float(subtotal_conductor or 0.0)
+    + float(viaticos_mxn or 0.0)
     + sub_tag + sub_def + sub_llantas + sub_mantto + sub_dep + sub_seg + sub_permiso + sub_custodia
     + sub_fin + sub_ov + sub_ut
 )
-
-
-# ===============================
-# TOTAL GENERAL + PDF
-# ===============================
-total_general = float(subtotal_peajes) + float(subtotal_combustible) + float(subtotal_conductor) + float(viaticos_mxn)
 
 st.markdown(
     f"""
@@ -342,10 +457,8 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# Generación de PDF (plantilla nueva ya incluye VIÁTICOS y usa método Edwin)
+# Generación de PDF (plantilla actual: peajes + combustible + conductor + viáticos)
 try:
-    # --- DataFrame de peajes para PDF
-    # DataFrame de peajes
     df_pdf = df.copy()
     df_pdf["excluir"] = df_pdf["idx"].apply(lambda i: is_excluded(int(i)))
 
@@ -356,38 +469,36 @@ try:
         _, _, costo_diario_total, anios = costo_diario_trabajador_auto(trabajador_sel_row)
 
     dias_est = float(dias_est or 1.0)
-    km_totales = float(km_totales or 0.0)
-    rendimiento = float(rendimiento or 1.0)
-    precio_litro = float(precio_litro or 0.0)
-    litros_estimados = float(litros_estimados if rendimiento > 0 else 0.0)
+    km_totales_pdf = float(km_totales or 0.0)
+    rendimiento_pdf = float(rendimiento or 1.0)
+    precio_litro_pdf = float(precio_litro or 0.0)
+    litros_estimados_pdf = float(litros_estimados if rendimiento_pdf > 0 else 0.0)
 
-    subtotal_peajes = float(subtotal_peajes or 0.0)
-    subtotal_combustible = float(subtotal_combustible or 0.0)
-    subtotal_conductor = float(dias_est * costo_diario_total) if trabajador_sel_row else 0.0
-    viaticos_mxn = float(viaticos_mxn or 0.0)
+    subtotal_peajes_pdf = float(subtotal_peajes or 0.0)
+    subtotal_combustible_pdf = float(subtotal_combustible or 0.0)
+    subtotal_conductor_pdf = float(dias_est * costo_diario_total) if trabajador_sel_row else 0.0
+    viaticos_mxn_pdf = float(viaticos_mxn or 0.0)
 
-    horas_totales = dias_est * 9.0  # si quieres seguir mostrando horas en el PDF
-
-    total_pdf = subtotal_peajes + subtotal_combustible + subtotal_conductor + viaticos_mxn
+    horas_totales = dias_est * 9.0
+    total_pdf = subtotal_peajes_pdf + subtotal_combustible_pdf + subtotal_conductor_pdf + viaticos_mxn_pdf
 
     pdf_bytes = build_pdf_cotizacion(
         ruta_nombre=ruta_nombre, origen=origen, destino=destino, clase=clase,
         df_peajes=df_pdf[["plaza", "tarifa", "excluir"]],
         total_original=float(df["tarifa"].sum()),
-        total_ajustado=subtotal_peajes,
-        km_totales=km_totales, rendimiento=rendimiento, precio_litro=precio_litro,
-        litros=litros_estimados, costo_combustible=subtotal_combustible,
+        total_ajustado=subtotal_peajes_pdf,
+        km_totales=km_totales_pdf, rendimiento=rendimiento_pdf, precio_litro=precio_litro_pdf,
+        litros=litros_estimados_pdf, costo_combustible=subtotal_combustible_pdf,
         total_general=total_pdf,
         trabajador_sel=trabajador_sel_row,
         esquema_conductor="Por día (método Edwin)" if trabajador_sel_row else "Sin conductor",
         horas_estimadas=horas_totales,
-        costo_conductor=subtotal_conductor,
-        tarifa_dia=float(costo_diario_total) if trabajador_sel_row else None, 
+        costo_conductor=subtotal_conductor_pdf,
+        tarifa_dia=float(costo_diario_total) if trabajador_sel_row else None,
         horas_por_dia=None,
         tarifa_hora=None, tarifa_km=None,
-        viaticos_mxn=viaticos_mxn
+        viaticos_mxn=viaticos_mxn_pdf
     )
-
 
     st.download_button(
         "📄 DESCARGAR COTIZACIÓN (PDF)",
