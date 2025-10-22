@@ -118,22 +118,31 @@ def _seed_routes_if_empty(conn):
                             pass
 
                     if inserted == 0 and ancho_inserto == 0:
-                        precio_simple = _parse_float(norm.get("precio") or norm.get("tarifa") or norm.get("costo"))
+                        precio_simple = _parse_float(
+                            norm.get("precio") or norm.get("tarifa") or norm.get("costo")
+                        )
                         if precio_simple is not None:
-                            for c in ("AUTOMOVIL", "T5"):
+                            for c in CLASES:
                                 try:
-                                    cur.execute("""
+                                    cur.execute(
+                                        """
                                         INSERT OR REPLACE INTO plaza_tarifas(plaza_id, clase, tarifa_mxn)
                                         VALUES(?,?,?)
-                                    """, (plaza_id, c, precio_simple))
+                                        """,
+                                        (plaza_id, c, precio_simple),
+                                    )
                                 except Exception:
                                     pass
+                            inserted = len(CLASES)
                         else:
                             for c in ("AUTOMOVIL", "T5"):
-                                cur.execute("""
+                                cur.execute(
+                                    """
                                     INSERT OR IGNORE INTO plaza_tarifas(plaza_id, clase, tarifa_mxn)
                                     VALUES(?,?,?)
-                                """, (plaza_id, c, 0.0))
+                                    """,
+                                    (plaza_id, c, 0.0),
+                                )
             conn.commit()
             print("[ETL] Rutas/plazas/tarifas cargadas desde CSV.")
             return
