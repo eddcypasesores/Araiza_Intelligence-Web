@@ -151,7 +151,9 @@ if submitted:
             cur.execute(f"""
                 INSERT INTO trabajadores({cols_sql})
                 VALUES ({placeholders})
-                ON CONFLICT(numero_economico) DO UPDATE SET
+                ON CONFLICT(numero_economico)
+                WHERE numero_economico IS NOT NULL AND numero_economico <> ''
+                DO UPDATE SET
                   {set_sql}
             """, values)
 
@@ -278,7 +280,9 @@ if st.button("💾 Guardar cambios", type="primary"):
                         nombres, apellido_paterno, apellido_materno, edad, rol_trabajador,
                         numero_economico, fecha_registro, salario_diario
                     ) VALUES (?,?,?,?,?,?,?,?)
-                    ON CONFLICT(numero_economico) DO UPDATE SET
+                    ON CONFLICT(numero_economico)
+                    WHERE numero_economico IS NOT NULL AND numero_economico <> ''
+                    DO UPDATE SET
                         nombres=excluded.nombres,
                         apellido_paterno=excluded.apellido_paterno,
                         apellido_materno=excluded.apellido_materno,
