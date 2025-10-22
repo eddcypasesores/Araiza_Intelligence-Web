@@ -553,7 +553,24 @@ try:
     viaticos_mxn_pdf = float(viaticos_mxn or 0.0)
 
     horas_totales = dias_est_pdf * 9.0
-    total_pdf = subtotal_peajes_pdf + subtotal_combustible_pdf + subtotal_conductor_pdf + viaticos_mxn_pdf
+
+    # --- construir lista de "OTROS CONCEPTOS" para el PDF ---
+    otros_conceptos_pdf = [
+        ("LLANTAS",       float(sub_llantas or 0.0)),
+        ("MANTENIMIENTO", float(sub_mantto or 0.0)),
+        ("DEPRECIACIÓN",  float(sub_dep or 0.0)),
+        ("SEGUROS",       float(sub_seg or 0.0)),
+        ("CUSTODIA",      float(sub_custodia or 0.0)),
+        ("PERMISOS",      float(sub_permiso or 0.0)),
+        ("DEF",           float(sub_def or 0.0)),
+        ("COMISIÓN TAG",  float(sub_tag or 0.0)),
+        ("FINANCIAMIENTO",float(sub_fin or 0.0)),
+        ("OVERHEAD",      float(sub_ov or 0.0)),
+        ("UTILIDAD",      float(sub_ut or 0.0)),
+    ]
+
+    # Usa el MISMO total que muestras en la pantalla
+    total_pdf = float(total_general or 0.0)
 
     pdf_bytes = build_pdf_cotizacion(
         ruta_nombre=ruta_nombre, origen=origen, destino=destino, clase=clase,
@@ -570,7 +587,8 @@ try:
         tarifa_dia=float(costo_diario_pdf) if trabajador_sel_row else None,
         horas_por_dia=None,
         tarifa_hora=None, tarifa_km=None,
-        viaticos_mxn=viaticos_mxn_pdf
+        viaticos_mxn=viaticos_mxn_pdf,
+        otros_conceptos=otros_conceptos_pdf,  # <-- nuevo parámetro
     )
 
     st.download_button(
