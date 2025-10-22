@@ -8,11 +8,16 @@ import csv
 # -------------------------
 def _seed_routes_if_empty(conn):
     cur = conn.cursor()
-    vcount = cur.execute("SELECT COUNT(*) FROM vias").fetchone()[0]
     pcount = cur.execute("SELECT COUNT(*) FROM plazas").fetchone()[0]
-    if vcount > 0 or pcount > 0:
+    tcount = cur.execute("SELECT COUNT(*) FROM plaza_tarifas").fetchone()[0]
+    real_vias = cur.execute(
+        "SELECT COUNT(*) FROM vias WHERE nombre <> ?",
+        ("VIA GENÉRICA",),
+    ).fetchone()[0]
+    if pcount > 0 and tcount > 0 and real_vias > 0:
         return
     CLASES = ["MOTO","AUTOMOVIL","B2","B3","B4","T2","T3","T4","T5","T6","T7","T8","T9"]
+
     try:
         path = ROUTES_CSV
         if path.exists():
@@ -141,26 +146,59 @@ def _seed_routes_if_empty(conn):
                                 )
             conn.commit()
             print("[ETL] Rutas/plazas/tarifas cargadas desde CSV.")
-            return
+            seeded = True
+
+            # Si existía el seed de fallback, eliminarlo una vez que hay datos reales.
+            via_generica = cur.execute(
+                "SELECT id FROM vias WHERE nombre=?",
+                ("VIA GENÉRICA",),
+            ).fetchone()
+            if via_generica:
+                gen_id = via_generica[0]
+                cur.execute(
+                    "DELETE FROM plaza_tarifas WHERE plaza_id IN (SELECT id FROM plazas WHERE via_id=?)",
+                    (gen_id,),
+                )
+                cur.execute("DELETE FROM plazas WHERE via_id=?", (gen_id,))
+                cur.execute("DELETE FROM vias WHERE id=?", (gen_id,))
+                conn.commit()
         else:
             print(f"[ETL] CSV no encontrado en {path}")
     except Exception as e:
         print(f"[ETL] Error leyendo CSV: {e}")
+
     # Fallback mínimo (si no hay CSV)
     try:
         cur.execute("INSERT OR IGNORE INTO vias(nombre) VALUES(?)", ("VIA GENÉRICA",))
-        via_id = cur.execute("SELECT id FROM vias WHERE nombre=?", ("VIA GENÉRICA",)).fetchone()[0]
-        cur.execute("""
+        via_row = cur.execute(
+            "SELECT id FROM vias WHERE nombre=?",
+            ("VIA GENÉRICA",),
+        ).fetchone()
+        if not via_row:
+            raise RuntimeError("No se pudo recuperar VIA GENÉRICA")
+
+        via_id = via_row[0]
+        cur.execute(
+            """
             INSERT OR IGNORE INTO plazas(via_id, nombre, orden, lat, lon)
             VALUES(?,?,?,?,?)
-        """, (via_id, "PLAZA DEMO", 1, None, None))
-        plaza_id = cur.execute("SELECT id FROM plazas WHERE via_id=? AND nombre=?",
-                               (via_id, "PLAZA DEMO")).fetchone()[0]
-        for c in ("AUTOMOVIL","T5"):
-            cur.execute("""
-                INSERT OR REPLACE INTO plaza_tarifas(plaza_id, clase, tarifa_mxn)
-                VALUES(?,?,?)
-            """, (plaza_id, c, 100.0))
+            """,
+            (via_id, "PLAZA DEMO", 1, None, None),
+        )
+
+        plazas = cur.execute("SELECT id FROM plazas").fetchall()
+        if not plazas:
+            raise RuntimeError("No se encontraron plazas para aplicar fallback")
+
+        for (plaza_id,) in plazas:
+            for c in CLASES:
+                cur.execute(
+                    """
+                    INSERT OR IGNORE INTO plaza_tarifas(plaza_id, clase, tarifa_mxn)
+                    VALUES(?,?,?)
+                    """,
+                    (plaza_id, c, 100.0 if c in ("AUTOMOVIL", "T5") else 0.0),
+                )
         conn.commit()
         print("[ETL] Seed de rutas mínimo creado (sin CSV).")
     except Exception as e:
