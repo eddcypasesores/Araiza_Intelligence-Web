@@ -1,5 +1,6 @@
-# pages/1_Calculadora.py — Costos de traslado (15 secciones con diseño unificado + CSS externo)
+# pages/1_Calculadora.py — Costos de traslado (layout 2 columnas por sección + iconos en base64)
 import math
+import base64
 import pandas as pd
 import streamlit as st
 from pathlib import Path
@@ -17,8 +18,27 @@ from core.params import read_params
 # Configuración de página + CSS
 # ===============================
 st.set_page_config(page_title="Costos de traslado", layout="wide", initial_sidebar_state="expanded")
-# Inyectar CSS SIEMPRE (evita que se pierda tras reruns)
 inject_css("styles.css")
+
+# Estilos de refuerzo (sin cajas grises; solo línea azul + layout)
+st.markdown(
+    """
+    <style>
+      .block-container { padding-top: 1.2rem; }
+      .section, .section * { background: transparent !important; box-shadow: none !important; }
+      .section { padding: 0 !important; margin: 0 0 .25rem 0 !important; border: none !important; }
+      .section-head { display:flex; align-items:center; gap:.5rem; font-weight:800; color:#1e293b; letter-spacing:.2px; margin:.25rem 0; }
+      .section-head .title { text-transform:uppercase; font-size:1.25rem; }
+      .total-right { display:flex; justify-content:flex-end; margin:.25rem 0 .4rem 0; }
+      .total-pill { display:inline-block; padding:.35rem .6rem; border-radius:999px; border:1px solid rgba(37,99,235,.25); min-width:110px; text-align:center; }
+      .section-divider { height:0; border:0; border-top:3px solid #2563eb; margin:8px 0 14px 0; opacity:1; }
+      [data-testid="stExpander"]{ border:1px solid rgba(15,23,42,.08); background:transparent; }
+      [data-testid="stExpander"]>div{ background:transparent !important; }
+      .section input[aria-label=""], .section textarea[aria-label=""]{ display:none !important; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 # ===============================
 # Seguridad / sesión
@@ -43,59 +63,149 @@ PLAZAS = plazas_catalog(ROUTES)
 # Helpers de assets / UI
 # ===============================
 APP_DIR = Path(__file__).resolve().parent
-ASSET_DIRS = [APP_DIR, APP_DIR / "assets", APP_DIR.parent / "assets", APP_DIR.parent / "static"]
 
-def resolve_asset(fname: str) -> str | None:
+# Lista robusta de ubicaciones posibles de assets
+ASSET_DIRS = [
+    APP_DIR,                                 # /pages
+    APP_DIR / "assets",                       # /pages/assets
+    APP_DIR.parent / "assets",                # /assets (raíz)
+    APP_DIR.parent / "static",                # /static (raíz)
+    Path.cwd() / "assets",                    # CWD/assets (por si el runner cambia)
+]
+
+def resolve_asset(fname: str) -> Path | None:
+    """
+    Devuelve un Path a la imagen del icono sin importar si:
+    - pasas sólo el nombre: "peaje_card.png"
+    - o pasas una ruta relativa: "assets/peaje_card.png"
+    - o una ruta absoluta
+    """
+    if not fname:
+        return None
+
+    p = Path(fname).expanduser().resolve()
+    # 1) Si te pasaron una ruta absoluta o una relativa válida, úsala
+    if p.exists():
+        return p
+
+    # 2) Si fue sólo el nombre o una ruta relativa no válida, busca en carpetas conocidas
     for d in ASSET_DIRS:
-        p = (d / fname).resolve()
-        if p.exists():
-            return str(p)
+        candidate = (d / fname).resolve()
+        if candidate.exists():
+            return candidate
+
+        # También intenta sólo el nombre del archivo dentro de cada carpeta
+        candidate2 = (d / Path(fname).name).resolve()
+        if candidate2.exists():
+            return candidate2
+
     return None
 
-def _icon_html(icon: str | None = None, icon_img: str | None = None) -> str:
-    """Devuelve HTML del icono: imagen (si hay) o emoji/texto."""
-    if icon_img:
-        p = resolve_asset(icon_img)
-        if p:
-            return f"<img src='file://{p}' class='icon-img' alt='icon'/>"
-    return f"<span class='icon'>{icon or ''}</span>"
-
-def section(title: str, icon: str | None, total_value: float, body_fn=None, icon_img: str | None = None):
-    """Sección con encabezado, expander opcional y 'pill' de total a la derecha."""
+def img_to_data_url(path: Path) -> str | None:
+    try:
+        suffix = path.suffix.lower()
+        if suffix in [".png"]: mime = "image/png"
+        elif suffix in [".jpg", ".jpeg"]: mime = "image/jpeg"
+        elif suffix in [".gif"]: mime = "image/gif"
+        elif suffix in [".svg"]: 
+            # SVG embebido como texto (no base64) para mejor nitidez
+            return f"data:image/svg+xml;utf8,{path.read_text(encoding='utf-8')}"
+        else: mime = "application/octet-stream"
+        b64 = base64.b64encode(path.read_bytes()).decode("utf-8")
+        return f"data:{mime};base64,{b64}"
+    except Exception:
+        return None
+def section(title: str, icon: str | None, total_value: float | None, body_fn=None, icon_img: str | None = None):
+    """
+    Layout por sección:
+      - Izquierda: título grande + expander (desglose)
+      - Derecha: imagen/icono arriba y, debajo, el total (pill) alineado a la derecha
+    Devuelve el total utilizado (float).
+    """
     st.markdown("<div class='section'>", unsafe_allow_html=True)
-    st.markdown(
-        f"<div class='section-head'>{_icon_html(icon=icon, icon_img=icon_img)}"
-        f"<span class='title'>{title}</span></div>",
-        unsafe_allow_html=True,
-    )
-    if body_fn:
-        with st.expander("Desglose / cálculo", expanded=False):
-            body_fn()
-    st.markdown(
-        f"<div class='total-right'><div class='total-pill'>${float(total_value or 0):,.2f}</div></div>",
-        unsafe_allow_html=True,
-    )
+    left, right = st.columns([0.68, 0.32], gap="large")
+
+    computed_total = total_value if total_value is not None else 0.0
+
+    with left:
+        st.markdown(
+            f"<div class='section-head' style='margin-bottom:.25rem'><span class='title'>{title}</span></div>",
+            unsafe_allow_html=True,
+        )
+        if body_fn:
+            with st.expander("Desglose / cálculo", expanded=False):
+                # Si el body_fn devuelve un número, se toma como total de la sección
+                ret = body_fn()
+                if isinstance(ret, (int, float)):
+                    computed_total = float(ret)
+
+    with right:
+        data_url = None
+        if icon_img:
+            p = resolve_asset(icon_img)
+            if p:
+                data_url = img_to_data_url(p)
+
+        if data_url:
+            st.markdown(
+                f"<div style='display:flex; justify-content:flex-end; margin-bottom:.5rem'>"
+                f"<img src='{data_url}' alt='icon' style='max-width:120px; height:auto;'/>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+        elif icon:
+            st.markdown(
+                f"<div style='display:flex; justify-content:flex-end; margin-bottom:.5rem'>"
+                f"<div style='font-size:54px; line-height:1'>{icon}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+
+        st.markdown(
+            f"<div class='total-right' style='justify-content:flex-end'>"
+            f"<div class='total-pill'>${computed_total:,.2f}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
     st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
+    return computed_total
+
+
 
 # ===============================
-# Encabezado + Barra superior
+# Encabezado + Selecciones TOP (orden solicitado)
 # ===============================
 st.markdown("<div class='hero-title'>COSTOS DE TRASLADO</div>", unsafe_allow_html=True)
 st.caption(f"Conectado como **{st.session_state['usuario']}** · Rol: **{st.session_state['rol']}**")
 
+# 1) Fila 1: ORIGEN / DESTINO
+r1c1, r1c2 = st.columns([1.2, 1.2])
+with r1c1:
+    origen = st.selectbox("ORIGEN", PLAZAS, key="top_origen")
+with r1c2:
+    destino = st.selectbox("DESTINO", PLAZAS, key="top_destino")
+
+# 2) Fila 2: CLASE (tipo de auto)
 clases = ["MOTO","AUTOMOVIL","B2","B3","B4","T2","T3","T4","T5","T6","T7","T8","T9"]
 default_idx = clases.index("T5")
+st.markdown("")  # espacio
+cl_col = st.columns([0.9])[0]
+with cl_col:
+    clase = st.selectbox("CLASE (TIPO DE AUTO)", clases, index=default_idx, key="top_clase")
 
-bc1, bc2, bc3, bc4 = st.columns([1.2, 1.2, 1.2, 0.8])
-with bc1:
-    origen = st.selectbox("ORIGEN", PLAZAS, key="top_origen")
-with bc2:
-    usar_parada = st.checkbox("AGREGAR PARADA", value=False)
-    parada = st.selectbox("PARADA (OPCIONAL)", PLAZAS, key="top_parada", disabled=not usar_parada)
-with bc3:
-    destino = st.selectbox("DESTINO", PLAZAS, key="top_destino")
-with bc4:
-    clase = st.selectbox("CLASE", clases, index=default_idx, key="top_clase")
+# 3) Fila 3: Agregar parada (checkbox) + selector visible solo si se activa
+st.markdown("")  # espacio
+r3c1, r3c2 = st.columns([0.35, 1.05])
+with r3c1:
+    usar_parada = st.checkbox("AGREGAR PARADA", value=False, key="chk_parada")
+with r3c2:
+    if usar_parada:
+        parada = st.selectbox("PARADA (OPCIONAL)", PLAZAS, key="top_parada")
+    else:
+        parada = None  # oculto completamente
 
 def compute_route_df_multi():
     """Calcula ruta (origen→parada→destino si aplica) y devuelve df de casetas/tarifas."""
@@ -148,6 +258,8 @@ def _peaje_body():
     COLS = [0.6, 7.0, 2.4]
     h1, h2, h3 = st.columns(COLS)
     h2.markdown("**PLAZA**"); h3.markdown("**TARIFA (MXN)**")
+
+    # Pintamos checkboxes y vamos actualizando el set de excluidas
     for _, row in df.iterrows():
         idx = int(row["idx"])
         c1x, c2x, c3x = st.columns(COLS)
@@ -157,11 +269,16 @@ def _peaje_body():
         c2x.markdown(row["plaza"])
         c3x.markdown(f"${float(row['tarifa']):,.2f}")
 
-def _total_peajes(df_):
-    return sum(0 if is_excluded(int(r["idx"])) else float(r["tarifa"]) for _, r in df_.iterrows())
+    # Calcular el subtotal con el estado ACTUAL
+    subtotal = 0.0
+    for _, r in df.iterrows():
+        if not is_excluded(int(r["idx"])):
+            subtotal += float(r["tarifa"])
+    # Guardamos por si quieres leerlo de session_state en otro lado
+    st.session_state["subtotal_peajes"] = subtotal
+    return subtotal
 
-subtotal_peajes = _total_peajes(df)
-section("PEAJE", None, subtotal_peajes, _peaje_body, icon_img="peaje_card.png")
+subtotal_peajes = section("PEAJE", None, None, _peaje_body, icon_img="peaje_card.png")
 
 # ===============================
 # 2) DIESEL
@@ -286,7 +403,7 @@ def _seg_body():
 section("SEGUROS", "🛡️", sub_seg, _seg_body)
 
 # ===============================
-# 9) VIÁTICOS (entrada + sección)
+# 9) VIÁTICOS
 # ===============================
 viaticos_mxn = st.number_input("VIÁTICOS (MXN)", min_value=0.0, value=0.0, step=50.0, format="%.2f", key="viat_input_main")
 def _viat_body():
@@ -400,7 +517,6 @@ total_general = (
     + sub_fin + sub_ov + sub_ut
 )
 
-# Sección “TOTAL GENERAL”
 st.markdown("<div class='section'>", unsafe_allow_html=True)
 st.markdown("<div class='section-head'><span class='title'>TOTAL GENERAL</span></div>", unsafe_allow_html=True)
 st.markdown(

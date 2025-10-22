@@ -41,3 +41,23 @@
   height:3px; background:#0b57d0; border-radius:4px; margin:1rem 0 1.2rem;
 }
 
+/* ——— Divisor azul minimal ——— */
+hr.blue-divider {
+  border: 0;
+  border-top: 3px solid #2563eb; /* azul */
+  margin: 10px 0 12px;
+  opacity: 1;
+}
+
+/* Si llegó a quedar algún contenedor con borde, lo anulamos visualmente */
+.stContainer:has(> div[data-testid="stVerticalBlock"]) {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+/* Evitar que inputs “espaciadores” se vean si alguno se nos escapó */
+.section-spacer [data-testid="stTextInput"] {
+  display: none !important;
+}
+
