@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import base64
 from uuid import uuid4
+from types import SimpleNamespace
 import pandas as pd
 import streamlit as st
 from pathlib import Path
@@ -71,7 +72,9 @@ PLAZAS = plazas_catalog(ROUTES)
 MAPS_ERROR = None
 maps_client: GoogleMapsClient | None = None
 if not GOOGLE_MAPS_API_KEY:
-    MAPS_ERROR = "Configura la variable de entorno GOOGLE_MAPS_API_KEY para habilitar el autocompletado y el cálculo de rutas."
+    MAPS_ERROR = (
+        "Configura la variable de entorno GOOGLE_MAPS_API_KEY para habilitar el autocompletado y el cálculo de rutas."
+    )
 else:
     maps_client = st.session_state.get("gmaps_client")
     if maps_client is None:
@@ -81,11 +84,14 @@ else:
         except GoogleMapsError as exc:
             MAPS_ERROR = str(exc)
 
-if MAPS_ERROR:
-    st.error(MAPS_ERROR)
-    st.stop()
-
 maps_client = st.session_state.get("gmaps_client")
+MAPS_AVAILABLE = maps_client is not None
+MANUAL_MODE = not MAPS_AVAILABLE
+if MAPS_ERROR:
+    msg = MAPS_ERROR
+    if not MAPS_AVAILABLE:
+        msg += " Se habilitó el modo manual sin integración con Google Maps."
+    st.warning(msg)
 maps_cache = st.session_state.setdefault("gmaps_cache", {})
 for bucket in ("autocomplete", "place_details", "directions", "plaza_lookup", "plaza_geometry"):
     maps_cache.setdefault(bucket, {})
@@ -221,6 +227,25 @@ def autocomplete_input(label: str, key_prefix: str) -> dict[str, str] | None:
     )
 
     trimmed = (query_value or "").strip()
+    if not MAPS_AVAILABLE:
+        if trimmed:
+            data = {
+                "description": trimmed,
+                "place_id": f"manual:{key_prefix}:{normalize_name(trimmed)}",
+                "matched_plaza": match_plaza_in_text(trimmed, PLAZAS),
+                "lat": None,
+                "lng": None,
+                "address": trimmed,
+            }
+            st.session_state[data_key] = data
+        else:
+            st.session_state.pop(data_key, None)
+        st.session_state.pop(options_key, None)
+        st.session_state.pop(selection_key, None)
+        if trimmed:
+            st.caption(f"Entrada manual: **{trimmed}**")
+        return st.session_state.get(data_key)
+
     predictions: list[dict[str, str]] = []
     if trimmed and len(trimmed) >= 3:
         try:
@@ -325,6 +350,8 @@ def _calculate_route(
 ):
     if not origin or not destination:
         return None, "Selecciona un origen y un destino válidos."
+    if maps_client is None:
+        return None, "Google Maps no está disponible en este momento."
 
     waypoint_ids = [waypoint["place_id"]] if waypoint else None
     try:
@@ -366,7 +393,15 @@ with cl_col:
 st.markdown("")  # espacio
 r3c1, r3c2 = st.columns([0.35, 1.05])
 with r3c1:
-    usar_parada = st.checkbox("AGREGAR PARADA", value=False, key="chk_parada")
+    if "chk_parada" not in st.session_state:
+        st.session_state["chk_parada"] = False
+    if MANUAL_MODE and st.session_state.get("chk_parada"):
+        st.session_state["chk_parada"] = False
+    usar_parada = st.checkbox(
+        "AGREGAR PARADA",
+        key="chk_parada",
+        disabled=MANUAL_MODE,
+    )
 with r3c2:
     if usar_parada:
         parada = autocomplete_input("PARADA (OPCIONAL)", "top_parada")
@@ -380,7 +415,15 @@ with r3c2:
 st.markdown("")  # espacio
 opts_c1, opts_c2 = st.columns([0.4, 0.6])
 with opts_c1:
-    evitar_cuotas = st.checkbox("EVITAR CASETAS (RUTA LIBRE)", value=False, key="chk_avoid_tolls")
+    if "chk_avoid_tolls" not in st.session_state:
+        st.session_state["chk_avoid_tolls"] = False
+    if MANUAL_MODE and st.session_state.get("chk_avoid_tolls"):
+        st.session_state["chk_avoid_tolls"] = False
+    evitar_cuotas = st.checkbox(
+        "EVITAR CASETAS (RUTA LIBRE)",
+        key="chk_avoid_tolls",
+        disabled=MANUAL_MODE,
+    )
 with opts_c2:
     st.caption("Si se activa, Google Maps intentará evitar peajes; la ruta puede ser más larga.")
 
@@ -431,13 +474,113 @@ def compute_route_data():
     return summary, ruta_nombre, df, None
 
 
-route_summary, ruta_nombre, df, route_error = compute_route_data()
+def manual_route_flow(
+    origin: dict[str, str] | None,
+    destination: dict[str, str] | None,
+    clase: str,
+):
+    empty_df = pd.DataFrame(columns=["idx", "plaza", "tarifa"])
+    origin_label = (origin or {}).get("description", "").strip()
+    destination_label = (destination or {}).get("description", "").strip()
+    if not origin_label or not destination_label:
+        st.info("Ingresa un origen y un destino para comenzar el cálculo manual.")
+        return None, None, empty_df, None
+
+    st.info(
+        "Modo manual activo: ingresa la distancia estimada y selecciona manualmente las casetas aplicables."
+    )
+
+    cols = st.columns([1.0, 1.0])
+    with cols[0]:
+        if "manual_distance_km" not in st.session_state:
+            st.session_state["manual_distance_km"] = float(st.session_state.get("maps_distance_km") or 0.0)
+        manual_distance = st.number_input(
+            "DISTANCIA ESTIMADA (KM)",
+            min_value=0.0,
+            step=1.0,
+            format="%.2f",
+            key="manual_distance_km",
+            help="Ingresa la distancia total aproximada del recorrido.",
+        )
+    with cols[1]:
+        route_options = sorted(ROUTES.keys()) if ROUTES else []
+        select_options = ["(Sin catálogo)"] + route_options
+        if "manual_route_choice" not in st.session_state:
+            st.session_state["manual_route_choice"] = select_options[0]
+        route_choice = st.selectbox(
+            "Ruta de referencia (opcional)",
+            select_options,
+            key="manual_route_choice",
+            help="Selecciona una ruta precargada para poblar automáticamente las casetas.",
+        )
+
+    if "_manual_last_route" not in st.session_state:
+        st.session_state["_manual_last_route"] = route_choice
+
+    if route_choice != st.session_state.get("_manual_last_route"):
+        st.session_state["_manual_last_route"] = route_choice
+        if route_choice != "(Sin catálogo)":
+            st.session_state["manual_plazas"] = list(ROUTES.get(route_choice, []))
+        else:
+            st.session_state["manual_plazas"] = st.session_state.get("manual_plazas", [])
+
+    default_plazas = st.session_state.get("manual_plazas", list(ROUTES.get(route_choice, [])))
+    manual_plazas = st.multiselect(
+        "Casetas incluidas",
+        PLAZAS,
+        default=default_plazas,
+        key="manual_plazas",
+        help="Selecciona las casetas que se incluirán en el cálculo.",
+    )
+
+    if route_choice != "(Sin catálogo)":
+        order_map = {p: idx for idx, p in enumerate(ROUTES.get(route_choice, []))}
+        manual_plazas_sorted = sorted(
+            manual_plazas,
+            key=lambda p: order_map.get(p, len(order_map) + manual_plazas.index(p)),
+        )
+    else:
+        manual_plazas_sorted = list(manual_plazas)
+
+    rows = [
+        {"idx": i, "plaza": plaza, "tarifa": tarifa_por_plaza(conn, plaza, clase)}
+        for i, plaza in enumerate(manual_plazas_sorted)
+    ]
+
+    df = pd.DataFrame(rows) if rows else empty_df
+
+    route_title = route_choice if route_choice != "(Sin catálogo)" else f"{origin_label} → {destination_label}"
+    st.session_state["maps_distance_km"] = float(manual_distance or 0.0)
+    st.session_state["gmaps_route"] = None
+    st.session_state["maps_polyline_points"] = []
+    st.session_state["maps_route_summary"] = route_title
+    st.session_state["detected_plazas"] = [row["plaza"] for row in rows]
+    summary = SimpleNamespace(
+        distance_m=float(manual_distance or 0.0) * 1000.0,
+        duration_s=0.0,
+        polyline=None,
+        polyline_points=[],
+        legs=[],
+        summary=route_title,
+        warnings=[],
+        fare=None,
+        raw={},
+    )
+
+    return summary, route_title, df, None
+
+
+if MANUAL_MODE:
+    route_summary, ruta_nombre, df, route_error = manual_route_flow(origen, destino, clase)
+else:
+    route_summary, ruta_nombre, df, route_error = compute_route_data()
 if route_error:
     st.error(f"❌ {route_error}")
     st.stop()
 
 if route_summary is None:
-    st.info("Selecciona un origen y un destino para calcular la ruta.")
+    if not MANUAL_MODE:
+        st.info("Selecciona un origen y un destino para calcular la ruta.")
     st.stop()
 
 # Limpiar exclusiones si cambian selecciones
@@ -467,15 +610,19 @@ if ruta_nombre:
     caption_parts.append(f"Ruta detectada: **{ruta_nombre}**")
 summary_label = route_summary.summary or ""
 if summary_label and summary_label not in (ruta_nombre or ""):
-    caption_parts.append(f"Resumen Google: {summary_label}")
+    label_prefix = "Resumen Google" if MAPS_AVAILABLE else "Resumen"
+    caption_parts.append(f"{label_prefix}: {summary_label}")
 caption_parts.append(f"Distancia: {distance_km_detected:,.2f} km")
 if evitar_cuotas:
     caption_parts.append("Ruta libre solicitada")
+if MANUAL_MODE:
+    caption_parts.append("Modo manual activado")
 st.caption(" · ".join(caption_parts))
 
-if route_summary.warnings:
+if getattr(route_summary, "warnings", None):
+    prefix = "Google Maps advierte" if MAPS_AVAILABLE else "Aviso"
     for warn in route_summary.warnings:
-        st.warning(f"Google Maps advierte: {warn}")
+        st.warning(f"{prefix}: {warn}")
 
 # ===============================
 # 1) PEAJE
