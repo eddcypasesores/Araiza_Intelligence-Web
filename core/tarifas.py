@@ -17,23 +17,47 @@ def resolve_plaza_candidates(conn, input_name: str) -> list[str]:
     return relaxed[:5]
 
 def tarifa_por_plaza(conn, plaza_nombre: str, clase: str) -> float:
+    """Devuelve la tarifa para una plaza y clase, tolerando variaciones de nombre."""
+
     c = clase.strip().upper()
     cur = conn.cursor()
-    row = cur.execute("""
-        SELECT pt.tarifa_mxn
-        FROM plaza_tarifas pt
-        JOIN plazas p ON p.id = pt.plaza_id
-        WHERE p.nombre = ? AND pt.clase = ?
-    """, (plaza_nombre, c)).fetchone()
-    if row: 
-        return float(row[0] or 0.0)
 
-    # fallback a AUTOMOVIL si no existe la clase pedida
-    row = cur.execute("""
-        SELECT pt.tarifa_mxn
-        FROM plaza_tarifas pt
-        JOIN plazas p ON p.id = pt.plaza_id
-        WHERE p.nombre = ? AND pt.clase = 'AUTOMOVIL'
-    """, (plaza_nombre,)).fetchone()
-    return float(row[0] or 0.0) if row else 0.0
+    def _buscar(nombre: str):
+        row = cur.execute(
+            """
+            SELECT pt.tarifa_mxn
+            FROM plaza_tarifas pt
+            JOIN plazas p ON p.id = pt.plaza_id
+            WHERE p.nombre = ? AND pt.clase = ?
+            """,
+            (nombre, c),
+        ).fetchone()
+        if row:
+            return float(row[0] or 0.0)
+
+        # fallback a AUTOMOVIL si no existe la clase pedida
+        row = cur.execute(
+            """
+            SELECT pt.tarifa_mxn
+            FROM plaza_tarifas pt
+            JOIN plazas p ON p.id = pt.plaza_id
+            WHERE p.nombre = ? AND pt.clase = 'AUTOMOVIL'
+            """,
+            (nombre,),
+        ).fetchone()
+        if row:
+            return float(row[0] or 0.0)
+        return None
+
+    candidatos = [plaza_nombre]
+    for cand in resolve_plaza_candidates(conn, plaza_nombre):
+        if cand not in candidatos:
+            candidatos.append(cand)
+
+    for candidato in candidatos:
+        resultado = _buscar(candidato)
+        if resultado is not None:
+            return resultado
+
+    return 0.0
 

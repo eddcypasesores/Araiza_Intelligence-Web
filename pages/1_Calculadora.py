@@ -57,7 +57,7 @@ if "usuario" not in st.session_state or "rol" not in st.session_state:
 conn = get_conn()
 ensure_schema(conn)
 ROUTES = load_routes()
-PLAZAS = plazas_catalog(ROUTES)
+PLAZAS = plazas_catalog(ROUTES, conn)
 
 # ===============================
 # Helpers de assets / UI
