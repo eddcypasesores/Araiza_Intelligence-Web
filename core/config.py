@@ -3,6 +3,8 @@ from pathlib import Path
 import os
 from typing import Iterable
 
+import tomllib
+
 
 def _first_existing(paths: Iterable[Path], default: Path) -> Path:
     for candidate in paths:
@@ -34,5 +36,78 @@ else:
         BASE_DIR / "data" / "PEAJE_PASE_2025.xlsx",
     )
 
-# Google Maps key (required for autocompletado y rutas)
-GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "").strip()
+
+def _read_first_existing_text(paths: Iterable[Path]) -> str:
+    for path in paths:
+        if path and path.is_file():
+            try:
+                return path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+    return ""
+
+
+def _parse_toml_key(raw: str, key: str) -> str:
+    if not raw:
+        return ""
+    try:
+        data = tomllib.loads(raw)
+    except tomllib.TOMLDecodeError:
+        return ""
+
+    if key in data and isinstance(data[key], str):
+        return data[key]
+
+    for value in data.values():
+        if isinstance(value, dict) and key in value and isinstance(value[key], str):
+            return value[key]
+    return ""
+
+
+def _parse_env_key(raw: str, key: str) -> str:
+    if not raw:
+        return ""
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if "=" not in stripped:
+            continue
+        name, value = stripped.split("=", 1)
+        if name.strip() == key:
+            return value.strip().strip('"').strip("'")
+    return ""
+
+
+def _load_google_maps_key() -> str:
+    key = os.getenv("GOOGLE_MAPS_API_KEY", "").strip()
+    if key:
+        return key
+
+    secrets_candidates = []
+    secrets_env = os.getenv("STREAMLIT_SECRETS_FILE", "").strip()
+    if secrets_env:
+        secrets_candidates.append(Path(secrets_env).expanduser())
+    secrets_candidates.extend(
+        [
+            BASE_DIR / ".streamlit" / "secrets.toml",
+            Path.home() / ".streamlit" / "secrets.toml",
+        ]
+    )
+
+    secrets_raw = _read_first_existing_text(secrets_candidates)
+    key = _parse_toml_key(secrets_raw, "GOOGLE_MAPS_API_KEY").strip()
+    if key:
+        return key
+
+    env_candidates = [
+        BASE_DIR / ".env",
+        Path.cwd() / ".env",
+    ]
+    env_raw = _read_first_existing_text(env_candidates)
+    key = _parse_env_key(env_raw, "GOOGLE_MAPS_API_KEY").strip()
+    return key
+
+
+# Google Maps key (required para autocompletado y rutas)
+GOOGLE_MAPS_API_KEY = _load_google_maps_key()
