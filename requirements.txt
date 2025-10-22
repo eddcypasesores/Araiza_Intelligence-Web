@@ -3,27 +3,3 @@ pandas
 reportlab
 openpyxl
 requests
-
-# Costo de traslados — configuración
-
-Este proyecto utiliza Streamlit para calcular costos de traslado considerando peajes, combustible y gastos asociados.
-
-## Variables de entorno
-
-El archivo `core/config.py` lee distintas variables para localizar bases de datos y fuentes de datos. Para habilitar la capa de Google Maps es necesario definir la llave del API antes de ejecutar la aplicación:
-
-```bash
-export GOOGLE_MAPS_API_KEY="tu_api_key_de_google_maps"
-```
-
-La clave se utiliza para autocompletar direcciones y solicitar rutas mediante los endpoints de Places y Directions.
-
-## Dependencias
-
-Instala los requisitos con:
-
-```bash
-pip install -r requirements.txt
-```
-
-Además de Streamlit, pandas y otras librerías originales, ahora se utiliza `requests` para comunicarse con la API de Google Maps.
