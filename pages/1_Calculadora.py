@@ -29,6 +29,7 @@ st.markdown(
       .section { padding: 0 !important; margin: 0 0 .25rem 0 !important; border: none !important; }
       .section-head { display:flex; align-items:center; gap:.5rem; font-weight:800; color:#1e293b; letter-spacing:.2px; margin:.25rem 0; }
       .section-head .title { text-transform:uppercase; font-size:1.25rem; }
+      .section-head .total-pill-inline { margin-left:auto; }
       .total-right { display:flex; justify-content:flex-end; margin:.25rem 0 .4rem 0; }
       .total-pill { display:inline-block; padding:.35rem .6rem; border-radius:999px; border:1px solid rgba(37,99,235,.25); min-width:110px; text-align:center; }
       .section-divider { height:0; border:0; border-top:3px solid #2563eb; margin:8px 0 14px 0; opacity:1; }
@@ -57,7 +58,7 @@ if "usuario" not in st.session_state or "rol" not in st.session_state:
 conn = get_conn()
 ensure_schema(conn)
 ROUTES = load_routes()
-PLAZAS = plazas_catalog(ROUTES)
+PLAZAS = plazas_catalog(ROUTES, conn)
 
 # ===============================
 # Helpers de assets / UI
@@ -115,7 +116,14 @@ def img_to_data_url(path: Path) -> str | None:
         return f"data:{mime};base64,{b64}"
     except Exception:
         return None
-def section(title: str, icon: str | None, total_value: float | None, body_fn=None, icon_img: str | None = None):
+def section(
+    title: str,
+    icon: str | None,
+    total_value: float | None,
+    body_fn=None,
+    icon_img: str | None = None,
+    total_position: str = "right",
+):
     """
     Layout por sección:
       - Izquierda: título grande + expander (desglose)
@@ -128,16 +136,20 @@ def section(title: str, icon: str | None, total_value: float | None, body_fn=Non
     computed_total = total_value if total_value is not None else 0.0
 
     with left:
-        st.markdown(
-            f"<div class='section-head' style='margin-bottom:.25rem'><span class='title'>{title}</span></div>",
-            unsafe_allow_html=True,
-        )
+        head_placeholder = st.empty()
         if body_fn:
             with st.expander("Desglose / cálculo", expanded=False):
                 # Si el body_fn devuelve un número, se toma como total de la sección
                 ret = body_fn()
                 if isinstance(ret, (int, float)):
                     computed_total = float(ret)
+        head_html = f"<div class='section-head' style='margin-bottom:.25rem'><span class='title'>{title}</span>"
+        if total_position == "inline":
+            head_html += (
+                f"<span class='total-pill total-pill-inline'>${computed_total:,.2f}</span>"
+            )
+        head_html += "</div>"
+        head_placeholder.markdown(head_html, unsafe_allow_html=True)
 
     with right:
         data_url = None
@@ -163,12 +175,13 @@ def section(title: str, icon: str | None, total_value: float | None, body_fn=Non
         else:
             st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
 
-        st.markdown(
-            f"<div class='total-right' style='justify-content:flex-end'>"
-            f"<div class='total-pill'>${computed_total:,.2f}</div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
+        if total_position != "inline":
+            st.markdown(
+                f"<div class='total-right' style='justify-content:flex-end'>"
+                f"<div class='total-pill'>${computed_total:,.2f}</div>"
+                f"</div>",
+                unsafe_allow_html=True,
+            )
 
     st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
     return computed_total
@@ -179,7 +192,6 @@ def section(title: str, icon: str | None, total_value: float | None, body_fn=Non
 # Encabezado + Selecciones TOP (orden solicitado)
 # ===============================
 st.markdown("<div class='hero-title'>COSTOS DE TRASLADO</div>", unsafe_allow_html=True)
-st.caption(f"Conectado como **{st.session_state['usuario']}** · Rol: **{st.session_state['rol']}**")
 
 # 1) Fila 1: ORIGEN / DESTINO
 r1c1, r1c2 = st.columns([1.2, 1.2])
@@ -248,7 +260,6 @@ if st.session_state.get("route_name") != ruta_nombre:
     st.session_state.setdefault("excluded_set", set())
     st.session_state["excluded_set"].clear()
 
-st.caption(f"Ruta detectada: **{ruta_nombre}**")
 
 # ===============================
 # 1) PEAJE
@@ -278,7 +289,14 @@ def _peaje_body():
     st.session_state["subtotal_peajes"] = subtotal
     return subtotal
 
-subtotal_peajes = section("PEAJE", None, None, _peaje_body, icon_img="peaje_card.png")
+subtotal_peajes = section(
+    "PEAJE",
+    None,
+    None,
+    _peaje_body,
+    icon_img="peaje_card.png",
+    total_position="inline",
+)
 
 # ===============================
 # 2) DIESEL
