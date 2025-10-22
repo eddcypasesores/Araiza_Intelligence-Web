@@ -10,7 +10,13 @@ El archivo `core/config.py` lee distintas variables para localizar bases de dato
 export GOOGLE_MAPS_API_KEY="tu_api_key_de_google_maps"
 ```
 
-La clave se utiliza para autocompletar direcciones y solicitar rutas mediante los endpoints de Places y Directions.
+También puedes declararla en `.streamlit/secrets.toml` cuando despliegas en Streamlit Cloud:
+
+```toml
+GOOGLE_MAPS_API_KEY = "tu_api_key_de_google_maps"
+```
+
+La clave debe generarse en [Google Cloud Console](https://console.cloud.google.com/) con los servicios **Maps JavaScript**, **Places**, **Directions** y **Geocoding** habilitados para que el autocompletado y las rutas funcionen correctamente.
 
 ## Dependencias
 

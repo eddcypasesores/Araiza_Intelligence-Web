@@ -92,6 +92,27 @@ if MAPS_ERROR:
     if not MAPS_AVAILABLE:
         msg += " Se habilitó el modo manual sin integración con Google Maps."
     st.warning(msg)
+
+if not GOOGLE_MAPS_API_KEY:
+    with st.expander("Cómo configurar la llave de Google Maps", expanded=False):
+        st.markdown(
+            """
+            1. Crea un proyecto en [Google Cloud Console](https://console.cloud.google.com/) y habilita las APIs **Places**, **Directions** y **Geocoding**.
+            2. Genera una clave de tipo "API key" y limita su uso al dominio o IP donde se ejecutará la calculadora.
+            3. Expón la llave a la aplicación mediante una variable de entorno o `secrets.toml`:
+
+               ```bash
+               export GOOGLE_MAPS_API_KEY="tu_clave_api"
+               ```
+
+               o bien en `.streamlit/secrets.toml`:
+
+               ```toml
+               GOOGLE_MAPS_API_KEY = "tu_clave_api"
+               ```
+            4. Reinicia la aplicación para que la clave quede disponible y se reactive la experiencia con Google Maps.
+            """
+        )
 maps_cache = st.session_state.setdefault("gmaps_cache", {})
 for bucket in ("autocomplete", "place_details", "directions", "plaza_lookup", "plaza_geometry"):
     maps_cache.setdefault(bucket, {})
