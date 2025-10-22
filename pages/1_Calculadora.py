@@ -363,7 +363,9 @@ def _llantas_body():
     st.write(f"Costo por km: ${PARAMS['costos_km']['costo_llantas_km']}/km")
     st.write(f"KM: {km_totales:,.2f}")
     st.write(f"Total: ${sub_llantas:,.2f}")
-section("LLANTAS", "🛞", sub_llantas, _llantas_body)
+
+section("LLANTAS", None, sub_llantas, _mo_body, icon_img="llanta_card.png")
+
 
 # ===============================
 # 6) MANTENIMIENTO
@@ -373,7 +375,7 @@ def _mantto_body():
     st.write(f"Costo por km: ${PARAMS['costos_km']['costo_mantto_km']}/km")
     st.write(f"KM: {km_totales:,.2f}")
     st.write(f"Total: ${sub_mantto:,.2f}")
-section("MANTENIMIENTO", "🧰", sub_mantto, _mantto_body)
+section("MANTENIMIENTO", None, sub_mantto, _mo_body, icon_img="mantenimiento_card.png")
 
 # ===============================
 # 7) DEPRECIACIÓN
@@ -388,7 +390,7 @@ def _dep_body():
     st.write(f"Vida: {int(dep['vida_anios'])} años · KM/año: {int(dep['km_anuales'])}")
     st.write(f"Depreciación por km: ${dep_km:,.4f}")
     st.write(f"Total: ${sub_dep:,.2f}")
-section("DEPRECIACIÓN", "📉", sub_dep, _dep_body)
+section("DEPRECIACIÓN", None, sub_dep, _mo_body, icon_img="depreciacion_card.png")
 
 # ===============================
 # 8) SEGUROS
@@ -400,7 +402,8 @@ def _seg_body():
     st.write(f"Prima anual: ${float(seg['prima_anual']):,.2f} · KM/año: {int(seg['km_anuales'])}")
     st.write(f"Seguro por km: ${seg_km:,.4f}")
     st.write(f"Total: ${sub_seg:,.2f}")
-section("SEGUROS", "🛡️", sub_seg, _seg_body)
+section("SEGUROS", None, sub_seg, _mo_body, icon_img="seguros_card.png")
+
 
 # ===============================
 # 9) VIÁTICOS
@@ -408,7 +411,7 @@ section("SEGUROS", "🛡️", sub_seg, _seg_body)
 viaticos_mxn = st.number_input("VIÁTICOS (MXN)", min_value=0.0, value=0.0, step=50.0, format="%.2f", key="viat_input_main")
 def _viat_body():
     st.write(f"Monto fijo ingresado: ${viaticos_mxn:,.2f}")
-section("VIÁTICOS", "💵", viaticos_mxn, _viat_body)
+
 
 # ===============================
 # 10) CUSTODIA
@@ -418,7 +421,7 @@ def _cust_body():
     st.write(f"Costo por km: ${PARAMS['otros']['custodia_km']}/km")
     st.write(f"KM: {km_totales:,.2f}")
     st.write(f"Total: ${sub_custodia:,.2f}")
-section("CUSTODIA", "🚓", sub_custodia, _cust_body)
+section("CUSTODIA", None, sub_custodia, _mo_body, icon_img="custodia_card.png")
 
 # ===============================
 # 11) PERMISOS
@@ -426,7 +429,7 @@ section("CUSTODIA", "🚓", sub_custodia, _cust_body)
 sub_permiso = float(PARAMS["otros"]["permiso_viaje"] or 0.0)
 def _perm_body():
     st.write(f"Permiso por viaje: ${sub_permiso:,.2f}")
-section("PERMISOS", "📄", sub_permiso, _perm_body)
+section("PERMISOS", None, sub_permiso, _mo_body, icon_img="permiso_card.png")
 
 # ===============================
 # 12) DEF
@@ -439,7 +442,7 @@ def _def_body():
     st.write(f"% DEF vs diésel: {pct_def*100:.2f}%")
     st.write(f"Litros DEF: {litros_def:,.2f} · Precio DEF/L: ${precio_def:,.2f}")
     st.write(f"Total: ${sub_def:,.2f}")
-section("DEF", "💧", sub_def, _def_body)
+section("DEF", None, sub_def, _mo_body, icon_img="def_card.png")
 
 # ===============================
 # 13) COMISIÓN TAG
@@ -450,7 +453,7 @@ def _tag_body():
     st.write(f"Comisión TAG %: {pct_tag*100:.2f}%")
     st.write(f"Base peajes: ${peajes_ajustados:,.2f}")
     st.write(f"Total: ${sub_tag:,.2f}")
-section("COMISIÓN TAG", "🏷️", sub_tag, _tag_body)
+section("COMISIÓN TAG", None, sub_tag, _mo_body, icon_img="tag_card.png")
 
 # ===============================
 # Base para (14) Financiamiento, (15) Overhead, (16) Utilidad
@@ -481,7 +484,7 @@ def _fin_body():
     st.write(f"Tasa anual: {tasa*100:.2f}% · Días de cobro: {dias_cobro}")
     st.write(f"Base: ${base_val:,.2f}")
     st.write(f"Total: ${sub_fin:,.2f}")
-section("FINANCIAMIENTO", "💳", sub_fin, _fin_body)
+section("FINANCIAMIENTO", None, sub_fin, _mo_body, icon_img="financiamiento_card.png")
 
 # ===============================
 # 15) OVERHEAD
@@ -492,7 +495,7 @@ def _ov_body():
     st.write(f"Overhead %: {pct_ov*100:.2f}%")
     st.write(f"Base: ${base_val:,.2f}")
     st.write(f"Total: ${sub_ov:,.2f}")
-section("OVERHEAD", "🏢", sub_ov, _ov_body)
+section("OVERHEAD", None, sub_ov, _mo_body, icon_img="overhead_card.png")
 
 # ===============================
 # 16) UTILIDAD
@@ -503,7 +506,7 @@ def _ut_body():
     st.write(f"Utilidad %: {pct_ut*100:.2f}%")
     st.write(f"Base + Overhead: ${(base_val+sub_ov):,.2f}")
     st.write(f"Total: ${sub_ut:,.2f}")
-section("UTILIDAD", "📈", sub_ut, _ut_body)
+section("UTILIDAD", None, sub_ut, _mo_body, icon_img="utilidad_card.png")
 
 # ===============================
 # TOTAL GENERAL + PDF
