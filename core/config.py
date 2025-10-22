@@ -33,3 +33,6 @@ else:
         ],
         BASE_DIR / "data" / "PEAJE_PASE_2025.xlsx",
     )
+
+# Google Maps key (required for autocompletado y rutas)
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "").strip()

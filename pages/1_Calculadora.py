@@ -1,6 +1,8 @@
 # pages/1_Calculadora.py — Costos de traslado (layout 2 columnas por sección + iconos en base64)
-import math
+from __future__ import annotations
+
 import base64
+from uuid import uuid4
 import pandas as pd
 import streamlit as st
 from pathlib import Path
@@ -8,11 +10,18 @@ from pathlib import Path
 # --- Utilidades / Proyecto
 from core.utils import inject_css, is_excluded, set_excluded, normalize_name
 from core.db import get_conn, ensure_schema, get_active_version_id
-from core.rutas import load_routes, plazas_catalog, find_subsequence_between
+from core.config import GOOGLE_MAPS_API_KEY
+from core.rutas import (
+    load_routes,
+    plazas_catalog,
+    match_plaza_in_text,
+    match_plazas_for_route,
+)
 from core.tarifas import tarifa_por_plaza
 from core.pdf import build_pdf_cotizacion
 from core.driver_costs import read_trabajadores, costo_diario_trabajador_auto
 from core.params import read_params
+from core.maps import GoogleMapsClient, GoogleMapsError
 
 # ===============================
 # Configuración de página + CSS
@@ -58,6 +67,30 @@ conn = get_conn()
 ensure_schema(conn)
 ROUTES = load_routes()
 PLAZAS = plazas_catalog(ROUTES)
+
+MAPS_ERROR = None
+maps_client: GoogleMapsClient | None = None
+if not GOOGLE_MAPS_API_KEY:
+    MAPS_ERROR = "Configura la variable de entorno GOOGLE_MAPS_API_KEY para habilitar el autocompletado y el cálculo de rutas."
+else:
+    maps_client = st.session_state.get("gmaps_client")
+    if maps_client is None:
+        try:
+            maps_client = GoogleMapsClient()
+            st.session_state["gmaps_client"] = maps_client
+        except GoogleMapsError as exc:
+            MAPS_ERROR = str(exc)
+
+if MAPS_ERROR:
+    st.error(MAPS_ERROR)
+    st.stop()
+
+maps_client = st.session_state.get("gmaps_client")
+maps_cache = st.session_state.setdefault("gmaps_cache", {})
+for bucket in ("autocomplete", "place_details", "directions", "plaza_lookup", "plaza_geometry"):
+    maps_cache.setdefault(bucket, {})
+
+session_token = st.session_state.setdefault("gmaps_session_token", str(uuid4()))
 
 # ===============================
 # Helpers de assets / UI
@@ -174,6 +207,139 @@ def section(title: str, icon: str | None, total_value: float | None, body_fn=Non
     return computed_total
 
 
+def autocomplete_input(label: str, key_prefix: str) -> dict[str, str] | None:
+    query_key = f"{key_prefix}_query"
+    options_key = f"{key_prefix}_options"
+    selection_key = f"{key_prefix}_selection"
+    data_key = f"{key_prefix}_data"
+
+    query_value = st.text_input(
+        label,
+        value=st.session_state.get(query_key, ""),
+        key=query_key,
+        placeholder="Ingresa dirección, ciudad o caseta",
+    )
+
+    trimmed = (query_value or "").strip()
+    predictions: list[dict[str, str]] = []
+    if trimmed and len(trimmed) >= 3:
+        try:
+            predictions = maps_client.autocomplete(
+                trimmed,
+                session_token=session_token,
+                cache=maps_cache["autocomplete"],
+            )
+        except GoogleMapsError as exc:
+            st.warning(f"Google Maps (autocomplete) respondió con un error: {exc}")
+            predictions = []
+        st.session_state[options_key] = predictions
+    else:
+        st.session_state[options_key] = []
+
+    predictions = st.session_state.get(options_key, []) or []
+    if predictions:
+        options = [pred.get("description", "") for pred in predictions]
+        prev = st.session_state.get(selection_key)
+        default_idx = options.index(prev) if prev in options else 0
+        selected_desc = st.selectbox(
+            "Coincidencias",
+            options,
+            index=default_idx,
+            key=selection_key,
+            label_visibility="collapsed",
+        )
+        chosen = next((pred for pred in predictions if pred.get("description", "") == selected_desc), None)
+        if chosen and chosen.get("place_id"):
+            place_id = chosen.get("place_id")
+            details_lat: float | None = None
+            details_lng: float | None = None
+            formatted_address: str | None = None
+            existing = st.session_state.get(data_key) or {}
+
+            if existing.get("place_id") == place_id and existing.get("lat") is not None and existing.get("lng") is not None:
+                details_lat = existing.get("lat")
+                details_lng = existing.get("lng")
+                formatted_address = existing.get("address")
+            else:
+                try:
+                    details = maps_client.place_details(
+                        place_id,
+                        session_token=session_token,
+                        cache=maps_cache["place_details"],
+                    )
+                except GoogleMapsError as exc:
+                    st.warning(f"Google Maps (detalles) respondió con un error: {exc}")
+                    details = {}
+
+                result = details.get("result", {}) if isinstance(details, dict) else {}
+                geometry = result.get("geometry", {}) if isinstance(result, dict) else {}
+                location = geometry.get("location", {}) if isinstance(geometry, dict) else {}
+                if isinstance(location, dict):
+                    lat_val = location.get("lat")
+                    lng_val = location.get("lng")
+                    try:
+                        details_lat = float(lat_val) if lat_val is not None else None
+                    except (TypeError, ValueError):
+                        details_lat = None
+                    try:
+                        details_lng = float(lng_val) if lng_val is not None else None
+                    except (TypeError, ValueError):
+                        details_lng = None
+                formatted_address = result.get("formatted_address") if isinstance(result, dict) else None
+
+            matched_plaza = match_plaza_in_text(selected_desc, PLAZAS)
+            data = {
+                "description": selected_desc,
+                "place_id": place_id,
+                "matched_plaza": matched_plaza,
+                "lat": details_lat,
+                "lng": details_lng,
+                "address": formatted_address,
+            }
+            st.session_state[data_key] = data
+            caption = f"Elegiste: **{selected_desc}**"
+            if matched_plaza:
+                caption += f" · Caseta detectada: **{matched_plaza}**"
+            if details_lat is not None and details_lng is not None:
+                caption += f" · Coordenadas: ({details_lat:.5f}, {details_lng:.5f})"
+            st.caption(caption)
+            return data
+    else:
+        st.session_state.pop(selection_key, None)
+        st.session_state.pop(data_key, None)
+        if trimmed:
+            if len(trimmed) < 3:
+                st.caption("Escribe al menos 3 caracteres para buscar.")
+            else:
+                st.info("Sin coincidencias para la búsqueda.")
+
+    return st.session_state.get(data_key)
+
+
+def _calculate_route(
+    origin: dict[str, str] | None,
+    destination: dict[str, str] | None,
+    waypoint: dict[str, str] | None,
+    *,
+    avoid_tolls: bool,
+):
+    if not origin or not destination:
+        return None, "Selecciona un origen y un destino válidos."
+
+    waypoint_ids = [waypoint["place_id"]] if waypoint else None
+    try:
+        summary = maps_client.route_summary(
+            origin["place_id"],
+            destination["place_id"],
+            waypoints=waypoint_ids,
+            avoid="tolls" if avoid_tolls else None,
+            cache=maps_cache["directions"],
+        )
+    except GoogleMapsError as exc:
+        return None, str(exc)
+
+    return summary, None
+
 
 # ===============================
 # Encabezado + Selecciones TOP (orden solicitado)
@@ -184,9 +350,9 @@ st.caption(f"Conectado como **{st.session_state['usuario']}** · Rol: **{st.sess
 # 1) Fila 1: ORIGEN / DESTINO
 r1c1, r1c2 = st.columns([1.2, 1.2])
 with r1c1:
-    origen = st.selectbox("ORIGEN", PLAZAS, key="top_origen")
+    origen = autocomplete_input("ORIGEN", "top_origen")
 with r1c2:
-    destino = st.selectbox("DESTINO", PLAZAS, key="top_destino")
+    destino = autocomplete_input("DESTINO", "top_destino")
 
 # 2) Fila 2: CLASE (tipo de auto)
 clases = ["MOTO","AUTOMOVIL","B2","B3","B4","T2","T3","T4","T5","T6","T7","T8","T9"]
@@ -203,44 +369,91 @@ with r3c1:
     usar_parada = st.checkbox("AGREGAR PARADA", value=False, key="chk_parada")
 with r3c2:
     if usar_parada:
-        parada = st.selectbox("PARADA (OPCIONAL)", PLAZAS, key="top_parada")
+        parada = autocomplete_input("PARADA (OPCIONAL)", "top_parada")
     else:
+        st.session_state.pop("top_parada_query", None)
+        st.session_state.pop("top_parada_options", None)
+        st.session_state.pop("top_parada_selection", None)
+        st.session_state.pop("top_parada_data", None)
         parada = None  # oculto completamente
 
-def compute_route_df_multi():
-    """Calcula ruta (origen→parada→destino si aplica) y devuelve df de casetas/tarifas."""
-    if usar_parada and parada:
-        f1 = find_subsequence_between(ROUTES, origen, parada)
-        f2 = find_subsequence_between(ROUTES, parada, destino)
-        if not f1 or not f2:
-            return None, None
-        name1, sec1 = f1
-        name2, sec2 = f2
-        ruta_nombre = f"{name1}  →  {name2}"
-        if sec1 and sec2 and sec1[-1] == sec2[0]:
-            secuencia = sec1 + sec2[1:]
-        else:
-            secuencia = sec1 + sec2
-    else:
-        f = find_subsequence_between(ROUTES, origen, destino)
-        if not f: return None, None
-        ruta_nombre, secuencia = f
+st.markdown("")  # espacio
+opts_c1, opts_c2 = st.columns([0.4, 0.6])
+with opts_c1:
+    evitar_cuotas = st.checkbox("EVITAR CASETAS (RUTA LIBRE)", value=False, key="chk_avoid_tolls")
+with opts_c2:
+    st.caption("Si se activa, Google Maps intentará evitar peajes; la ruta puede ser más larga.")
 
-    rows = [{"idx": i, "plaza": c, "tarifa": tarifa_por_plaza(conn, c, clase)} for i, c in enumerate(secuencia)]
-    return ruta_nombre, pd.DataFrame(rows)
+origin_label = origen.get("description", "") if origen else ""
+destination_label = destino.get("description", "") if destino else ""
+stop_label = parada.get("description", "") if (usar_parada and parada) else ""
+st.session_state["origin_label"] = origin_label
+st.session_state["destination_label"] = destination_label
+st.session_state["stop_label"] = stop_label
+
+def compute_route_data():
+    """Consulta Google Maps, calcula la ruta y determina las casetas aplicables."""
+
+    waypoint = parada if (usar_parada and parada) else None
+    summary, route_error = _calculate_route(origen, destino, waypoint, avoid_tolls=evitar_cuotas)
+    if route_error:
+        return None, None, None, route_error
+    if summary is None:
+        return None, None, None, None
+
+    st.session_state["gmaps_route"] = summary
+    st.session_state["maps_distance_km"] = float(summary.distance_m or 0.0) / 1000.0
+    st.session_state["maps_polyline_points"] = summary.polyline_points
+    st.session_state["maps_route_summary"] = summary.summary
+    selections = [s for s in (origen, waypoint, destino) if s]
+
+    match = match_plazas_for_route(
+        ROUTES,
+        selections,
+        summary.polyline_points,
+        maps_client=maps_client,
+        cache=maps_cache,
+        session_token=session_token,
+    )
+
+    if match:
+        ruta_nombre, secuencia = match
+    else:
+        ruta_nombre = summary.summary or "Ruta Google Maps (sin coincidencia en catálogo)"
+        secuencia = []
+
+    rows = [
+        {"idx": i, "plaza": plaza, "tarifa": tarifa_por_plaza(conn, plaza, clase)}
+        for i, plaza in enumerate(secuencia)
+    ]
+    st.session_state["detected_plazas"] = [row["plaza"] for row in rows]
+    df = pd.DataFrame(rows) if rows else pd.DataFrame(columns=["idx", "plaza", "tarifa"])
+    return summary, ruta_nombre, df, None
+
+
+route_summary, ruta_nombre, df, route_error = compute_route_data()
+if route_error:
+    st.error(f"❌ {route_error}")
+    st.stop()
+
+if route_summary is None:
+    st.info("Selecciona un origen y un destino para calcular la ruta.")
+    st.stop()
 
 # Limpiar exclusiones si cambian selecciones
-sel = (origen, destino, clase, usar_parada, parada if usar_parada else None)
+sel = (
+    origen["place_id"] if origen else None,
+    destino["place_id"] if destino else None,
+    clase,
+    usar_parada,
+    (parada["place_id"] if usar_parada and parada else None),
+    evitar_cuotas,
+)
 if st.session_state.get("last_sel_top") != sel:
     for k in list(st.session_state.keys()):
         if str(k).startswith("cb_"):
             del st.session_state[k]
     st.session_state["last_sel_top"] = sel
-
-ruta_nombre, df = compute_route_df_multi()
-if not ruta_nombre:
-    st.error("❌ No se encontró una ruta que contenga las casetas en ese orden.")
-    st.stop()
 
 # Reset exclusiones si cambia la ruta
 if st.session_state.get("route_name") != ruta_nombre:
@@ -248,7 +461,21 @@ if st.session_state.get("route_name") != ruta_nombre:
     st.session_state.setdefault("excluded_set", set())
     st.session_state["excluded_set"].clear()
 
-st.caption(f"Ruta detectada: **{ruta_nombre}**")
+distance_km_detected = float(st.session_state.get("maps_distance_km") or 0.0)
+caption_parts = []
+if ruta_nombre:
+    caption_parts.append(f"Ruta detectada: **{ruta_nombre}**")
+summary_label = route_summary.summary or ""
+if summary_label and summary_label not in (ruta_nombre or ""):
+    caption_parts.append(f"Resumen Google: {summary_label}")
+caption_parts.append(f"Distancia: {distance_km_detected:,.2f} km")
+if evitar_cuotas:
+    caption_parts.append("Ruta libre solicitada")
+st.caption(" · ".join(caption_parts))
+
+if route_summary.warnings:
+    for warn in route_summary.warnings:
+        st.warning(f"Google Maps advierte: {warn}")
 
 # ===============================
 # 1) PEAJE
@@ -260,6 +487,11 @@ def _peaje_body():
     h2.markdown("**PLAZA**"); h3.markdown("**TARIFA (MXN)**")
 
     # Pintamos checkboxes y vamos actualizando el set de excluidas
+    if df.empty:
+        st.caption("No se detectaron casetas para la ruta seleccionada.")
+        st.session_state["subtotal_peajes"] = 0.0
+        return 0.0
+
     for _, row in df.iterrows():
         idx = int(row["idx"])
         c1x, c2x, c3x = st.columns(COLS)
@@ -284,12 +516,22 @@ subtotal_peajes = section("PEAJE", None, None, _peaje_body, icon_img="peaje_card
 # 2) DIESEL
 # ===============================
 c1, c2, c3, c4 = st.columns([1.0, 1.0, 1.0, 1.0])
-with c1: distancia_km = st.number_input("DISTANCIA (KM)", min_value=0.0, value=0.0, step=1.0)
+distancia_km_val = float(st.session_state.get("maps_distance_km") or 0.0)
+with c1:
+    st.number_input(
+        "DISTANCIA (KM)",
+        min_value=0.0,
+        value=distancia_km_val,
+        step=0.1,
+        format="%.2f",
+        key="distance_display_km",
+        disabled=True,
+    )
 with c2: rendimiento  = st.number_input("RENDIMIENTO (KM/L)", min_value=0.1, value=30.0, step=0.1)
 with c3: precio_litro = st.number_input("PRECIO POR LITRO ($/L)", min_value=0.0, value=26.5, step=0.1)
 with c4: viaje_redondo = st.checkbox("VIAJE REDONDO", value=False)
 
-km_totales = float(distancia_km or 0.0) * (2 if viaje_redondo else 1)
+km_totales = float(distancia_km_val or 0.0) * (2 if viaje_redondo else 1)
 litros_estimados = (km_totales / float(rendimiento or 1.0)) if float(rendimiento or 0) > 0 else 0.0
 subtotal_combustible = float(litros_estimados) * float(precio_litro or 0.0)
 
@@ -573,7 +815,10 @@ try:
     total_pdf = float(total_general or 0.0)
 
     pdf_bytes = build_pdf_cotizacion(
-        ruta_nombre=ruta_nombre, origen=origen, destino=destino, clase=clase,
+        ruta_nombre=ruta_nombre,
+        origen=origin_label,
+        destino=destination_label,
+        clase=clase,
         df_peajes=df_pdf[["plaza", "tarifa", "excluir"]],
         total_original=float(df["tarifa"].sum()),
         total_ajustado=subtotal_peajes_pdf,
@@ -594,7 +839,7 @@ try:
     st.download_button(
         "📄 DESCARGAR COTIZACIÓN (PDF)",
         data=pdf_bytes,
-        file_name=f"cotizacion_{normalize_name(origen)}_{normalize_name(destino)}.pdf",
+        file_name=f"cotizacion_{normalize_name(origin_label)}_{normalize_name(destination_label)}.pdf",
         mime="application/pdf",
         use_container_width=True
     )
