@@ -411,7 +411,7 @@ section("SEGUROS", None, sub_seg, _mo_body, icon_img="seguros_card.png")
 viaticos_mxn = st.number_input("VIÁTICOS (MXN)", min_value=0.0, value=0.0, step=50.0, format="%.2f", key="viat_input_main")
 def _viat_body():
     st.write(f"Monto fijo ingresado: ${viaticos_mxn:,.2f}")
-
+section("Viaticos", None, viaticos_mxn, _mo_body, icon_img="viaticos_card.png")
 
 # ===============================
 # 10) CUSTODIA
