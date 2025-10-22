@@ -1,8 +1,270 @@
 # core/db.py
-import sqlite3
-import pandas as pd  # puede usarse en otros helpers
-from .config import DB_PATH, ROUTES_CSV
 import csv
+import re
+import sqlite3
+import unicodedata
+from pathlib import Path
+from typing import Iterable
+
+import pandas as pd  # puede usarse en otros helpers
+
+from .config import DB_PATH, ROUTES_CSV, TARIFFS_XLSX
+
+
+CLASES: list[str] = [
+    "MOTO",
+    "AUTOMOVIL",
+    "B2",
+    "B3",
+    "B4",
+    "T2",
+    "T3",
+    "T4",
+    "T5",
+    "T6",
+    "T7",
+    "T8",
+    "T9",
+]
+
+HEADER_ALIASES = {
+    "via_principal": "via",
+    "via": "via",
+    "ruta": "via",
+    "tramo": "via",
+    "plaza": "plaza",
+    "caseta": "plaza",
+    "caseta_de_cobro": "plaza",
+    "n": "orden",
+    "no": "orden",
+    "numero": "orden",
+    "orden": "orden",
+    "lat": "lat",
+    "latitud": "lat",
+    "lon": "lon",
+    "long": "lon",
+    "longitud": "lon",
+    "tarifa_mxn": "tarifa_mxn",
+    "tarifa": "tarifa",
+    "precio": "precio",
+    "costo": "costo",
+    "clase": "clase",
+}
+
+
+def _clean_header(value: str) -> str:
+    text = unicodedata.normalize("NFKD", str(value or ""))
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    text = text.lower()
+    text = text.replace("º", "n").replace("°", "n")
+    text = re.sub(r"[^a-z0-9]+", "_", text)
+    return text.strip("_")
+
+
+def _normalize_headers(headers: Iterable[str]) -> list[str]:
+    normalized = []
+    for header in headers:
+        cleaned = _clean_header(header)
+        normalized.append(HEADER_ALIASES.get(cleaned, cleaned))
+    return normalized
+
+
+def _strip_str(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    return str(value).strip()
+
+
+def _parse_float(value):
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        cleaned = value.replace("$", "").replace(",", "").strip()
+        if not cleaned:
+            return None
+        try:
+            return float(cleaned)
+        except ValueError:
+            return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_int(value):
+    if value in (None, ""):
+        return None
+    try:
+        return int(float(value))
+    except (TypeError, ValueError):
+        return None
+
+
+def _records_from_excel(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    try:
+        df = pd.read_excel(path, sheet_name=0, engine="openpyxl")
+    except ImportError as exc:
+        print(f"[ETL] Falta dependencia para leer Excel: {exc}")
+        return []
+    except Exception as exc:
+        print(f"[ETL] Error leyendo Excel {path}: {exc}")
+        return []
+
+    if df.empty:
+        return []
+
+    df = df.fillna("")
+    headers = _normalize_headers(df.columns)
+    records: list[dict] = []
+    for raw in df.to_dict(orient="records"):
+        normalized = {}
+        for alias, original_key in zip(headers, df.columns):
+            normalized[alias] = raw.get(original_key)
+        records.append(normalized)
+    return records
+
+
+def _records_from_csv(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    try:
+        with open(path, newline="", encoding="utf-8-sig") as fh:
+            reader = csv.DictReader(fh)
+            records = []
+            for row in reader:
+                normalized = {}
+                for key, value in row.items():
+                    alias = HEADER_ALIASES.get(_clean_header(key), _clean_header(key))
+                    normalized[alias] = value
+                records.append(normalized)
+            return records
+    except Exception as exc:
+        print(f"[ETL] Error leyendo CSV {path}: {exc}")
+        return []
+
+
+def _ingest_records(conn, records: Iterable[dict], source: str) -> bool:
+    cur = conn.cursor()
+    vias_cache: dict[str, int] = {}
+    orden_cache: dict[int, int] = {}
+    inserted_any = False
+
+    for row in records:
+        via_nom = _strip_str(row.get("via"))
+        plaza_nom = _strip_str(row.get("plaza"))
+        if not via_nom or not plaza_nom:
+            continue
+
+        inserted_any = True
+
+        via_id = vias_cache.get(via_nom)
+        if via_id is None:
+            cur.execute("INSERT OR IGNORE INTO vias(nombre) VALUES(?)", (via_nom,))
+            via_id = cur.execute("SELECT id FROM vias WHERE nombre=?", (via_nom,)).fetchone()[0]
+            vias_cache[via_nom] = via_id
+
+        orden = _parse_int(row.get("orden"))
+        if orden is None:
+            orden = orden_cache.get(via_id, 0) + 1
+        orden_cache[via_id] = max(orden_cache.get(via_id, 0), orden)
+
+        lat = _parse_float(row.get("lat"))
+        lon = _parse_float(row.get("lon"))
+
+        cur.execute(
+            """
+            INSERT OR IGNORE INTO plazas(via_id, nombre, orden, lat, lon)
+            VALUES(?,?,?,?,?)
+            """,
+            (via_id, plaza_nom, orden, lat, lon),
+        )
+        plaza_id = cur.execute(
+            "SELECT id FROM plazas WHERE via_id=? AND nombre=?",
+            (via_id, plaza_nom),
+        ).fetchone()[0]
+
+        clase_unica = _strip_str(row.get("clase")).upper()
+        tarifa_unica = row.get("tarifa_mxn")
+        if clase_unica and tarifa_unica not in (None, ""):
+            tarifa_float = _parse_float(tarifa_unica)
+            if tarifa_float is not None:
+                cur.execute(
+                    """
+                    INSERT OR REPLACE INTO plaza_tarifas(plaza_id, clase, tarifa_mxn)
+                    VALUES(?,?,?)
+                    """,
+                    (plaza_id, clase_unica, tarifa_float),
+                )
+
+        inserted_clase = False
+        for clase in CLASES:
+            valor = row.get(clase.lower())
+            if valor in (None, ""):
+                continue
+            tarifa_float = _parse_float(valor)
+            if tarifa_float is None:
+                continue
+            cur.execute(
+                """
+                INSERT OR REPLACE INTO plaza_tarifas(plaza_id, clase, tarifa_mxn)
+                VALUES(?,?,?)
+                """,
+                (plaza_id, clase, tarifa_float),
+            )
+            inserted_clase = True
+
+        if not inserted_clase and not (clase_unica and tarifa_unica not in (None, "")):
+            precio_simple = _parse_float(row.get("precio") or row.get("tarifa") or row.get("costo"))
+            if precio_simple is not None:
+                for clase in CLASES:
+                    cur.execute(
+                        """
+                        INSERT OR REPLACE INTO plaza_tarifas(plaza_id, clase, tarifa_mxn)
+                        VALUES(?,?,?)
+                        """,
+                        (plaza_id, clase, precio_simple),
+                    )
+            else:
+                for clase in ("AUTOMOVIL", "T5"):
+                    cur.execute(
+                        """
+                        INSERT OR IGNORE INTO plaza_tarifas(plaza_id, clase, tarifa_mxn)
+                        VALUES(?,?,?)
+                        """,
+                        (plaza_id, clase, 0.0),
+                    )
+
+    if inserted_any:
+        conn.commit()
+        print(f"[ETL] Rutas/plazas/tarifas cargadas desde {source}.")
+    return inserted_any
+
+
+def _remove_generic_seed(conn):
+    cur = conn.cursor()
+    via_generica = cur.execute(
+        "SELECT id FROM vias WHERE nombre=?",
+        ("VIA GENÉRICA",),
+    ).fetchone()
+    if not via_generica:
+        return
+    gen_id = via_generica[0]
+    cur.execute(
+        "DELETE FROM plaza_tarifas WHERE plaza_id IN (SELECT id FROM plazas WHERE via_id=?)",
+        (gen_id,),
+    )
+    cur.execute("DELETE FROM plazas WHERE via_id=?", (gen_id,))
+    cur.execute("DELETE FROM vias WHERE id=?", (gen_id,))
+    conn.commit()
+
+
 # -------------------------
 # ETL inicial de rutas
 # -------------------------
@@ -16,156 +278,17 @@ def _seed_routes_if_empty(conn):
     ).fetchone()[0]
     if pcount > 0 and tcount > 0 and real_vias > 0:
         return
-    CLASES = ["MOTO","AUTOMOVIL","B2","B3","B4","T2","T3","T4","T5","T6","T7","T8","T9"]
 
-    try:
-        path = ROUTES_CSV
-        if path.exists():
-            with open(path, newline="", encoding="utf-8-sig") as f:
-                reader = csv.DictReader(f)
-                vias_cache = {}
-                orden_cache = {}
+    seeded = False
+    if TARIFFS_XLSX and TARIFFS_XLSX.exists():
+        seeded = _ingest_records(conn, _records_from_excel(TARIFFS_XLSX), "Excel")
 
-                def _norm_key(key) -> str:
-                    return (key or "").lstrip("\ufeff").strip().lower()
+    if not seeded and ROUTES_CSV and ROUTES_CSV.exists():
+        seeded = _ingest_records(conn, _records_from_csv(ROUTES_CSV), "CSV")
 
-                def _norm_val(val):
-                    if isinstance(val, str):
-                        return val.strip()
-                    return val
-
-                def _parse_float(val):
-                    if val is None:
-                        return None
-                    if isinstance(val, str):
-                        cleaned = val.replace("$", "").replace(",", "").strip()
-                        if not cleaned:
-                            return None
-                        try:
-                            return float(cleaned)
-                        except ValueError:
-                            return None
-                    try:
-                        return float(val)
-                    except (TypeError, ValueError):
-                        return None
-
-                for row in reader:
-                    norm = {_norm_key(k): _norm_val(v) for k, v in row.items()}
-                    via_nom = (norm.get("via") or norm.get("ruta") or "").strip()
-                    plaza_nom = (norm.get("plaza") or norm.get("caseta") or "").strip()
-                    if not via_nom or not plaza_nom:
-                        continue
-
-                    orden_val = norm.get("orden")
-                    try:
-                        orden = int(float(orden_val)) if orden_val not in (None, "") else None
-                    except (TypeError, ValueError):
-                        orden = None
-
-                    lat = _parse_float(norm.get("lat") or norm.get("latitud"))
-                    lon = _parse_float(norm.get("lon") or norm.get("long") or norm.get("longitud"))
-
-                    via_id = vias_cache.get(via_nom)
-                    if via_id is None:
-                        cur.execute("INSERT OR IGNORE INTO vias(nombre) VALUES(?)", (via_nom,))
-                        via_id = cur.execute("SELECT id FROM vias WHERE nombre=?", (via_nom,)).fetchone()[0]
-                        vias_cache[via_nom] = via_id
-
-                    if orden is None:
-                        orden = orden_cache.get(via_id, 0) + 1
-                        orden_cache[via_id] = orden
-
-                    cur.execute("""
-                        INSERT OR IGNORE INTO plazas(via_id, nombre, orden, lat, lon)
-                        VALUES(?,?,?,?,?)
-	@@ -49,45 +82,67 @@ def _seed_routes_if_empty(conn):
-                        SELECT id FROM plazas WHERE via_id=? AND nombre=?
-                    """, (via_id, plaza_nom)).fetchone()[0]
-
-                    # --- tarifas: soporta CSV "alto", "ancho" o formato simple ---
-
-                    clase_alta = (norm.get("clase") or "").upper()
-                    tarifa_alta = norm.get("tarifa_mxn")
-
-                    inserted = 0
-                    if clase_alta and tarifa_alta is not None:
-                        tarifa_float = _parse_float(tarifa_alta)
-                        if tarifa_float is not None:
-                            try:
-                                cur.execute("""
-                                    INSERT OR REPLACE INTO plaza_tarifas(plaza_id, clase, tarifa_mxn)
-                                    VALUES(?,?,?)
-                                """, (plaza_id, clase_alta, tarifa_float))
-                                inserted += 1
-                            except Exception:
-                                pass
-
-                    ancho_inserto = 0
-                    for c in CLASES:
-                        val = norm.get(c.lower())
-                        if val is None or str(val).strip() == "":
-                            continue
-                        tarifa_float = _parse_float(val)
-                        if tarifa_float is None:
-                            continue
-                        try:
-                            cur.execute("""
-                                INSERT OR REPLACE INTO plaza_tarifas(plaza_id, clase, tarifa_mxn)
-                                VALUES(?,?,?)
-                            """, (plaza_id, c, tarifa_float))
-                            ancho_inserto += 1
-                        except Exception:
-                            pass
-
-                    if inserted == 0 and ancho_inserto == 0:
-                        precio_simple = _parse_float(
-                            norm.get("precio") or norm.get("tarifa") or norm.get("costo")
-                        )
-                        if precio_simple is not None:
-                            for c in CLASES:
-                                try:
-                                    cur.execute(
-                                        """
-                                        INSERT OR REPLACE INTO plaza_tarifas(plaza_id, clase, tarifa_mxn)
-                                        VALUES(?,?,?)
-                                        """,
-                                        (plaza_id, c, precio_simple),
-                                    )
-                                except Exception:
-                                    pass
-                            inserted = len(CLASES)
-                        else:
-                            for c in ("AUTOMOVIL", "T5"):
-                                cur.execute(
-                                    """
-                                    INSERT OR IGNORE INTO plaza_tarifas(plaza_id, clase, tarifa_mxn)
-                                    VALUES(?,?,?)
-                                    """,
-                                    (plaza_id, c, 0.0),
-                                )
-            conn.commit()
-            print("[ETL] Rutas/plazas/tarifas cargadas desde CSV.")
-            seeded = True
-
-            # Si existía el seed de fallback, eliminarlo una vez que hay datos reales.
-            via_generica = cur.execute(
-                "SELECT id FROM vias WHERE nombre=?",
-                ("VIA GENÉRICA",),
-            ).fetchone()
-            if via_generica:
-                gen_id = via_generica[0]
-                cur.execute(
-                    "DELETE FROM plaza_tarifas WHERE plaza_id IN (SELECT id FROM plazas WHERE via_id=?)",
-                    (gen_id,),
-                )
-                cur.execute("DELETE FROM plazas WHERE via_id=?", (gen_id,))
-                cur.execute("DELETE FROM vias WHERE id=?", (gen_id,))
-                conn.commit()
-        else:
-            print(f"[ETL] CSV no encontrado en {path}")
-    except Exception as e:
-        print(f"[ETL] Error leyendo CSV: {e}")
+    if seeded:
+        _remove_generic_seed(conn)
+        return
 
     # Fallback mínimo (si no hay CSV)
     try:
