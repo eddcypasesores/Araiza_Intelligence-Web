@@ -143,8 +143,8 @@ st.markdown(f"""
 with st.container():
     st.markdown('<div class="nav-sentinel"></div>', unsafe_allow_html=True)
 
-    #   [esp] [Tarifas] [Usuarios] [Parámetros] [Calculadora] [esp] [Salir]
-    c0, c1, c2, c3, c4, c5, c6 = st.columns([1.2, 1, 1, 1, 1, 1.2, 0.9], gap="small")
+    #   [esp] [Tarifas] [Usuarios] [Parámetros] [Salir]
+    c0, c1, c2, c3, c4 = st.columns([1.2, 1, 1, 1, 0.9], gap="small")
 
     with c1:
         st.markdown('<div class="nav-scope">', unsafe_allow_html=True)
@@ -162,17 +162,15 @@ with st.container():
         st.markdown('</div>', unsafe_allow_html=True)
 
     with c4:
-        st.markdown('<div class="nav-scope">', unsafe_allow_html=True)
-        st.page_link("pages/1_Calculadora.py", label="Calculadora")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with c6:
         st.markdown('<div class="nav-scope logout" style="text-align:right;">', unsafe_allow_html=True)
         if st.button("Salir", key="logout_btn"):
-            for k in ("usuario","rol","excluded_set","route","show_detail"):
-                if k in st.session_state: del st.session_state[k]
-            try: st.switch_page("app.py")
-            except Exception: st.experimental_rerun()
+            for k in ("usuario", "rol", "excluded_set", "route", "show_detail"):
+                if k in st.session_state:
+                    del st.session_state[k]
+            try:
+                st.switch_page("app.py")
+            except Exception:
+                st.experimental_rerun()
         st.markdown('</div>', unsafe_allow_html=True)
 
 # -------- Resolver imagen --------
@@ -223,19 +221,23 @@ with col_txt:
       Somos una empresa mexicana dedicada al transporte de carga y logística de fletes, ofreciendo soluciones precisas, seguras y transparentes para mover mercancías en todo el país.
       </p>
       <p class="lead">
+      Nuestra plataforma integra tecnología de Google Maps (Places, Directions y Geocoding APIs), bases de datos inteligentes y cálculos automatizados para ofrecerte resultados precisos y en tiempo real.
+      </p>
+      <p class="lead">
       Calculamos tus costos de traslado, optimizamos rutas y te ayudamos a tomar mejores decisiones con datos reales y actualizados.
       </p>
     """, unsafe_allow_html=True)
     st.markdown("""
+      <p class="lead" style="font-weight:700; margin-top: 8px;">Características principales:</p>
       <ul class="bullets">
-        <li>Cálculo de tarifas y peajes por tipo de camión.</li>
-        <li>Estimaciones de combustible y costos operativos.</li>
-        <li>Reportes detallados para clientes y transportistas.</li>
-        <li>Transparencia total en cada viaje.</li>
+        <li>Cálculo automático de rutas, distancias y casetas.</li>
+        <li>Estimaciones de combustible y costos operativos detallados.</li>
+        <li>Reportes profesionales para clientes y transportistas.</li>
+        <li>Transparencia total y datos actualizados en cada viaje.</li>
       </ul>
     """, unsafe_allow_html=True)
     st.markdown('<div class="cta-area">', unsafe_allow_html=True)
-    if st.button("Calcula tu Traslado", key="cta_calc", type="primary"):
+    if st.button("Calcular ruta", key="cta_calc", type="primary"):
         st.switch_page("pages/1_Calculadora.py")
     st.markdown('</div></div></div>', unsafe_allow_html=True)
 
