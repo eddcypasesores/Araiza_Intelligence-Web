@@ -1,18 +1,12 @@
 # pages/1_Calculadora.py — Costos de traslado (layout 2 columnas por sección + iconos en base64)
 from __future__ import annotations
 
-from pathlib import Path
-import sys
 import base64
 from uuid import uuid4
 from types import SimpleNamespace
-from typing import Any
 import pandas as pd
 import streamlit as st
-
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+from pathlib import Path
 
 # --- Utilidades / Proyecto
 from core.utils import inject_css, is_excluded, set_excluded, normalize_name
@@ -29,7 +23,6 @@ from core.pdf import build_pdf_cotizacion
 from core.driver_costs import read_trabajadores, costo_diario_trabajador_auto
 from core.params import read_params
 from core.maps import GoogleMapsClient, GoogleMapsError
-from core.streamlit_components import gmaps_autocomplete_component
 
 HARDCODED_MAPS_API_KEY = "AIzaSyBqSuQGWucHtypH60GpAAIxJVap76CgRL8"
 
@@ -54,8 +47,6 @@ st.markdown(
       [data-testid="stExpander"]{ border:1px solid rgba(15,23,42,.08); background:transparent; }
       [data-testid="stExpander"]>div{ background:transparent !important; }
       .section input[aria-label=""], .section textarea[aria-label=""]{ display:none !important; }
-      .gmaps-route { width:100%; }
-      .gmaps-route__list { margin-bottom:0.25rem; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -234,99 +225,81 @@ def section(title: str, icon: str | None, total_value: float | None, body_fn=Non
 
     st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
     return computed_total
-def _blank_route_point(point_id: str, role: str) -> dict[str, Any]:
-    return {
-        "id": point_id,
-        "role": role,
-        "raw_query": "",
-        "description": "",
-        "place_id": None,
-        "lat": None,
-        "lng": None,
-        "address": "",
-        "matched_plaza": None,
-    }
 
 
-def _ensure_route_points_state() -> list[dict[str, Any]]:
-    raw_points = st.session_state.get("route_points")
-    if not isinstance(raw_points, list) or len(raw_points) < 2:
-        raw_points = [
-            _blank_route_point("origin", "origin"),
-            _blank_route_point("destination", "destination"),
-        ]
+def autocomplete_input(label: str, key_prefix: str) -> dict[str, str] | None:
+    query_key = f"{key_prefix}_query"
+    options_key = f"{key_prefix}_options"
+    selection_key = f"{key_prefix}_selection"
+    data_key = f"{key_prefix}_data"
 
-    normalized: list[dict[str, Any]] = []
-    seen_ids: set[str] = set()
-    for idx, item in enumerate(raw_points):
-        point_id = str(item.get("id") or f"pt-{idx}")
-        if point_id in seen_ids:
-            point_id = f"{point_id}-{idx}"
-        seen_ids.add(point_id)
-        role = item.get("role") or "stop"
-        point = _blank_route_point(point_id, role)
-        for key in ("raw_query", "description", "place_id", "lat", "lng", "address", "matched_plaza"):
-            if key in item and item[key] is not None:
-                point[key] = item[key]
-        normalized.append(point)
+    query_value = st.text_input(
+        label,
+        value=st.session_state.get(query_key, ""),
+        key=query_key,
+        placeholder="Ingresa dirección, ciudad o caseta",
+    )
 
-    if len(normalized) < 2:
-        normalized = [
-            _blank_route_point("origin", "origin"),
-            _blank_route_point("destination", "destination"),
-        ]
+    trimmed = (query_value or "").strip()
+    if not MAPS_AVAILABLE:
+        if trimmed:
+            data = {
+                "description": trimmed,
+                "place_id": f"manual:{key_prefix}:{normalize_name(trimmed)}",
+                "matched_plaza": match_plaza_in_text(trimmed, PLAZAS),
+                "lat": None,
+                "lng": None,
+                "address": trimmed,
+            }
+            st.session_state[data_key] = data
+        else:
+            st.session_state.pop(data_key, None)
+        st.session_state.pop(options_key, None)
+        st.session_state.pop(selection_key, None)
+        if trimmed:
+            st.caption(f"Entrada manual: **{trimmed}**")
+        return st.session_state.get(data_key)
 
-    normalized[0]["role"] = "origin"
-    normalized[-1]["role"] = "destination"
-    for point in normalized[1:-1]:
-        point["role"] = "stop"
-
-    st.session_state["route_points"] = normalized
-    return normalized
-
-
-def _process_route_points(
-    points: list[dict[str, Any]],
-    previous: dict[str, dict[str, Any]] | None = None,
-) -> list[dict[str, Any]]:
-    previous = previous or {}
-    processed: list[dict[str, Any]] = []
-    for idx, item in enumerate(points):
-        point_id = str(item.get("id") or f"pt-{idx}")
-        role = item.get("role") or "stop"
-        point = _blank_route_point(point_id, role)
-        for key in ("raw_query", "description", "place_id", "lat", "lng", "address"):
-            value = item.get(key)
-            if value is not None:
-                point[key] = value
-
-        # Normaliza textos
-        raw_text = (point.get("raw_query") or "").strip()
-        description = (point.get("description") or "").strip()
-        if raw_text and not description:
-            point["description"] = raw_text
-        if description and not raw_text:
-            point["raw_query"] = description
-
-        # Convierte lat/lng a float si es posible
+    predictions: list[dict[str, str]] = []
+    if trimmed and len(trimmed) >= 3:
         try:
-            point["lat"] = float(point["lat"]) if point["lat"] is not None else None
-        except (TypeError, ValueError):
-            point["lat"] = None
-        try:
-            point["lng"] = float(point["lng"]) if point["lng"] is not None else None
-        except (TypeError, ValueError):
-            point["lng"] = None
+            predictions = maps_client.autocomplete(
+                trimmed,
+                session_token=session_token,
+                cache=maps_cache["autocomplete"],
+            )
+        except GoogleMapsError as exc:
+            st.warning(f"Google Maps (autocomplete) respondió con un error: {exc}")
+            predictions = []
+        st.session_state[options_key] = predictions
+    else:
+        st.session_state[options_key] = []
 
-        place_id = point.get("place_id")
-        prev_data = previous.get(point_id) or {}
+    predictions = st.session_state.get(options_key, []) or []
+    if predictions:
+        options = [pred.get("description", "") for pred in predictions]
+        prev = st.session_state.get(selection_key)
+        default_idx = options.index(prev) if prev in options else 0
+        selected_desc = st.selectbox(
+            "Coincidencias",
+            options,
+            index=default_idx,
+            key=selection_key,
+            label_visibility="collapsed",
+        )
+        chosen = next((pred for pred in predictions if pred.get("description", "") == selected_desc), None)
+        if chosen and chosen.get("place_id"):
+            place_id = chosen.get("place_id")
+            details_lat: float | None = None
+            details_lng: float | None = None
+            formatted_address: str | None = None
+            existing = st.session_state.get(data_key) or {}
 
-        if place_id and isinstance(place_id, str) and not place_id.startswith("manual:"):
-            changed = prev_data.get("place_id") != place_id
-            missing_lat = point.get("lat") is None
-            missing_lng = point.get("lng") is None
-            missing_address = not (point.get("address") or "").strip()
-            if maps_client is not None and (changed or missing_lat or missing_lng or missing_address):
+            if existing.get("place_id") == place_id and existing.get("lat") is not None and existing.get("lng") is not None:
+                details_lat = existing.get("lat")
+                details_lng = existing.get("lng")
+                formatted_address = existing.get("address")
+            else:
                 try:
                     details = maps_client.place_details(
                         place_id,
@@ -344,180 +317,63 @@ def _process_route_points(
                     lat_val = location.get("lat")
                     lng_val = location.get("lng")
                     try:
-                        point["lat"] = float(lat_val) if lat_val is not None else point.get("lat")
+                        details_lat = float(lat_val) if lat_val is not None else None
                     except (TypeError, ValueError):
-                        point["lat"] = point.get("lat")
+                        details_lat = None
                     try:
-                        point["lng"] = float(lng_val) if lng_val is not None else point.get("lng")
+                        details_lng = float(lng_val) if lng_val is not None else None
                     except (TypeError, ValueError):
-                        point["lng"] = point.get("lng")
-                formatted_address = result.get("formatted_address")
-                if formatted_address:
-                    point["address"] = formatted_address
-                    if not point.get("description") or point.get("description") == prev_data.get("description"):
-                        point["description"] = formatted_address
-        elif not place_id:
-            text_value = point.get("description") or point.get("raw_query") or ""
-            point["place_id"] = None
-            point["lat"] = None
-            point["lng"] = None
-            point["address"] = text_value
+                        details_lng = None
+                formatted_address = result.get("formatted_address") if isinstance(result, dict) else None
 
-        lookup_text = point.get("address") or point.get("description") or point.get("raw_query") or ""
-        point["matched_plaza"] = match_plaza_in_text(lookup_text, PLAZAS) if lookup_text else None
-        processed.append(point)
-
-    if processed:
-        processed[0]["role"] = "origin"
-        processed[-1]["role"] = "destination"
-        for point in processed[1:-1]:
-            point["role"] = "stop"
-
-    return processed
-
-
-def _split_route_points(
-    points: list[dict[str, Any]],
-) -> tuple[dict[str, Any] | None, list[dict[str, Any]], dict[str, Any] | None]:
-    if not points:
-        return None, [], None
-
-    origin = points[0] if (points[0].get("place_id") or (points[0].get("raw_query") or "").strip()) else None
-    destination = points[-1] if (points[-1].get("place_id") or (points[-1].get("raw_query") or "").strip()) else None
-    stops = [
-        point
-        for point in points[1:-1]
-        if point.get("place_id") or (point.get("raw_query") or "").strip()
-    ]
-    return origin, stops, destination
-
-
-def _render_component_route_inputs(
-    points: list[dict[str, Any]],
-    previous: dict[str, dict[str, Any]],
-) -> list[dict[str, Any]]:
-    component_value = gmaps_autocomplete_component(
-        points=points,
-        apiKey=maps_api_key,
-        elementId="route_builder",
-        key="route_builder_component",
-        allowAdd=True,
-        allowReorder=True,
-        maxStops=8,
-        placeholders={
-            "origin": "Ingresa el punto de origen",
-            "stop": "Agregar parada intermedia",
-            "destination": "Ingresa el destino final",
-        },
-        labels={
-            "origin": "Origen",
-            "stop": "Parada",
-            "destination": "Destino",
-        },
-        default={"points": points},
-    )
-
-    component_points = points
-    if isinstance(component_value, dict):
-        raw_points = component_value.get("points")
-        if isinstance(raw_points, list):
-            component_points = []
-            for idx, item in enumerate(raw_points):
-                point_id = str(item.get("id") or f"pt-{idx}")
-                role = item.get("role") or "stop"
-                point = _blank_route_point(point_id, role)
-                for key in ("raw_query", "description", "place_id", "lat", "lng", "address"):
-                    if key in item and item[key] is not None:
-                        point[key] = item[key]
-                component_points.append(point)
-            if len(component_points) < 2:
-                component_points = points
-
-    return _process_route_points(component_points, previous)
-
-
-def _render_manual_route_inputs(points: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    updated: list[dict[str, Any]] = []
-    to_remove: set[str] = set()
-
-    for idx, point in enumerate(points):
-        label = "ORIGEN" if idx == 0 else ("DESTINO" if idx == len(points) - 1 else f"PARADA {idx}")
-        if 0 < idx < len(points) - 1:
-            col_input, col_remove = st.columns([0.88, 0.12])
-        else:
-            col_input = st.columns([1.0])[0]
-            col_remove = None
-
-        with col_input:
-            value = st.text_input(
-                label,
-                value=point.get("description") or point.get("raw_query") or "",
-                key=f"manual_route_{point['id']}",
-                placeholder="Ingresa dirección, ciudad o referencia",
-            )
-
-        if col_remove is not None:
-            with col_remove:
-                if st.button("✕", key=f"manual_remove_{point['id']}"):
-                    to_remove.add(point["id"])
-
-        text_value = (value or "").strip()
-        point["raw_query"] = text_value
-        point["description"] = text_value
-        point["address"] = text_value
-        point["place_id"] = f"manual:{point['id']}:{normalize_name(text_value)}" if text_value else None
-        point["lat"] = None
-        point["lng"] = None
-        point["matched_plaza"] = match_plaza_in_text(text_value, PLAZAS) if text_value else None
-        updated.append(point)
-
-    if to_remove:
-        updated = [point for point in updated if point["id"] not in to_remove]
-
-    if st.button("➕ Añadir parada", key="manual_add_stop"):
-        new_id = f"stop-{uuid4().hex[:6]}"
-        updated.insert(max(len(updated) - 1, 1), _blank_route_point(new_id, "stop"))
-
-    if len(updated) < 2:
-        updated = [
-            _blank_route_point("origin", "origin"),
-            _blank_route_point("destination", "destination"),
-        ]
-
-    return updated
-
-
-def build_route_inputs() -> tuple[dict[str, Any] | None, list[dict[str, Any]], dict[str, Any] | None]:
-    points = _ensure_route_points_state()
-    previous_map = {point["id"]: point for point in points}
-
-    if MANUAL_MODE:
-        manual_points = _render_manual_route_inputs(points)
-        processed = _process_route_points(manual_points, previous_map)
+            matched_plaza = match_plaza_in_text(selected_desc, PLAZAS)
+            data = {
+                "description": selected_desc,
+                "place_id": place_id,
+                "matched_plaza": matched_plaza,
+                "lat": details_lat,
+                "lng": details_lng,
+                "address": formatted_address,
+            }
+            st.session_state[data_key] = data
+            caption = f"Elegiste: **{selected_desc}**"
+            if matched_plaza:
+                caption += f" · Caseta detectada: **{matched_plaza}**"
+            if details_lat is not None and details_lng is not None:
+                caption += f" · Coordenadas: ({details_lat:.5f}, {details_lng:.5f})"
+            st.caption(caption)
+            return data
     else:
-        processed = _render_component_route_inputs(points, previous_map)
+        st.session_state.pop(selection_key, None)
+        st.session_state.pop(data_key, None)
+        if trimmed:
+            if len(trimmed) < 3:
+                st.caption("Escribe al menos 3 caracteres para buscar.")
+            else:
+                st.info("Sin coincidencias para la búsqueda.")
 
-    st.session_state["route_points"] = processed
-    return _split_route_points(processed)
+    return st.session_state.get(data_key)
 
 
 def _calculate_route(
-    origin: dict[str, Any] | None,
-    destination: dict[str, Any] | None,
-    waypoints: list[dict[str, Any]],
+    origin: dict[str, str] | None,
+    destination: dict[str, str] | None,
+    waypoint: dict[str, str] | None,
+    *,
+    avoid_tolls: bool,
 ):
     if not origin or not destination:
         return None, "Selecciona un origen y un destino válidos."
     if maps_client is None:
         return None, "Google Maps no está disponible en este momento."
 
-    waypoint_ids = [wp["place_id"] for wp in waypoints if wp.get("place_id")]
-    waypoint_ids = waypoint_ids or None
+    waypoint_ids = [waypoint["place_id"]] if waypoint else None
     try:
         summary = maps_client.route_summary(
             origin["place_id"],
             destination["place_id"],
             waypoints=waypoint_ids,
+            avoid="tolls" if avoid_tolls else None,
             cache=maps_cache["directions"],
         )
     except GoogleMapsError as exc:
@@ -531,16 +387,12 @@ def _calculate_route(
 # ===============================
 st.markdown("<div class='hero-title'>COSTOS DE TRASLADO</div>", unsafe_allow_html=True)
 
-# 1) Búsquedas de origen / destino
-origen, paradas, destino = build_route_inputs()
-for legacy_key in (
-    "chk_parada",
-    "top_parada_query",
-    "top_parada_options",
-    "top_parada_selection",
-    "top_parada_data",
-):
-    st.session_state.pop(legacy_key, None)
+# 1) Fila 1: ORIGEN / DESTINO
+r1c1, r1c2 = st.columns([1.2, 1.2])
+with r1c1:
+    origen = autocomplete_input("ORIGEN", "top_origen")
+with r1c2:
+    destino = autocomplete_input("DESTINO", "top_destino")
 
 # 2) Fila 2: CLASE (tipo de auto)
 clases = ["MOTO","AUTOMOVIL","B2","B3","B4","T2","T3","T4","T5","T6","T7","T8","T9"]
@@ -550,34 +402,56 @@ cl_col = st.columns([0.9])[0]
 with cl_col:
     clase = st.selectbox("CLASE (TIPO DE AUTO)", clases, index=default_idx, key="top_clase")
 
+# 3) Fila 3: Agregar parada (checkbox) + selector visible solo si se activa
 st.markdown("")  # espacio
-st.session_state.pop("chk_avoid_tolls", None)
+r3c1, r3c2 = st.columns([0.35, 1.05])
+with r3c1:
+    if "chk_parada" not in st.session_state:
+        st.session_state["chk_parada"] = False
+    if MANUAL_MODE and st.session_state.get("chk_parada"):
+        st.session_state["chk_parada"] = False
+    usar_parada = st.checkbox(
+        "AGREGAR PARADA",
+        key="chk_parada",
+        disabled=MANUAL_MODE,
+    )
+with r3c2:
+    if usar_parada:
+        parada = autocomplete_input("PARADA (OPCIONAL)", "top_parada")
+    else:
+        st.session_state.pop("top_parada_query", None)
+        st.session_state.pop("top_parada_options", None)
+        st.session_state.pop("top_parada_selection", None)
+        st.session_state.pop("top_parada_data", None)
+        parada = None  # oculto completamente
 
-def _label_from_point(point: dict[str, Any] | None) -> str:
-    if not point:
-        return ""
-    return (point.get("description") or point.get("raw_query") or "").strip()
+st.markdown("")  # espacio
+opts_c1, opts_c2 = st.columns([0.4, 0.6])
+with opts_c1:
+    if "chk_avoid_tolls" not in st.session_state:
+        st.session_state["chk_avoid_tolls"] = False
+    if MANUAL_MODE and st.session_state.get("chk_avoid_tolls"):
+        st.session_state["chk_avoid_tolls"] = False
+    evitar_cuotas = st.checkbox(
+        "EVITAR CASETAS (RUTA LIBRE)",
+        key="chk_avoid_tolls",
+        disabled=MANUAL_MODE,
+    )
+with opts_c2:
+    st.caption("Si se activa, Google Maps intentará evitar peajes; la ruta puede ser más larga.")
 
-
-origin_label = _label_from_point(origen)
-destination_label = _label_from_point(destino)
-stop_labels = [_label_from_point(stop) for stop in paradas]
+origin_label = origen.get("description", "") if origen else ""
+destination_label = destino.get("description", "") if destino else ""
+stop_label = parada.get("description", "") if (usar_parada and parada) else ""
 st.session_state["origin_label"] = origin_label
 st.session_state["destination_label"] = destination_label
-st.session_state["stop_labels"] = stop_labels
+st.session_state["stop_label"] = stop_label
 
 def compute_route_data():
     """Consulta Google Maps, calcula la ruta y determina las casetas aplicables."""
 
-    missing_points = [
-        point
-        for point in [origen, destino, *paradas]
-        if point and not point.get("place_id")
-    ]
-    if missing_points:
-        return None, None, None, "Confirma cada punto con una selección válida de Google Maps."
-
-    summary, route_error = _calculate_route(origen, destino, paradas)
+    waypoint = parada if (usar_parada and parada) else None
+    summary, route_error = _calculate_route(origen, destino, waypoint, avoid_tolls=evitar_cuotas)
     if route_error:
         return None, None, None, route_error
     if summary is None:
@@ -587,7 +461,7 @@ def compute_route_data():
     st.session_state["maps_distance_km"] = float(summary.distance_m or 0.0) / 1000.0
     st.session_state["maps_polyline_points"] = summary.polyline_points
     st.session_state["maps_route_summary"] = summary.summary
-    selections = [point for point in [origen, *paradas, destino] if point]
+    selections = [s for s in (origen, waypoint, destino) if s]
 
     match = match_plazas_for_route(
         ROUTES,
@@ -614,21 +488,16 @@ def compute_route_data():
 
 
 def manual_route_flow(
-    origin: dict[str, Any] | None,
-    destination: dict[str, Any] | None,
-    stops: list[dict[str, Any]],
+    origin: dict[str, str] | None,
+    destination: dict[str, str] | None,
     clase: str,
 ):
     empty_df = pd.DataFrame(columns=["idx", "plaza", "tarifa"])
-    origin_label = _label_from_point(origin)
-    destination_label = _label_from_point(destination)
+    origin_label = (origin or {}).get("description", "").strip()
+    destination_label = (destination or {}).get("description", "").strip()
     if not origin_label or not destination_label:
         st.info("Ingresa un origen y un destino para comenzar el cálculo manual.")
         return None, None, empty_df, None
-
-    stop_names = [_label_from_point(stop) for stop in stops if _label_from_point(stop)]
-    path_labels = [origin_label, *stop_names, destination_label]
-    manual_route_name = " → ".join(path_labels)
 
     st.info(
         "Modo manual activo: ingresa la distancia estimada y selecciona manualmente las casetas aplicables."
@@ -693,7 +562,7 @@ def manual_route_flow(
 
     df = pd.DataFrame(rows) if rows else empty_df
 
-    route_title = route_choice if route_choice != "(Sin catálogo)" else manual_route_name
+    route_title = route_choice if route_choice != "(Sin catálogo)" else f"{origin_label} → {destination_label}"
     st.session_state["maps_distance_km"] = float(manual_distance or 0.0)
     st.session_state["gmaps_route"] = None
     st.session_state["maps_polyline_points"] = []
@@ -715,7 +584,7 @@ def manual_route_flow(
 
 
 if MANUAL_MODE:
-    route_summary, ruta_nombre, df, route_error = manual_route_flow(origen, destino, paradas, clase)
+    route_summary, ruta_nombre, df, route_error = manual_route_flow(origen, destino, clase)
 else:
     route_summary, ruta_nombre, df, route_error = compute_route_data()
 if route_error:
@@ -729,11 +598,12 @@ if route_summary is None:
 
 # Limpiar exclusiones si cambian selecciones
 sel = (
-    tuple(
-        (point.get("place_id") or point.get("raw_query") or "")
-        for point in [origen, *paradas, destino]
-    ),
+    origen["place_id"] if origen else None,
+    destino["place_id"] if destino else None,
     clase,
+    usar_parada,
+    (parada["place_id"] if usar_parada and parada else None),
+    evitar_cuotas,
 )
 if st.session_state.get("last_sel_top") != sel:
     for k in list(st.session_state.keys()):
@@ -746,6 +616,21 @@ if st.session_state.get("route_name") != ruta_nombre:
     st.session_state["route_name"] = ruta_nombre
     st.session_state.setdefault("excluded_set", set())
     st.session_state["excluded_set"].clear()
+
+distance_km_detected = float(st.session_state.get("maps_distance_km") or 0.0)
+caption_parts = []
+if ruta_nombre:
+    caption_parts.append(f"Ruta detectada: **{ruta_nombre}**")
+summary_label = route_summary.summary or ""
+if summary_label and summary_label not in (ruta_nombre or ""):
+    label_prefix = "Resumen Google" if MAPS_AVAILABLE else "Resumen"
+    caption_parts.append(f"{label_prefix}: {summary_label}")
+caption_parts.append(f"Distancia: {distance_km_detected:,.2f} km")
+if evitar_cuotas:
+    caption_parts.append("Ruta libre solicitada")
+if MANUAL_MODE:
+    caption_parts.append("Modo manual activado")
+st.caption(" · ".join(caption_parts))
 
 if getattr(route_summary, "warnings", None):
     prefix = "Google Maps advierte" if MAPS_AVAILABLE else "Aviso"
