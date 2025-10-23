@@ -1,12 +1,17 @@
 # pages/1_Calculadora.py — Costos de traslado (layout 2 columnas por sección + iconos en base64)
 from __future__ import annotations
 
+from pathlib import Path
+import sys
 import base64
 from uuid import uuid4
 from types import SimpleNamespace
 import pandas as pd
 import streamlit as st
-from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 # --- Utilidades / Proyecto
 from core.utils import inject_css, is_excluded, set_excluded, normalize_name
