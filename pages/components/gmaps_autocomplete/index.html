@@ -4,47 +4,259 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <script src="https://unpkg.com/streamlit-component-lib@latest/dist/index.js"></script>
+    <script>
+      (() => {
+        if (window.Streamlit) {
+          return;
+        }
+
+        const RENDER_EVENT = "streamlit:render";
+
+        const inferDataType = (value) => {
+          if (value === null || value === undefined) return "json";
+          if (Array.isArray(value)) return "json";
+          const valueType = typeof value;
+          if (valueType === "number") {
+            return Number.isInteger(value) ? "int" : "float";
+          }
+          if (valueType === "boolean") return "bool";
+          if (valueType === "string") return "string";
+          if (valueType === "bigint") return "int";
+          return "json";
+        };
+
+        const events = new EventTarget();
+
+        const sendMessage = (type, payload) => {
+          const message = {
+            isStreamlitMessage: true,
+            type,
+            ...payload,
+          };
+          window.parent.postMessage(message, "*");
+        };
+
+        window.addEventListener("message", (event) => {
+          const data = event.data || {};
+          if (!data.isStreamlitMessage) return;
+          if (data.type === RENDER_EVENT) {
+            events.dispatchEvent(new CustomEvent(RENDER_EVENT, { detail: data }));
+          }
+        });
+
+        window.Streamlit = {
+          setComponentReady: () =>
+            sendMessage("streamlit:componentReady", { apiVersion: 1 }),
+          setFrameHeight: (height) =>
+            sendMessage("streamlit:setFrameHeight", { height }),
+          setComponentValue: (value) =>
+            sendMessage("streamlit:setComponentValue", {
+              value: value ?? null,
+              dataType: inferDataType(value),
+            }),
+          events,
+          RENDER_EVENT,
+        };
+      })();
+    </script>
     <style>
       :root {
         color-scheme: light;
       }
       body {
         margin: 0;
+        background: transparent;
         font-family: "Source Sans Pro", "Segoe UI", Tahoma, sans-serif;
+        color: #0f172a;
       }
-      .gmaps-field {
+      * {
+        box-sizing: border-box;
+      }
+      .gmaps-route {
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+      }
+      .gmaps-route__list {
         display: flex;
         flex-direction: column;
         gap: 0.45rem;
-        margin-bottom: 0.75rem;
       }
-      .gmaps-label {
-        font-weight: 700;
-        text-transform: uppercase;
-        letter-spacing: 0.08em;
-        color: #334155;
-        font-size: 0.95rem;
-      }
-      .gmaps-input {
+      .gmaps-row {
+        display: grid;
+        grid-template-columns: auto auto 1fr auto;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.4rem 0.55rem 0.4rem 0.45rem;
+        border: 1px solid #dfe1e5;
+        border-radius: 999px;
+        background: #fff;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+        transition: box-shadow 0.2s ease, border 0.2s ease;
         position: relative;
       }
-      .gmaps-input input[type="text"] {
+      .gmaps-row:focus-within {
+        border-color: #4285f4;
+        box-shadow: 0 4px 12px rgba(66, 133, 244, 0.25);
+      }
+      .gmaps-row.is-dragging {
+        opacity: 0.85;
+        border-color: #4285f4;
+      }
+      .gmaps-row__handle {
+        width: 1.4rem;
+        height: 1.4rem;
+        border: none;
+        background: transparent;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        cursor: grab;
+        color: #64748b;
+      }
+      .gmaps-row__handle svg {
+        width: 0.9rem;
+        height: 0.9rem;
+      }
+      .gmaps-row__icon {
+        width: 1.35rem;
+        height: 1.35rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .gmaps-row__icon svg {
         width: 100%;
-        font-size: 1.05rem;
-        padding: 0.85rem 1rem;
-        border-radius: 14px;
-        border: 1.5px solid #cbd5f5;
-        transition: border 0.2s ease, box-shadow 0.2s ease;
+        height: 100%;
+      }
+      .gmaps-row__input {
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+        position: relative;
+      }
+      .gmaps-row__input input[type="text"] {
+        border: none;
+        background: transparent;
         outline: none;
+        font-size: 1rem;
+        flex: 1 1 auto;
+        min-width: 0;
+        padding: 0.35rem 0;
+        color: inherit;
       }
-      .gmaps-input input[type="text"]:focus {
+      .gmaps-row__input input[type="text"]::placeholder {
+        color: #94a3b8;
+      }
+      .gmaps-row__clear {
+        width: 1.4rem;
+        height: 1.4rem;
+        border: none;
+        background: transparent;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #6b7280;
+        cursor: pointer;
+        opacity: 0;
+        transform: scale(0.85);
+        transition: opacity 0.15s ease, transform 0.15s ease, background 0.15s ease;
+        pointer-events: none;
+      }
+      .gmaps-row__clear.is-visible {
+        opacity: 1;
+        transform: scale(1);
+        pointer-events: auto;
+      }
+      .gmaps-row__clear:hover,
+      .gmaps-row__clear:focus-visible {
+        background: rgba(60, 64, 67, 0.1);
+        color: #111827;
+      }
+      .gmaps-row__remove {
+        width: 1.4rem;
+        height: 1.4rem;
+        border: none;
+        background: transparent;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #ef4444;
+        cursor: pointer;
+        transition: background 0.15s ease, color 0.15s ease;
+      }
+      .gmaps-row__remove:hover,
+      .gmaps-row__remove:focus-visible {
+        background: rgba(239, 68, 68, 0.1);
+        color: #b91c1c;
+      }
+      .gmaps-row[draggable="true"] {
+        cursor: grab;
+      }
+      .gmaps-row.is-drop-target::after {
+        content: "";
+        position: absolute;
+        left: 1.5rem;
+        right: 1.5rem;
+        bottom: -0.45rem;
+        height: 0.25rem;
+        border-radius: 999px;
+        background: rgba(66, 133, 244, 0.35);
+      }
+      .gmaps-add {
+        align-self: flex-start;
+        border: 1px dashed #9ca3af;
+        border-radius: 999px;
+        padding: 0.45rem 0.95rem;
+        font-size: 0.95rem;
+        font-weight: 600;
+        letter-spacing: 0.01em;
+        background: transparent;
+        color: #1f2937;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        cursor: pointer;
+        transition: border 0.2s ease, background 0.2s ease;
+      }
+      .gmaps-add svg {
+        width: 1.1rem;
+        height: 1.1rem;
+      }
+      .gmaps-add:hover,
+      .gmaps-add:focus-visible {
         border-color: #2563eb;
-        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+        background: rgba(37, 99, 235, 0.08);
       }
-      .gmaps-input input[type="text"]:disabled {
-        background: #f1f5f9;
+      .gmaps-row.is-disabled,
+      .gmaps-add.is-disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+        pointer-events: none;
+        box-shadow: none;
+      }
+      .gmaps-row input:disabled {
         color: #94a3b8;
         cursor: not-allowed;
+      }
+      .gmaps-row__handle:focus-visible,
+      .gmaps-row__remove:focus-visible,
+      .gmaps-add:focus-visible,
+      .gmaps-row__clear:focus-visible {
+        outline: 2px solid #2563eb;
+        outline-offset: 2px;
+      }
+      @media (max-width: 640px) {
+        .gmaps-row {
+          grid-template-columns: auto 1fr auto;
+        }
+        .gmaps-row__handle {
+          display: none;
+        }
       }
     </style>
   </head>
@@ -56,21 +268,32 @@
         console.error("Streamlit component lib no disponible en window.Streamlit");
       }
 
-      const sendValue = (payload) => {
-        if (Streamlit) {
-          Streamlit.setComponentValue(payload);
-        }
-      };
-
-      const updateHeight = (height) => {
-        if (Streamlit) {
-          Streamlit.setFrameHeight(height);
-        }
-      };
       let scriptPromise = null;
-      let autocomplete = null;
-      let latestArgs = null;
-      let inputElement = null;
+      const autocompleteInstances = new Map();
+      const componentState = {
+        points: [],
+        allowAdd: true,
+        allowReorder: true,
+        maxStops: 8,
+        disabled: false,
+        placeholders: {
+          origin: "Ingresa el origen",
+          stop: "Agregar parada intermedia",
+          destination: "Ingresa el destino",
+        },
+        labels: {
+          origin: "Origen",
+          stop: "Parada",
+          destination: "Destino",
+        },
+        elementId: "gmaps-route",
+        countryRestriction: null,
+        apiKey: "",
+      };
+      let dragState = {
+        id: null,
+        overId: null,
+      };
 
       function ensureScript(apiKey) {
         if (window.google && window.google.maps && window.google.maps.places) {
@@ -96,6 +319,65 @@
           document.head.appendChild(script);
         });
         return scriptPromise;
+      }
+
+      function sanitizePoint(raw, idx) {
+        const baseId = raw && raw.id ? String(raw.id) : `pt-${idx}`;
+        const cleaned = {
+          id: baseId,
+          role: raw && raw.role ? String(raw.role) : "stop",
+          raw_query: raw && typeof raw.raw_query === "string" ? raw.raw_query : "",
+          description: raw && typeof raw.description === "string" ? raw.description : "",
+          place_id: raw && raw.place_id ? String(raw.place_id) : null,
+          lat: typeof raw?.lat === "number" ? raw.lat : null,
+          lng: typeof raw?.lng === "number" ? raw.lng : null,
+          address: raw && typeof raw.address === "string" ? raw.address : "",
+        };
+        return cleaned;
+      }
+
+      function normalizeRoles(points) {
+        if (!Array.isArray(points) || points.length === 0) {
+          return;
+        }
+        points.forEach((point, index) => {
+          if (index === 0) {
+            point.role = "origin";
+          } else if (index === points.length - 1) {
+            point.role = "destination";
+          } else {
+            point.role = "stop";
+          }
+        });
+      }
+
+      function setStateFromArgs(args) {
+        componentState.allowAdd = args.allowAdd !== false;
+        componentState.allowReorder = args.allowReorder !== false;
+        componentState.maxStops = typeof args.maxStops === "number" ? args.maxStops : 8;
+        componentState.disabled = Boolean(args.disabled);
+        componentState.placeholders = {
+          ...componentState.placeholders,
+          ...(args.placeholders || {}),
+        };
+        componentState.labels = {
+          ...componentState.labels,
+          ...(args.labels || {}),
+        };
+        componentState.elementId = args.elementId || "gmaps-route";
+        componentState.countryRestriction = args.countryRestriction || null;
+        componentState.apiKey = args.apiKey || componentState.apiKey;
+        const rawPoints = Array.isArray(args.points) ? args.points : [];
+        const sanitized = rawPoints.map((item, idx) => sanitizePoint(item, idx));
+        let points = sanitized;
+        if (points.length < 2) {
+          points = [
+            sanitizePoint({ id: "origin", role: "origin" }, 0),
+            sanitizePoint({ id: "destination", role: "destination" }, 1),
+          ];
+        }
+        normalizeRoles(points);
+        componentState.points = points;
       }
 
       function toPayload(place, rawValue) {
@@ -128,86 +410,439 @@
         return payload;
       }
 
-      function attachAutocomplete() {
-        if (!window.google || !window.google.maps || !window.google.maps.places) {
-          return;
+      function updatePoint(pointId, patch, options = {}) {
+        const idx = componentState.points.findIndex((pt) => pt.id === pointId);
+        if (idx === -1) return;
+        const point = componentState.points[idx];
+        if (options.resetLocation) {
+          point.place_id = null;
+          point.lat = null;
+          point.lng = null;
+          point.address = "";
         }
-        if (!inputElement) {
-          return;
-        }
-        if (autocomplete) {
-          google.maps.event.clearInstanceListeners(autocomplete);
-        }
-        const options = {
-          fields: ["place_id", "name", "formatted_address", "geometry"],
-        };
-        if (latestArgs && latestArgs.countryRestriction) {
-          options.componentRestrictions = { country: latestArgs.countryRestriction };
-        }
-        autocomplete = new google.maps.places.Autocomplete(inputElement, options);
-        autocomplete.addListener("place_changed", () => {
-          const place = autocomplete.getPlace();
-          const payload = toPayload(place, inputElement.value);
-          sendValue(payload);
+        Object.assign(point, patch);
+      }
+
+      function sendCurrentValue(reason = "update", changedPointId = null) {
+        if (!Streamlit) return;
+        const payloadPoints = componentState.points.map((pt) => ({
+          id: pt.id,
+          role: pt.role,
+          raw_query: pt.raw_query || "",
+          description: pt.description || "",
+          place_id: pt.place_id || null,
+          lat: typeof pt.lat === "number" ? pt.lat : null,
+          lng: typeof pt.lng === "number" ? pt.lng : null,
+          address: pt.address || "",
+        }));
+        Streamlit.setComponentValue({
+          reason,
+          changedPointId,
+          points: payloadPoints,
         });
       }
 
-      function render(event) {
-        latestArgs = event.detail.args || {};
-        const root = document.getElementById("root");
-        const label = latestArgs.label || "";
-        const placeholder = latestArgs.placeholder || "";
-        const disabled = latestArgs.disabled ? "disabled" : "";
-        const value =
-          latestArgs.value ||
-          (latestArgs.stored && latestArgs.stored.description) ||
-          "";
-        const elementId = latestArgs.elementId || "gmaps-autocomplete-input";
+      function getPlaceholderForRole(role) {
+        const placeholders = componentState.placeholders || {};
+        if (role === "origin") return placeholders.origin || "Ingresa el origen";
+        if (role === "destination")
+          return placeholders.destination || "Ingresa el destino";
+        return placeholders.stop || "Agregar parada";
+      }
 
-        root.innerHTML = `
-          <div class="gmaps-field">
-            ${label ? `<label class="gmaps-label" for="${elementId}">${label}</label>` : ""}
-            <div class="gmaps-input">
-              <input type="text" id="${elementId}" ${disabled} placeholder="${placeholder}" autocomplete="off" spellcheck="false" />
-            </div>
-          </div>
-        `;
+      function getLabelForRole(role) {
+        const labels = componentState.labels || {};
+        if (role === "origin") return labels.origin || "Origen";
+        if (role === "destination") return labels.destination || "Destino";
+        return labels.stop || "Parada";
+      }
 
-        inputElement = document.getElementById(elementId);
-        if (inputElement) {
-          inputElement.value = value || "";
-          inputElement.addEventListener("input", () => {
-            const payload = toPayload(null, inputElement.value);
-            sendValue(payload);
-          });
+      function syncClearVisibility(inputEl, clearBtn) {
+        if (!inputEl || !clearBtn) return;
+        if (!inputEl.value || componentState.disabled) {
+          clearBtn.classList.remove("is-visible");
+          clearBtn.setAttribute("tabindex", "-1");
+        } else {
+          clearBtn.classList.add("is-visible");
+          clearBtn.removeAttribute("tabindex");
         }
+      }
 
-        const updateFrame = () => {
-          const height = Math.max(root.offsetHeight + 12, 80);
-          updateHeight(height);
-        };
+      function detachAutocomplete(pointId) {
+        const inputId = `${componentState.elementId}__${pointId}`;
+        const stored = autocompleteInstances.get(inputId);
+        if (stored && stored.instance) {
+          google.maps.event.clearInstanceListeners(stored.instance);
+        }
+        autocompleteInstances.delete(inputId);
+      }
 
-        updateFrame();
-
-        if (latestArgs.disabled) {
-          sendValue({ raw_query: value || "", description: value || "" });
+      function attachAutocompleteToInput(inputEl, pointId) {
+        if (!window.google || !window.google.maps || !window.google.maps.places) {
           return;
         }
-
-        ensureScript(latestArgs.apiKey)
-          .then(() => {
-            attachAutocomplete();
-            updateFrame();
-          })
-          .catch(() => {
-            updateFrame();
+        const inputId = `${componentState.elementId}__${pointId}`;
+        detachAutocomplete(pointId);
+        const options = {
+          fields: ["place_id", "name", "formatted_address", "geometry"],
+        };
+        if (componentState.countryRestriction) {
+          options.componentRestrictions = {
+            country: componentState.countryRestriction,
+          };
+        }
+        const autocomplete = new google.maps.places.Autocomplete(inputEl, options);
+        autocomplete.addListener("place_changed", () => {
+          const place = autocomplete.getPlace();
+          const payload = toPayload(place, inputEl.value);
+          updatePoint(pointId, {
+            ...payload,
+            raw_query: inputEl.value || "",
           });
+          sendCurrentValue("place", pointId);
+        });
+        autocompleteInstances.set(inputId, { instance: autocomplete, pointId });
+      }
+
+      function setupAutocompleteForAllInputs() {
+        if (!window.google || !window.google.maps || !window.google.maps.places) {
+          return;
+        }
+        componentState.points.forEach((point) => {
+          const inputId = `${componentState.elementId}__${point.id}`;
+          const inputEl = document.getElementById(inputId);
+          if (inputEl) {
+            attachAutocompleteToInput(inputEl, point.id);
+          }
+        });
+      }
+
+      function generateStopId() {
+        let counter = 1;
+        const existingIds = new Set(componentState.points.map((pt) => pt.id));
+        while (existingIds.has(`stop-${counter}`)) {
+          counter += 1;
+        }
+        return `stop-${counter}`;
+      }
+
+      function addStop() {
+        const insertIndex = Math.max(componentState.points.length - 1, 1);
+        const newPoint = {
+          id: generateStopId(),
+          role: "stop",
+          raw_query: "",
+          description: "",
+          place_id: null,
+          lat: null,
+          lng: null,
+          address: "",
+        };
+        componentState.points.splice(insertIndex, 0, newPoint);
+        normalizeRoles(componentState.points);
+        renderComponent();
+        sendCurrentValue("add", newPoint.id);
+      }
+
+      function removeStop(pointId) {
+        if (componentState.points.length <= 2) return;
+        const idx = componentState.points.findIndex((pt) => pt.id === pointId);
+        if (idx <= 0 || idx >= componentState.points.length - 1) return;
+        componentState.points.splice(idx, 1);
+        normalizeRoles(componentState.points);
+        renderComponent();
+        sendCurrentValue("remove", pointId);
+      }
+
+      function movePoint(pointId, targetId) {
+        if (pointId === targetId) return;
+        const currentIdx = componentState.points.findIndex((pt) => pt.id === pointId);
+        const targetIdx = componentState.points.findIndex((pt) => pt.id === targetId);
+        if (currentIdx === -1 || targetIdx === -1) return;
+        const [point] = componentState.points.splice(currentIdx, 1);
+        componentState.points.splice(targetIdx, 0, point);
+        normalizeRoles(componentState.points);
+        renderComponent();
+        sendCurrentValue("reorder", pointId);
+      }
+
+      function handleDragStart(event) {
+        const row = event.currentTarget;
+        const pointId = row.dataset.pointId;
+        if (!pointId) return;
+        if (
+          componentState.disabled ||
+          !componentState.allowReorder ||
+          componentState.points.length < 2
+        ) {
+          event.preventDefault();
+          return;
+        }
+        const isHandle = event.target.closest(".gmaps-row__handle");
+        if (!isHandle) {
+          event.preventDefault();
+          return;
+        }
+        dragState = { id: pointId, overId: null };
+        row.classList.add("is-dragging");
+        event.dataTransfer.effectAllowed = "move";
+        try {
+          event.dataTransfer.setData("text/plain", pointId);
+        } catch (err) {
+          // Ignorar navegadores que no permiten setData
+        }
+      }
+
+      function handleDragOver(event) {
+        event.preventDefault();
+        const row = event.currentTarget;
+        if (!row || !row.dataset.pointId || row.dataset.pointId === dragState.id) {
+          return;
+        }
+        dragState.overId = row.dataset.pointId;
+        document
+          .querySelectorAll(".gmaps-row")
+          .forEach((el) => el.classList.remove("is-drop-target"));
+        row.classList.add("is-drop-target");
+      }
+
+      function handleDragLeave(event) {
+        const row = event.currentTarget;
+        if (!row) return;
+        row.classList.remove("is-drop-target");
+      }
+
+      function handleDrop(event) {
+        event.preventDefault();
+        const row = event.currentTarget;
+        if (!row || !row.dataset.pointId) return;
+        row.classList.remove("is-drop-target");
+        const targetId = row.dataset.pointId;
+        if (dragState.id && targetId) {
+          movePoint(dragState.id, targetId);
+        }
+      }
+
+      function handleDragEnd(event) {
+        const row = event.currentTarget;
+        if (row) {
+          row.classList.remove("is-dragging");
+        }
+        document
+          .querySelectorAll(".gmaps-row")
+          .forEach((el) => el.classList.remove("is-drop-target"));
+        dragState = { id: null, overId: null };
+      }
+
+      function renderIconForRole(role) {
+        if (role === "origin") {
+          return `
+            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+              <circle cx="12" cy="12" r="7" fill="none" stroke="#4b5563" stroke-width="2" />
+              <circle cx="12" cy="12" r="3" fill="#2563eb" />
+            </svg>
+          `;
+        }
+        if (role === "destination") {
+          return `
+            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+              <path fill="#2563eb" d="m19 5-6 3-6-3v14l6-3 6 3z" />
+            </svg>
+          `;
+        }
+        return `
+          <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+            <path fill="#ef4444" d="M12 2a7 7 0 0 0-7 7c0 4.77 6.07 12.39 6.33 12.7a1 1 0 0 0 1.34 0C12.93 21.39 19 13.77 19 9a7 7 0 0 0-7-7Zm0 10a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z" />
+          </svg>
+        `;
+      }
+
+      function createRow(point, index) {
+        const row = document.createElement("div");
+        row.className = "gmaps-row";
+        row.dataset.pointId = point.id;
+        if (componentState.disabled) {
+          row.classList.add("is-disabled");
+        }
+        const canDrag =
+          componentState.allowReorder &&
+          !componentState.disabled &&
+          componentState.points.length > 1;
+        if (canDrag) {
+          row.setAttribute("draggable", "true");
+          row.addEventListener("dragstart", handleDragStart);
+          row.addEventListener("dragover", handleDragOver);
+          row.addEventListener("dragleave", handleDragLeave);
+          row.addEventListener("drop", handleDrop);
+          row.addEventListener("dragend", handleDragEnd);
+        } else {
+          row.setAttribute("draggable", "false");
+        }
+
+        const handleBtn = document.createElement("button");
+        handleBtn.type = "button";
+        handleBtn.className = "gmaps-row__handle";
+        handleBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+            <path fill="currentColor" d="M10 4h4v2h-4zm0 7h4v2h-4zm0 7h4v2h-4z" />
+          </svg>
+        `;
+        handleBtn.setAttribute("aria-label", "Reordenar parada");
+        if (!canDrag) {
+          handleBtn.setAttribute("tabindex", "-1");
+          handleBtn.style.cursor = "default";
+          handleBtn.style.color = "#cbd5f5";
+        }
+        row.appendChild(handleBtn);
+
+        const iconSpan = document.createElement("span");
+        iconSpan.className = "gmaps-row__icon";
+        iconSpan.innerHTML = renderIconForRole(point.role);
+        row.appendChild(iconSpan);
+
+        const inputWrapper = document.createElement("div");
+        inputWrapper.className = "gmaps-row__input";
+        const input = document.createElement("input");
+        input.type = "text";
+        input.id = `${componentState.elementId}__${point.id}`;
+        input.value = point.raw_query || point.description || "";
+        input.placeholder = getPlaceholderForRole(point.role);
+        input.disabled = componentState.disabled;
+        input.autocomplete = "off";
+        input.spellcheck = false;
+        input.setAttribute("aria-label", getLabelForRole(point.role));
+        input.dataset.pointId = point.id;
+        input.addEventListener("input", (event) => {
+          const value = event.target.value || "";
+          updatePoint(point.id, {
+            raw_query: value,
+            description: value,
+          }, {
+            resetLocation: true,
+          });
+          syncClearVisibility(input, clearBtn);
+          sendCurrentValue("input", point.id);
+        });
+        inputWrapper.appendChild(input);
+
+        const clearBtn = document.createElement("button");
+        clearBtn.type = "button";
+        clearBtn.className = "gmaps-row__clear";
+        clearBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+            <path fill="currentColor" d="m12 10.586 4.95-4.95 1.414 1.414L13.414 12l4.95 4.95-1.414 1.414L12 13.414l-4.95 4.95-1.414-1.414L10.586 12l-4.95-4.95L7.05 5.636z" />
+          </svg>
+        `;
+        clearBtn.setAttribute("aria-label", `Limpiar ${getLabelForRole(point.role)}`);
+        clearBtn.addEventListener("click", () => {
+          if (componentState.disabled) return;
+          input.value = "";
+          updatePoint(point.id, {
+            raw_query: "",
+            description: "",
+          }, {
+            resetLocation: true,
+          });
+          syncClearVisibility(input, clearBtn);
+          sendCurrentValue("clear", point.id);
+          input.focus();
+        });
+        inputWrapper.appendChild(clearBtn);
+        syncClearVisibility(input, clearBtn);
+        row.appendChild(inputWrapper);
+
+        if (point.role === "stop") {
+          const removeBtn = document.createElement("button");
+          removeBtn.type = "button";
+          removeBtn.className = "gmaps-row__remove";
+          removeBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+              <path fill="currentColor" d="M6 11h12v2H6z" />
+            </svg>
+          `;
+          removeBtn.setAttribute("aria-label", "Eliminar parada");
+          removeBtn.addEventListener("click", () => removeStop(point.id));
+          row.appendChild(removeBtn);
+        } else {
+          const spacer = document.createElement("span");
+          spacer.style.width = "1.4rem";
+          spacer.style.height = "1.4rem";
+          row.appendChild(spacer);
+        }
+
+        return row;
+      }
+
+      function updateFrameHeight() {
+        if (!Streamlit) return;
+        const root = document.getElementById("root");
+        if (!root) return;
+        const height = Math.max(root.offsetHeight + 16, 140);
+        Streamlit.setFrameHeight(height);
+      }
+
+      function renderComponent() {
+        const root = document.getElementById("root");
+        if (!root) return;
+        root.innerHTML = "";
+
+        const wrapper = document.createElement("div");
+        wrapper.className = "gmaps-route";
+        const list = document.createElement("div");
+        list.className = "gmaps-route__list";
+        componentState.points.forEach((point, index) => {
+          const row = createRow(point, index);
+          list.appendChild(row);
+        });
+        wrapper.appendChild(list);
+
+        const stopsCount = Math.max(componentState.points.length - 2, 0);
+        const canAddMore =
+          componentState.allowAdd &&
+          !componentState.disabled &&
+          stopsCount < componentState.maxStops;
+        if (canAddMore) {
+          const addBtn = document.createElement("button");
+          addBtn.type = "button";
+          addBtn.className = "gmaps-add";
+          addBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true">
+              <path fill="currentColor" d="M11 5h2v6h6v2h-6v6h-2v-6H5v-2h6z" />
+            </svg>
+            <span>Añadir destino</span>
+          `;
+          addBtn.setAttribute("aria-label", "Añadir destino");
+          addBtn.addEventListener("click", addStop);
+          wrapper.appendChild(addBtn);
+        }
+
+        root.appendChild(wrapper);
+        updateFrameHeight();
+
+        const maybeAttach = () => {
+          if (!componentState.apiKey) {
+            return;
+          }
+          ensureScript(componentState.apiKey)
+            .then(() => {
+              setupAutocompleteForAllInputs();
+              updateFrameHeight();
+            })
+            .catch(() => {
+              updateFrameHeight();
+            });
+        };
+        maybeAttach();
       }
 
       if (Streamlit) {
-        Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, render);
+        Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, (event) => {
+          const args = event.detail.args || {};
+          setStateFromArgs(args);
+          renderComponent();
+        });
         Streamlit.setComponentReady();
-        Streamlit.setFrameHeight(100);
+        Streamlit.setFrameHeight(140);
       }
     </script>
   </body>
