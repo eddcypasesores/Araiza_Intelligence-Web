@@ -33,8 +33,20 @@ st.markdown(f"""
     --brand-red-dark: #b91c1c;
   }}
 
-  /* Ocultar sidebar */
-  [data-testid="stSidebar"], [data-testid="collapsedControl"] {{ display:none !important; }}
+  /* Ocultar elementos nativos de Streamlit que compiten con la barra */
+  [data-testid="stSidebar"],
+  [data-testid="collapsedControl"] {
+    display: none !important;
+  }
+  header[data-testid="stHeader"],
+  div[data-testid="stToolbar"],
+  #MainMenu {
+    display: none !important;
+  }
+
+  [data-testid="stAppViewContainer"] > .main {
+    padding-top: 0 !important;
+  }
 
   /* Contenedor principal centrado y sin huecos extra */
   .block-container {{
@@ -93,49 +105,71 @@ st.markdown(f"""
   }}
 
   /* ===== HERO (pegado a la barra, sin huecos, columnas igual altura) ===== */
-  .hero-wrap {{ margin-top: 0 !important; }}
-  .hero-grid {{
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-    align-items: stretch;  /* clave para igual altura */
-  }}
-  @media (max-width: 980px) {{
-    .hero-grid {{ grid-template-columns: 1fr; }}
-  }}
+  .block-container > div:has(> .hero-sentinel) {
+    margin: 0 !important;
+    padding: 16px 0 0 !important;
+  }
 
-  .img-cell, .text-cell {{
+  .block-container > div:has(> .hero-sentinel) [data-testid="column"] > div:first-child {
+    height: 100%;
+  }
+
+  .hero-img-wrap,
+  .hero-text-wrap {
+    height: 100%;
+    min-height: {HERO_H}px;
     display: flex;
     align-items: center;
+  }
+
+  .hero-img-wrap {
     justify-content: center;
-    height: {HERO_H}px;   /* MISMA altura en ambos lados */
-  }}
-  .hero-image {{
+  }
+
+  .hero-text-wrap {
+    justify-content: center;
+  }
+
+  .hero-image {
     width: 100%;
     height: 100%;
+    max-height: {HERO_H}px;
     object-fit: cover;
     border-radius: 16px;
     box-shadow: 0 6px 20px rgba(0,0,0,.08);
-  }}
+  }
 
-  .text-box {{ width: 100%; display: flex; flex-direction: column; gap: 10px; }}
-  .title {{ font-size: 32px; font-weight: 800; margin: 0; letter-spacing:.2px; }}
-  .lead  {{ font-size: 16px; color:#334155; margin: 0; text-align: justify; }}
-  .bullets {{ margin: 8px 0 0 1.2rem; color:#0f172a; }}
-  .bullets li {{ margin: 6px 0; }}
+  .text-box {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
 
-  .cta-area {{ margin-top: 12px; }}
-  .cta-area button[kind="primary"] {{
+  .title { font-size: 32px; font-weight: 800; margin: 0; letter-spacing:.2px; }
+  .lead  { font-size: 16px; color:#334155; margin: 0; text-align: justify; }
+  .bullets { margin: 8px 0 0 1.2rem; color:#0f172a; }
+  .bullets li { margin: 6px 0; }
+
+  .cta-area { margin-top: 16px; }
+  .cta-area button[kind="primary"] {
     font-size: 18px !important;
-    padding: 10px 18px !important;
+    padding: 10px 20px !important;
     border-radius: 999px !important;
     background: var(--brand-red) !important;
     border-color: var(--brand-red) !important;
-  }}
-  .cta-area button[kind="primary"]:hover {{
+  }
+  .cta-area button[kind="primary"]:hover {
     background: var(--brand-red-dark) !important;
     border-color: var(--brand-red-dark) !important;
-  }}
+  }
+
+  @media (max-width: 980px) {
+    .hero-img-wrap,
+    .hero-text-wrap {
+      min-height: auto;
+    }
+  }
 </style>
 """, unsafe_allow_html=True)
 
@@ -201,44 +235,53 @@ img_path = resolve_asset("assets/inicio_card.png") or resolve_asset("inicio_card
 img_data = to_data_url(img_path) if img_path else None
 
 # -------- HERO (imagen izquierda | texto derecha, MISMA altura) --------
-st.markdown('<div class="hero-wrap"><div class="hero-grid">', unsafe_allow_html=True)
+with st.container():
+    st.markdown('<div class="hero-sentinel"></div>', unsafe_allow_html=True)
+    col_img, col_txt = st.columns(2, gap="large")
 
-col_img, col_txt = st.columns(2, gap="large")
+    with col_img:
+        st.markdown('<div class="hero-img-wrap">', unsafe_allow_html=True)
+        if img_data:
+            st.markdown(
+                f"<img src='{img_data}' class='hero-image' alt='Transporte y rutas' />",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.info("Falta la imagen en assets/inicio_card.png")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-with col_img:
-    st.markdown('<div class="img-cell">', unsafe_allow_html=True)
-    if img_data:
-        st.markdown(f"<img src='{img_data}' class='hero-image' alt='Transporte y rutas'/>", unsafe_allow_html=True)
-    else:
-        st.info("Falta la imagen en assets/inicio_card.png")
-    st.markdown('</div>', unsafe_allow_html=True)
-
-with col_txt:
-    st.markdown('<div class="text-cell"><div class="text-box">', unsafe_allow_html=True)
-    st.markdown('<div class="title">Tu ruta, nuestro compromiso.</div>', unsafe_allow_html=True)
-    st.markdown("""
-      <p class="lead">
-      Somos una empresa mexicana dedicada al transporte de carga y logística de fletes, ofreciendo soluciones precisas, seguras y transparentes para mover mercancías en todo el país.
-      </p>
-      <p class="lead">
-      Nuestra plataforma integra tecnología de Google Maps (Places, Directions y Geocoding APIs), bases de datos inteligentes y cálculos automatizados para ofrecerte resultados precisos y en tiempo real.
-      </p>
-      <p class="lead">
-      Calculamos tus costos de traslado, optimizamos rutas y te ayudamos a tomar mejores decisiones con datos reales y actualizados.
-      </p>
-    """, unsafe_allow_html=True)
-    st.markdown("""
-      <p class="lead" style="font-weight:700; margin-top: 8px;">Características principales:</p>
-      <ul class="bullets">
-        <li>Cálculo automático de rutas, distancias y casetas.</li>
-        <li>Estimaciones de combustible y costos operativos detallados.</li>
-        <li>Reportes profesionales para clientes y transportistas.</li>
-        <li>Transparencia total y datos actualizados en cada viaje.</li>
-      </ul>
-    """, unsafe_allow_html=True)
-    st.markdown('<div class="cta-area">', unsafe_allow_html=True)
-    if st.button("Calcular ruta", key="cta_calc", type="primary"):
-        st.switch_page("pages/1_Calculadora.py")
-    st.markdown('</div></div></div>', unsafe_allow_html=True)
-
-st.markdown('</div></div>', unsafe_allow_html=True)
+    with col_txt:
+        st.markdown('<div class="hero-text-wrap"><div class="text-box">', unsafe_allow_html=True)
+        st.markdown('<div class="title">Tu ruta, nuestro compromiso.</div>', unsafe_allow_html=True)
+        st.markdown(
+            """
+          <p class="lead">
+          Somos una empresa mexicana dedicada al transporte de carga y logística de fletes, ofreciendo soluciones precisas, seguras
+    y transparentes para mover mercancías en todo el país.
+          </p>
+          <p class="lead">
+          Nuestra plataforma integra tecnología de Google Maps (Places, Directions y Geocoding APIs), bases de datos inteligentes y
+    cálculos automatizados para ofrecerte resultados precisos y en tiempo real.
+          </p>
+          <p class="lead">
+          Calculamos tus costos de traslado, optimizamos rutas y te ayudamos a tomar mejores decisiones con datos reales y actualizados.
+          </p>
+        """,
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            """
+          <p class="lead" style="font-weight:700; margin-top: 8px;">Características principales:</p>
+          <ul class="bullets">
+            <li>Cálculo automático de rutas, distancias y casetas.</li>
+            <li>Estimaciones de combustible y costos operativos detallados.</li>
+            <li>Reportes profesionales para clientes y transportistas.</li>
+            <li>Transparencia total y datos actualizados en cada viaje.</li>
+          </ul>
+        """,
+            unsafe_allow_html=True,
+        )
+        st.markdown('<div class="cta-area">', unsafe_allow_html=True)
+        if st.button("Calcular ruta", key="cta_calc", type="primary"):
+            st.switch_page("pages/1_Calculadora.py")
+        st.markdown('</div></div></div>', unsafe_allow_html=True)
