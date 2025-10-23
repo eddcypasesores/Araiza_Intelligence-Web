@@ -3,7 +3,61 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <script src="https://unpkg.com/streamlit-component-lib@latest/dist/index.js"></script>
+    <script>
+      (() => {
+        if (window.Streamlit) {
+          return;
+        }
+
+        const RENDER_EVENT = "streamlit:render";
+
+        const inferDataType = (value) => {
+          if (value === null || value === undefined) return "json";
+          if (Array.isArray(value)) return "json";
+          const valueType = typeof value;
+          if (valueType === "number") {
+            return Number.isInteger(value) ? "int" : "float";
+          }
+          if (valueType === "boolean") return "bool";
+          if (valueType === "string") return "string";
+          if (valueType === "bigint") return "int";
+          return "json";
+        };
+
+        const events = new EventTarget();
+
+        const sendMessage = (type, payload) => {
+          const message = {
+            isStreamlitMessage: true,
+            type,
+            ...payload,
+          };
+          window.parent.postMessage(message, "*");
+        };
+
+        window.addEventListener("message", (event) => {
+          const data = event.data || {};
+          if (!data.isStreamlitMessage) return;
+          if (data.type === RENDER_EVENT) {
+            events.dispatchEvent(new CustomEvent(RENDER_EVENT, { detail: data }));
+          }
+        });
+
+        window.Streamlit = {
+          setComponentReady: () =>
+            sendMessage("streamlit:componentReady", { apiVersion: 1 }),
+          setFrameHeight: (height) =>
+            sendMessage("streamlit:setFrameHeight", { height }),
+          setComponentValue: (value) =>
+            sendMessage("streamlit:setComponentValue", {
+              value: value ?? null,
+              dataType: inferDataType(value),
+            }),
+          events,
+          RENDER_EVENT,
+        };
+      })();
+    </script>
     <style>
       :root {
         color-scheme: light;
