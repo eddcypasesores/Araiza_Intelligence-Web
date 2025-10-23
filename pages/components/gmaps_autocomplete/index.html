@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://unpkg.com/streamlit-component-lib@latest/dist/index.js"></script>
+    <style>
+      :root {
+        color-scheme: light;
+      }
+      body {
+        margin: 0;
+        font-family: "Source Sans Pro", "Segoe UI", Tahoma, sans-serif;
+      }
+      .gmaps-field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.45rem;
+        margin-bottom: 0.75rem;
+      }
+      .gmaps-label {
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: #334155;
+        font-size: 0.95rem;
+      }
+      .gmaps-input {
+        position: relative;
+      }
+      .gmaps-input input[type="text"] {
+        width: 100%;
+        font-size: 1.05rem;
+        padding: 0.85rem 1rem;
+        border-radius: 14px;
+        border: 1.5px solid #cbd5f5;
+        transition: border 0.2s ease, box-shadow 0.2s ease;
+        outline: none;
+      }
+      .gmaps-input input[type="text"]:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+      }
+      .gmaps-input input[type="text"]:disabled {
+        background: #f1f5f9;
+        color: #94a3b8;
+        cursor: not-allowed;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      const Streamlit = window.Streamlit;
+      if (!Streamlit) {
+        console.error("Streamlit component lib no disponible en window.Streamlit");
+      }
+
+      const sendValue = (payload) => {
+        if (Streamlit) {
+          Streamlit.setComponentValue(payload);
+        }
+      };
+
+      const updateHeight = (height) => {
+        if (Streamlit) {
+          Streamlit.setFrameHeight(height);
+        }
+      };
+      let scriptPromise = null;
+      let autocomplete = null;
+      let latestArgs = null;
+      let inputElement = null;
+
+      function ensureScript(apiKey) {
+        if (window.google && window.google.maps && window.google.maps.places) {
+          return Promise.resolve();
+        }
+        if (scriptPromise) {
+          return scriptPromise;
+        }
+        scriptPromise = new Promise((resolve, reject) => {
+          const existing = document.getElementById("gmaps-sdk");
+          if (existing) {
+            existing.addEventListener("load", () => resolve());
+            existing.addEventListener("error", reject);
+            return;
+          }
+          const script = document.createElement("script");
+          script.id = "gmaps-sdk";
+          script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+          script.async = true;
+          script.defer = true;
+          script.onload = () => resolve();
+          script.onerror = (err) => reject(err);
+          document.head.appendChild(script);
+        });
+        return scriptPromise;
+      }
+
+      function toPayload(place, rawValue) {
+        const payload = {
+          raw_query: rawValue || "",
+        };
+        if (place && place.place_id) {
+          payload.place_id = place.place_id;
+          payload.description =
+            place.name || place.formatted_address || rawValue || "";
+          if (place.formatted_address) {
+            payload.address = place.formatted_address;
+          }
+          if (place.geometry && place.geometry.location) {
+            const loc = place.geometry.location;
+            try {
+              payload.lat = typeof loc.lat === "function" ? loc.lat() : loc.lat;
+            } catch (e) {
+              payload.lat = null;
+            }
+            try {
+              payload.lng = typeof loc.lng === "function" ? loc.lng() : loc.lng;
+            } catch (e) {
+              payload.lng = null;
+            }
+          }
+        } else if (rawValue) {
+          payload.description = rawValue;
+        }
+        return payload;
+      }
+
+      function attachAutocomplete() {
+        if (!window.google || !window.google.maps || !window.google.maps.places) {
+          return;
+        }
+        if (!inputElement) {
+          return;
+        }
+        if (autocomplete) {
+          google.maps.event.clearInstanceListeners(autocomplete);
+        }
+        const options = {
+          fields: ["place_id", "name", "formatted_address", "geometry"],
+        };
+        if (latestArgs && latestArgs.countryRestriction) {
+          options.componentRestrictions = { country: latestArgs.countryRestriction };
+        }
+        autocomplete = new google.maps.places.Autocomplete(inputElement, options);
+        autocomplete.addListener("place_changed", () => {
+          const place = autocomplete.getPlace();
+          const payload = toPayload(place, inputElement.value);
+          sendValue(payload);
+        });
+      }
+
+      function render(event) {
+        latestArgs = event.detail.args || {};
+        const root = document.getElementById("root");
+        const label = latestArgs.label || "";
+        const placeholder = latestArgs.placeholder || "";
+        const disabled = latestArgs.disabled ? "disabled" : "";
+        const value =
+          latestArgs.value ||
+          (latestArgs.stored && latestArgs.stored.description) ||
+          "";
+        const elementId = latestArgs.elementId || "gmaps-autocomplete-input";
+
+        root.innerHTML = `
+          <div class="gmaps-field">
+            ${label ? `<label class="gmaps-label" for="${elementId}">${label}</label>` : ""}
+            <div class="gmaps-input">
+              <input type="text" id="${elementId}" ${disabled} placeholder="${placeholder}" autocomplete="off" spellcheck="false" />
+            </div>
+          </div>
+        `;
+
+        inputElement = document.getElementById(elementId);
+        if (inputElement) {
+          inputElement.value = value || "";
+          inputElement.addEventListener("input", () => {
+            const payload = toPayload(null, inputElement.value);
+            sendValue(payload);
+          });
+        }
+
+        const updateFrame = () => {
+          const height = Math.max(root.offsetHeight + 12, 80);
+          updateHeight(height);
+        };
+
+        updateFrame();
+
+        if (latestArgs.disabled) {
+          sendValue({ raw_query: value || "", description: value || "" });
+          return;
+        }
+
+        ensureScript(latestArgs.apiKey)
+          .then(() => {
+            attachAutocomplete();
+            updateFrame();
+          })
+          .catch(() => {
+            updateFrame();
+          });
+      }
+
+      if (Streamlit) {
+        Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, render);
+        Streamlit.setComponentReady();
+        Streamlit.setFrameHeight(100);
+      }
+    </script>
+  </body>
+</html>
