@@ -51,7 +51,22 @@
   <body>
     <div id="root"></div>
     <script>
-      const { Streamlit } = window.streamlit;
+      const Streamlit = window.Streamlit;
+      if (!Streamlit) {
+        console.error("Streamlit component lib no disponible en window.Streamlit");
+      }
+
+      const sendValue = (payload) => {
+        if (Streamlit) {
+          Streamlit.setComponentValue(payload);
+        }
+      };
+
+      const updateHeight = (height) => {
+        if (Streamlit) {
+          Streamlit.setFrameHeight(height);
+        }
+      };
       let scriptPromise = null;
       let autocomplete = null;
       let latestArgs = null;
@@ -133,7 +148,7 @@
         autocomplete.addListener("place_changed", () => {
           const place = autocomplete.getPlace();
           const payload = toPayload(place, inputElement.value);
-          Streamlit.setComponentValue(payload);
+          sendValue(payload);
         });
       }
 
@@ -163,19 +178,19 @@
           inputElement.value = value || "";
           inputElement.addEventListener("input", () => {
             const payload = toPayload(null, inputElement.value);
-            Streamlit.setComponentValue(payload);
+            sendValue(payload);
           });
         }
 
         const updateFrame = () => {
           const height = Math.max(root.offsetHeight + 12, 80);
-          Streamlit.setFrameHeight(height);
+          updateHeight(height);
         };
 
         updateFrame();
 
         if (latestArgs.disabled) {
-          Streamlit.setComponentValue({ raw_query: value || "", description: value || "" });
+          sendValue({ raw_query: value || "", description: value || "" });
           return;
         }
 
@@ -189,9 +204,11 @@
           });
       }
 
-      Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, render);
-      Streamlit.setComponentReady();
-      Streamlit.setFrameHeight(100);
+      if (Streamlit) {
+        Streamlit.events.addEventListener(Streamlit.RENDER_EVENT, render);
+        Streamlit.setComponentReady();
+        Streamlit.setFrameHeight(100);
+      }
     </script>
   </body>
 </html>

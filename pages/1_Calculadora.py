@@ -352,8 +352,6 @@ def _calculate_route(
     origin: dict[str, str] | None,
     destination: dict[str, str] | None,
     waypoint: dict[str, str] | None,
-    *,
-    avoid_tolls: bool,
 ):
     if not origin or not destination:
         return None, "Selecciona un origen y un destino válidos."
@@ -366,7 +364,6 @@ def _calculate_route(
             origin["place_id"],
             destination["place_id"],
             waypoints=waypoint_ids,
-            avoid="tolls" if avoid_tolls else None,
             cache=maps_cache["directions"],
         )
     except GoogleMapsError as exc:
@@ -416,19 +413,7 @@ with r3c2:
         parada = None  # oculto completamente
 
 st.markdown("")  # espacio
-opts_c1, opts_c2 = st.columns([0.4, 0.6])
-with opts_c1:
-    if "chk_avoid_tolls" not in st.session_state:
-        st.session_state["chk_avoid_tolls"] = False
-    if MANUAL_MODE and st.session_state.get("chk_avoid_tolls"):
-        st.session_state["chk_avoid_tolls"] = False
-    evitar_cuotas = st.checkbox(
-        "EVITAR CASETAS (RUTA LIBRE)",
-        key="chk_avoid_tolls",
-        disabled=MANUAL_MODE,
-    )
-with opts_c2:
-    st.caption("Si se activa, Google Maps intentará evitar peajes; la ruta puede ser más larga.")
+st.session_state.pop("chk_avoid_tolls", None)
 
 origin_label = origen.get("description", "") if origen else ""
 destination_label = destino.get("description", "") if destino else ""
@@ -441,7 +426,7 @@ def compute_route_data():
     """Consulta Google Maps, calcula la ruta y determina las casetas aplicables."""
 
     waypoint = parada if (usar_parada and parada) else None
-    summary, route_error = _calculate_route(origen, destino, waypoint, avoid_tolls=evitar_cuotas)
+    summary, route_error = _calculate_route(origen, destino, waypoint)
     if route_error:
         return None, None, None, route_error
     if summary is None:
@@ -593,7 +578,6 @@ sel = (
     clase,
     usar_parada,
     (parada["place_id"] if usar_parada and parada else None),
-    evitar_cuotas,
 )
 if st.session_state.get("last_sel_top") != sel:
     for k in list(st.session_state.keys()):
