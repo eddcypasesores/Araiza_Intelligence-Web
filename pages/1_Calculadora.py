@@ -24,6 +24,8 @@ from core.driver_costs import read_trabajadores, costo_diario_trabajador_auto
 from core.params import read_params
 from core.maps import GoogleMapsClient, GoogleMapsError
 
+HARDCODED_MAPS_API_KEY = "AIzaSyBqSuQGWucHtypH60GpAAIxJVap76CgRL8"
+
 # ===============================
 # Configuración de página + CSS
 # ===============================
@@ -69,20 +71,32 @@ ensure_schema(conn)
 ROUTES = load_routes()
 PLAZAS = plazas_catalog(ROUTES)
 
+maps_api_key = (GOOGLE_MAPS_API_KEY or HARDCODED_MAPS_API_KEY).strip()
+
 MAPS_ERROR = None
 maps_client: GoogleMapsClient | None = None
-if not GOOGLE_MAPS_API_KEY:
+
+if maps_api_key:
+    cached_key = st.session_state.get("gmaps_client_key")
+    maps_client = st.session_state.get("gmaps_client")
+    if maps_client is not None and cached_key != maps_api_key:
+        maps_client = None
+        st.session_state.pop("gmaps_client", None)
+        st.session_state.pop("gmaps_client_key", None)
+
+    if maps_client is None:
+        try:
+            maps_client = GoogleMapsClient(api_key=maps_api_key)
+            st.session_state["gmaps_client"] = maps_client
+            st.session_state["gmaps_client_key"] = maps_api_key
+        except GoogleMapsError as exc:
+            MAPS_ERROR = str(exc)
+            st.session_state.pop("gmaps_client", None)
+            st.session_state.pop("gmaps_client_key", None)
+else:
     MAPS_ERROR = (
         "Configura la variable de entorno GOOGLE_MAPS_API_KEY para habilitar el autocompletado y el cálculo de rutas."
     )
-else:
-    maps_client = st.session_state.get("gmaps_client")
-    if maps_client is None:
-        try:
-            maps_client = GoogleMapsClient()
-            st.session_state["gmaps_client"] = maps_client
-        except GoogleMapsError as exc:
-            MAPS_ERROR = str(exc)
 
 maps_client = st.session_state.get("gmaps_client")
 MAPS_AVAILABLE = maps_client is not None
@@ -92,27 +106,6 @@ if MAPS_ERROR:
     if not MAPS_AVAILABLE:
         msg += " Se habilitó el modo manual sin integración con Google Maps."
     st.warning(msg)
-
-if not GOOGLE_MAPS_API_KEY:
-    with st.expander("Cómo configurar la llave de Google Maps", expanded=False):
-        st.markdown(
-            """
-            1. Crea un proyecto en [Google Cloud Console](https://console.cloud.google.com/) y habilita las APIs **Places**, **Directions** y **Geocoding**.
-            2. Genera una clave de tipo "API key" y limita su uso al dominio o IP donde se ejecutará la calculadora.
-            3. Expón la llave a la aplicación mediante una variable de entorno o `secrets.toml`:
-
-               ```bash
-               export GOOGLE_MAPS_API_KEY="tu_clave_api"
-               ```
-
-               o bien en `.streamlit/secrets.toml`:
-
-               ```toml
-               GOOGLE_MAPS_API_KEY = "tu_clave_api"
-               ```
-            4. Reinicia la aplicación para que la clave quede disponible y se reactive la experiencia con Google Maps.
-            """
-        )
 maps_cache = st.session_state.setdefault("gmaps_cache", {})
 for bucket in ("autocomplete", "place_details", "directions", "plaza_lookup", "plaza_geometry"):
     maps_cache.setdefault(bucket, {})
