@@ -6,7 +6,6 @@ from uuid import uuid4
 from types import SimpleNamespace
 import pandas as pd
 import streamlit as st
-import streamlit.components.v1 as components
 from pathlib import Path
 
 # --- Utilidades / Proyecto
@@ -24,6 +23,7 @@ from core.pdf import build_pdf_cotizacion
 from core.driver_costs import read_trabajadores, costo_diario_trabajador_auto
 from core.params import read_params
 from core.maps import GoogleMapsClient, GoogleMapsError
+from core.streamlit_components import gmaps_autocomplete_component
 
 HARDCODED_MAPS_API_KEY = "AIzaSyBqSuQGWucHtypH60GpAAIxJVap76CgRL8"
 
@@ -130,11 +130,6 @@ ASSET_DIRS = [
     APP_DIR.parent / "static",                # /static (raíz)
     Path.cwd() / "assets",                    # CWD/assets (por si el runner cambia)
 ]
-
-AUTOCOMPLETE_COMPONENT = components.declare_component(
-    "gmaps_autocomplete",
-    path=str((APP_DIR / "components" / "gmaps_autocomplete").resolve()),
-)
 
 def resolve_asset(fname: str) -> Path | None:
     """
@@ -288,7 +283,7 @@ def autocomplete_input(label: str, key_prefix: str) -> dict[str, str] | None:
         or ""
     )
 
-    component_value = AUTOCOMPLETE_COMPONENT(
+    component_value = gmaps_autocomplete_component(
         label=label,
         value=default_text,
         stored=stored_data or {},
