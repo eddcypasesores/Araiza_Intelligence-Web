@@ -47,6 +47,14 @@ st.markdown(
       [data-testid="stExpander"]{ border:1px solid rgba(15,23,42,.08); background:transparent; }
       [data-testid="stExpander"]>div{ background:transparent !important; }
       .section input[aria-label=""], .section textarea[aria-label=""]{ display:none !important; }
+      .gmaps-field { margin-bottom: 0.75rem; }
+      .gmaps-label { display:block; font-size:.95rem; font-weight:700; letter-spacing:.05em; color:#334155; margin-bottom:.25rem; text-transform:uppercase; }
+      .gmaps-input [data-baseweb="input"] input { font-size:1.05rem; padding:.85rem 1rem; border-radius:.8rem; }
+      .gmaps-input .stTextInput>label { display:none; }
+      .gmaps-suggestions { margin-top:-0.35rem; }
+      .gmaps-suggestions button { width:100%; text-align:left; border:1px solid #e2e8f0; background:#fff; color:#1e293b; padding:.75rem 1rem; border-radius:.9rem; margin-bottom:.45rem; font-weight:600; white-space:pre-wrap; }
+      .gmaps-suggestions button:hover { border-color:#2563eb; background:#eff6ff; color:#1d4ed8; }
+      .gmaps-suggestions button:focus-visible { outline:3px solid rgba(37,99,235,.35); }
     </style>
     """,
     unsafe_allow_html=True,
@@ -233,14 +241,29 @@ def autocomplete_input(label: str, key_prefix: str) -> dict[str, str] | None:
     selection_key = f"{key_prefix}_selection"
     data_key = f"{key_prefix}_data"
 
-    query_value = st.text_input(
-        label,
-        value=st.session_state.get(query_key, ""),
-        key=query_key,
-        placeholder="Ingresa dirección, ciudad o caseta",
-    )
+    st.markdown(f"<div class='gmaps-field'><label class='gmaps-label'>{label}</label>", unsafe_allow_html=True)
+    with st.container():
+        st.markdown("<div class='gmaps-input'>", unsafe_allow_html=True)
+        query_value = st.text_input(
+            label,
+            value=st.session_state.get(query_key, ""),
+            key=query_key,
+            placeholder="Ingresa dirección, ciudad o caseta",
+            label_visibility="collapsed",
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+    st.markdown("</div>", unsafe_allow_html=True)
 
     trimmed = (query_value or "").strip()
+    stored_selection = st.session_state.get(selection_key)
+    if not trimmed:
+        st.session_state.pop(selection_key, None)
+        st.session_state.pop(data_key, None)
+        st.session_state.pop(options_key, None)
+    elif stored_selection and trimmed != stored_selection:
+        st.session_state.pop(selection_key, None)
+        st.session_state.pop(data_key, None)
+
     if not MAPS_AVAILABLE:
         if trimmed:
             data = {
@@ -256,8 +279,6 @@ def autocomplete_input(label: str, key_prefix: str) -> dict[str, str] | None:
             st.session_state.pop(data_key, None)
         st.session_state.pop(options_key, None)
         st.session_state.pop(selection_key, None)
-        if trimmed:
-            st.caption(f"Entrada manual: **{trimmed}**")
         return st.session_state.get(data_key)
 
     predictions: list[dict[str, str]] = []
@@ -273,84 +294,99 @@ def autocomplete_input(label: str, key_prefix: str) -> dict[str, str] | None:
             predictions = []
         st.session_state[options_key] = predictions
     else:
-        st.session_state[options_key] = []
+        st.session_state.pop(options_key, None)
 
     predictions = st.session_state.get(options_key, []) or []
+    chosen_prediction: dict[str, str] | None = None
+
+    def build_label(pred: dict[str, str]) -> str:
+        structured = pred.get("structured_formatting") if isinstance(pred, dict) else None
+        if isinstance(structured, dict):
+            main = structured.get("main_text") or pred.get("description", "")
+            secondary = structured.get("secondary_text") or ""
+        else:
+            main = pred.get("description", "")
+            secondary = ""
+        if secondary:
+            return f"📍 {main}\n{secondary}"
+        return f"📍 {main}"
+
     if predictions:
-        options = [pred.get("description", "") for pred in predictions]
-        prev = st.session_state.get(selection_key)
-        default_idx = options.index(prev) if prev in options else 0
-        selected_desc = st.selectbox(
-            "Coincidencias",
-            options,
-            index=default_idx,
-            key=selection_key,
-            label_visibility="collapsed",
-        )
-        chosen = next((pred for pred in predictions if pred.get("description", "") == selected_desc), None)
-        if chosen and chosen.get("place_id"):
-            place_id = chosen.get("place_id")
-            details_lat: float | None = None
-            details_lng: float | None = None
-            formatted_address: str | None = None
-            existing = st.session_state.get(data_key) or {}
+        st.markdown("<div class='gmaps-suggestions'>", unsafe_allow_html=True)
+        for idx, pred in enumerate(predictions[:8]):
+            label_text = build_label(pred)
+            if st.button(
+                label_text,
+                key=f"{key_prefix}_option_{idx}",
+                use_container_width=True,
+                type="secondary",
+            ):
+                chosen_prediction = pred
+                break
+        st.markdown("</div>", unsafe_allow_html=True)
 
-            if existing.get("place_id") == place_id and existing.get("lat") is not None and existing.get("lng") is not None:
-                details_lat = existing.get("lat")
-                details_lng = existing.get("lng")
-                formatted_address = existing.get("address")
-            else:
+    if chosen_prediction:
+        selected_desc = chosen_prediction.get("description", trimmed)
+        place_id = chosen_prediction.get("place_id")
+        if not place_id:
+            st.session_state.pop(options_key, None)
+            st.session_state.pop(selection_key, None)
+            st.session_state.pop(data_key, None)
+            return None
+        details_lat: float | None = None
+        details_lng: float | None = None
+        formatted_address: str | None = None
+        existing = st.session_state.get(data_key) or {}
+
+        if (
+            existing.get("place_id") == place_id
+            and existing.get("lat") is not None
+            and existing.get("lng") is not None
+        ):
+            details_lat = existing.get("lat")
+            details_lng = existing.get("lng")
+            formatted_address = existing.get("address")
+        else:
+            try:
+                details = maps_client.place_details(
+                    place_id,
+                    session_token=session_token,
+                    cache=maps_cache["place_details"],
+                )
+            except GoogleMapsError as exc:
+                st.warning(f"Google Maps (detalles) respondió con un error: {exc}")
+                details = {}
+
+            result = details.get("result", {}) if isinstance(details, dict) else {}
+            geometry = result.get("geometry", {}) if isinstance(result, dict) else {}
+            location = geometry.get("location", {}) if isinstance(geometry, dict) else {}
+            if isinstance(location, dict):
+                lat_val = location.get("lat")
+                lng_val = location.get("lng")
                 try:
-                    details = maps_client.place_details(
-                        place_id,
-                        session_token=session_token,
-                        cache=maps_cache["place_details"],
-                    )
-                except GoogleMapsError as exc:
-                    st.warning(f"Google Maps (detalles) respondió con un error: {exc}")
-                    details = {}
+                    details_lat = float(lat_val) if lat_val is not None else None
+                except (TypeError, ValueError):
+                    details_lat = None
+                try:
+                    details_lng = float(lng_val) if lng_val is not None else None
+                except (TypeError, ValueError):
+                    details_lng = None
+            formatted_address = result.get("formatted_address") if isinstance(result, dict) else None
 
-                result = details.get("result", {}) if isinstance(details, dict) else {}
-                geometry = result.get("geometry", {}) if isinstance(result, dict) else {}
-                location = geometry.get("location", {}) if isinstance(geometry, dict) else {}
-                if isinstance(location, dict):
-                    lat_val = location.get("lat")
-                    lng_val = location.get("lng")
-                    try:
-                        details_lat = float(lat_val) if lat_val is not None else None
-                    except (TypeError, ValueError):
-                        details_lat = None
-                    try:
-                        details_lng = float(lng_val) if lng_val is not None else None
-                    except (TypeError, ValueError):
-                        details_lng = None
-                formatted_address = result.get("formatted_address") if isinstance(result, dict) else None
-
-            matched_plaza = match_plaza_in_text(selected_desc, PLAZAS)
-            data = {
-                "description": selected_desc,
-                "place_id": place_id,
-                "matched_plaza": matched_plaza,
-                "lat": details_lat,
-                "lng": details_lng,
-                "address": formatted_address,
-            }
-            st.session_state[data_key] = data
-            caption = f"Elegiste: **{selected_desc}**"
-            if matched_plaza:
-                caption += f" · Caseta detectada: **{matched_plaza}**"
-            if details_lat is not None and details_lng is not None:
-                caption += f" · Coordenadas: ({details_lat:.5f}, {details_lng:.5f})"
-            st.caption(caption)
-            return data
-    else:
-        st.session_state.pop(selection_key, None)
-        st.session_state.pop(data_key, None)
-        if trimmed:
-            if len(trimmed) < 3:
-                st.caption("Escribe al menos 3 caracteres para buscar.")
-            else:
-                st.info("Sin coincidencias para la búsqueda.")
+        matched_plaza = match_plaza_in_text(selected_desc, PLAZAS)
+        data = {
+            "description": selected_desc,
+            "place_id": place_id,
+            "matched_plaza": matched_plaza,
+            "lat": details_lat,
+            "lng": details_lng,
+            "address": formatted_address,
+        }
+        st.session_state[data_key] = data
+        st.session_state[selection_key] = selected_desc
+        st.session_state[query_key] = selected_desc
+        st.session_state.pop(options_key, None)
+        return data
 
     return st.session_state.get(data_key)
 
@@ -387,12 +423,9 @@ def _calculate_route(
 # ===============================
 st.markdown("<div class='hero-title'>COSTOS DE TRASLADO</div>", unsafe_allow_html=True)
 
-# 1) Fila 1: ORIGEN / DESTINO
-r1c1, r1c2 = st.columns([1.2, 1.2])
-with r1c1:
-    origen = autocomplete_input("ORIGEN", "top_origen")
-with r1c2:
-    destino = autocomplete_input("DESTINO", "top_destino")
+# 1) Búsquedas de origen / destino
+origen = autocomplete_input("ORIGEN", "top_origen")
+destino = autocomplete_input("DESTINO", "top_destino")
 
 # 2) Fila 2: CLASE (tipo de auto)
 clases = ["MOTO","AUTOMOVIL","B2","B3","B4","T2","T3","T4","T5","T6","T7","T8","T9"]
@@ -616,21 +649,6 @@ if st.session_state.get("route_name") != ruta_nombre:
     st.session_state["route_name"] = ruta_nombre
     st.session_state.setdefault("excluded_set", set())
     st.session_state["excluded_set"].clear()
-
-distance_km_detected = float(st.session_state.get("maps_distance_km") or 0.0)
-caption_parts = []
-if ruta_nombre:
-    caption_parts.append(f"Ruta detectada: **{ruta_nombre}**")
-summary_label = route_summary.summary or ""
-if summary_label and summary_label not in (ruta_nombre or ""):
-    label_prefix = "Resumen Google" if MAPS_AVAILABLE else "Resumen"
-    caption_parts.append(f"{label_prefix}: {summary_label}")
-caption_parts.append(f"Distancia: {distance_km_detected:,.2f} km")
-if evitar_cuotas:
-    caption_parts.append("Ruta libre solicitada")
-if MANUAL_MODE:
-    caption_parts.append("Modo manual activado")
-st.caption(" · ".join(caption_parts))
 
 if getattr(route_summary, "warnings", None):
     prefix = "Google Maps advierte" if MAPS_AVAILABLE else "Aviso"
