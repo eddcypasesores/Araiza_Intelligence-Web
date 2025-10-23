@@ -71,6 +71,12 @@ ensure_schema(conn)
 ROUTES = load_routes()
 PLAZAS = plazas_catalog(ROUTES)
 
+vid = get_active_version_id(conn)
+if vid is None:
+    st.error("No hay parámetros de costeo publicados. Configura una versión vigente en la pantalla de parámetros.")
+    st.stop()
+PARAMS = read_params(conn, vid)
+
 maps_api_key = (GOOGLE_MAPS_API_KEY or HARDCODED_MAPS_API_KEY).strip()
 
 MAPS_ERROR = None
@@ -199,6 +205,13 @@ def section(title: str, icon: str | None, total_value: float | None, body_fn=Non
             if p:
                 data_url = img_to_data_url(p)
 
+        st.markdown(
+            f"<div class='total-right' style='justify-content:flex-end; margin-bottom:.75rem'>"
+            f"<div class='total-pill'>${computed_total:,.2f}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
         if data_url:
             st.markdown(
                 f"<div style='display:flex; justify-content:flex-end; margin-bottom:.5rem'>"
@@ -215,13 +228,6 @@ def section(title: str, icon: str | None, total_value: float | None, body_fn=Non
             )
         else:
             st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-
-        st.markdown(
-            f"<div class='total-right' style='justify-content:flex-end'>"
-            f"<div class='total-pill'>${computed_total:,.2f}</div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
 
     st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
     return computed_total
@@ -336,12 +342,6 @@ def autocomplete_input(label: str, key_prefix: str) -> dict[str, str] | None:
                 "address": formatted_address,
             }
             st.session_state[data_key] = data
-            caption = f"Elegiste: **{selected_desc}**"
-            if matched_plaza:
-                caption += f" · Caseta detectada: **{matched_plaza}**"
-            if details_lat is not None and details_lng is not None:
-                caption += f" · Coordenadas: ({details_lat:.5f}, {details_lng:.5f})"
-            st.caption(caption)
             return data
     else:
         st.session_state.pop(selection_key, None)
@@ -426,7 +426,7 @@ with r3c2:
         parada = None  # oculto completamente
 
 st.markdown("")  # espacio
-opts_c1, opts_c2 = st.columns([0.4, 0.6])
+opts_c1, _ = st.columns([0.4, 0.6])
 with opts_c1:
     if "chk_avoid_tolls" not in st.session_state:
         st.session_state["chk_avoid_tolls"] = False
@@ -437,8 +437,6 @@ with opts_c1:
         key="chk_avoid_tolls",
         disabled=MANUAL_MODE,
     )
-with opts_c2:
-    st.caption("Si se activa, Google Maps intentará evitar peajes; la ruta puede ser más larga.")
 
 origin_label = origen.get("description", "") if origen else ""
 destination_label = destino.get("description", "") if destino else ""
@@ -618,19 +616,6 @@ if st.session_state.get("route_name") != ruta_nombre:
     st.session_state["excluded_set"].clear()
 
 distance_km_detected = float(st.session_state.get("maps_distance_km") or 0.0)
-caption_parts = []
-if ruta_nombre:
-    caption_parts.append(f"Ruta detectada: **{ruta_nombre}**")
-summary_label = route_summary.summary or ""
-if summary_label and summary_label not in (ruta_nombre or ""):
-    label_prefix = "Resumen Google" if MAPS_AVAILABLE else "Resumen"
-    caption_parts.append(f"{label_prefix}: {summary_label}")
-caption_parts.append(f"Distancia: {distance_km_detected:,.2f} km")
-if evitar_cuotas:
-    caption_parts.append("Ruta libre solicitada")
-if MANUAL_MODE:
-    caption_parts.append("Modo manual activado")
-st.caption(" · ".join(caption_parts))
 
 if getattr(route_summary, "warnings", None):
     prefix = "Google Maps advierte" if MAPS_AVAILABLE else "Aviso"
@@ -675,7 +660,11 @@ subtotal_peajes = section("PEAJE", None, None, _peaje_body, icon_img="peaje_card
 # ===============================
 # 2) DIESEL
 # ===============================
-c1, c2, c3, c4 = st.columns([1.0, 1.0, 1.0, 1.0])
+diesel_params = PARAMS.get("diesel", {}) if isinstance(PARAMS, dict) else {}
+rendimiento = float(diesel_params.get("rendimiento_km_l") or 0.0)
+precio_litro = float(diesel_params.get("precio_litro") or 0.0)
+
+c1, c2 = st.columns([1.0, 1.0])
 distancia_km_val = float(st.session_state.get("maps_distance_km") or 0.0)
 with c1:
     st.number_input(
@@ -687,13 +676,12 @@ with c1:
         key="distance_display_km",
         disabled=True,
     )
-with c2: rendimiento  = st.number_input("RENDIMIENTO (KM/L)", min_value=0.1, value=30.0, step=0.1)
-with c3: precio_litro = st.number_input("PRECIO POR LITRO ($/L)", min_value=0.0, value=26.5, step=0.1)
-with c4: viaje_redondo = st.checkbox("VIAJE REDONDO", value=False)
+with c2:
+    viaje_redondo = st.checkbox("VIAJE REDONDO", value=False)
 
 km_totales = float(distancia_km_val or 0.0) * (2 if viaje_redondo else 1)
-litros_estimados = (km_totales / float(rendimiento or 1.0)) if float(rendimiento or 0) > 0 else 0.0
-subtotal_combustible = float(litros_estimados) * float(precio_litro or 0.0)
+litros_estimados = (km_totales / rendimiento) if rendimiento > 0 else 0.0
+subtotal_combustible = float(litros_estimados) * precio_litro
 
 def _diesel_body():
     st.write(f"**KM totales:** {km_totales:,.2f}")
@@ -744,16 +732,10 @@ def _mo_body():
 
 section("MANO DE OBRA", None, subtotal_conductor, _mo_body, icon_img="conductor_card.png")
 
-# ===============================
-# 4) Parámetros versionados y cargos
-# ===============================
-vid = get_active_version_id(conn)
-PARAMS = read_params(conn, vid)
-
 # Apoyos comunes
 peajes_ajustados = float(subtotal_peajes or 0.0)
 km_totales = float(km_totales or 0.0)
-rendimiento = float(rendimiento or 1.0)
+rendimiento = float(rendimiento or 0.0)
 precio_litro = float(precio_litro or 0.0)
 litros_estimados = (km_totales / rendimiento) if rendimiento > 0 else 0.0
 
