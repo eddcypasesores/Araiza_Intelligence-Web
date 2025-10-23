@@ -110,7 +110,7 @@ css_template = Template(
   /* ===== HERO (pegado a la barra, sin huecos, columnas igual altura) ===== */
   .block-container > div:has(> .hero-sentinel) {
     margin: 0 !important;
-    padding: 16px 0 0 !important;
+    padding: 8px 0 0 !important;
   }
 
   .block-container > div:has(> .hero-sentinel) [data-testid="column"] > div:first-child {
@@ -122,21 +122,19 @@ css_template = Template(
     height: 100%;
     min-height: ${hero_h}px;
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
   }
 
   .hero-img-wrap {
-    justify-content: center;
-  }
-
-  .hero-text-wrap {
-    justify-content: center;
+    overflow: hidden;
+    border-radius: 16px;
   }
 
   .hero-image {
     width: 100%;
     height: 100%;
-    max-height: ${hero_h}px;
     object-fit: cover;
     border-radius: 16px;
     box-shadow: 0 6px 20px rgba(0,0,0,.08);
@@ -144,9 +142,17 @@ css_template = Template(
 
   .text-box {
     width: 100%;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .text-box .copy {
     display: flex;
     flex-direction: column;
     gap: 10px;
+    flex: 1;
   }
 
   .title { font-size: 32px; font-weight: 800; margin: 0; letter-spacing: .2px; }
@@ -154,7 +160,7 @@ css_template = Template(
   .bullets { margin: 8px 0 0 1.2rem; color: #0f172a; }
   .bullets li { margin: 6px 0; }
 
-  .cta-area { margin-top: 16px; }
+  .cta-area { margin-top: auto; padding-top: 16px; }
   .cta-area button[kind="primary"] {
     font-size: 18px !important;
     padding: 10px 20px !important;
@@ -171,6 +177,14 @@ css_template = Template(
     .hero-img-wrap,
     .hero-text-wrap {
       min-height: auto;
+    }
+
+    .hero-img-wrap {
+      margin-bottom: 24px;
+    }
+
+    .cta-area {
+      margin-top: 16px;
     }
   }
 </style>
@@ -262,6 +276,7 @@ with st.container():
     with col_txt:
         st.markdown('<div class="hero-text-wrap"><div class="text-box">', unsafe_allow_html=True)
         st.markdown('<div class="title">Tu ruta, nuestro compromiso.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="copy">', unsafe_allow_html=True)
         st.markdown(
             """
           <p class="lead">
@@ -290,6 +305,7 @@ with st.container():
         """,
             unsafe_allow_html=True,
         )
+        st.markdown('</div>', unsafe_allow_html=True)
         st.markdown('<div class="cta-area">', unsafe_allow_html=True)
         if st.button("Calcular ruta", key="cta_calc", type="primary"):
             st.switch_page("pages/1_Calculadora.py")
