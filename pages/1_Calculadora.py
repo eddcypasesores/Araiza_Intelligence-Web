@@ -24,6 +24,8 @@ from core.driver_costs import read_trabajadores, costo_diario_trabajador_auto
 from core.params import read_params
 from core.maps import GoogleMapsClient, GoogleMapsError
 
+HARDCODED_MAPS_API_KEY = "AIzaSyBqSuQGWucHtypH60GpAAIxJVap76CgRL8"
+
 # ===============================
 # Configuración de página + CSS
 # ===============================
@@ -69,8 +71,7 @@ ensure_schema(conn)
 ROUTES = load_routes()
 PLAZAS = plazas_catalog(ROUTES)
 
-session_api_key = st.session_state.get("maps_api_key", "").strip()
-maps_api_key = session_api_key or GOOGLE_MAPS_API_KEY.strip()
+maps_api_key = (GOOGLE_MAPS_API_KEY or HARDCODED_MAPS_API_KEY).strip()
 
 MAPS_ERROR = None
 maps_client: GoogleMapsClient | None = None
@@ -105,55 +106,6 @@ if MAPS_ERROR:
     if not MAPS_AVAILABLE:
         msg += " Se habilitó el modo manual sin integración con Google Maps."
     st.warning(msg)
-
-if not maps_api_key or MAPS_ERROR:
-    expanded = not maps_api_key
-    with st.expander("Cómo configurar la llave de Google Maps", expanded=expanded):
-        st.markdown(
-            """
-            1. Crea un proyecto en [Google Cloud Console](https://console.cloud.google.com/) y habilita las APIs **Places**, **Directions** y **Geocoding**.
-            2. Genera una clave de tipo "API key" y limita su uso al dominio o IP donde se ejecutará la calculadora.
-            3. Expón la llave a la aplicación mediante una variable de entorno, `secrets.toml` o introdúcela manualmente en la sección de abajo.
-
-               ```bash
-               export GOOGLE_MAPS_API_KEY="tu_clave_api"
-               ```
-
-               o bien en `.streamlit/secrets.toml`:
-
-               ```toml
-               GOOGLE_MAPS_API_KEY = "tu_clave_api"
-               ```
-            4. Si la defines manualmente, se guardará únicamente durante la sesión activa.
-            """
-        )
-
-        with st.form("maps_key_form"):
-            provided_key = st.text_input(
-                "Google Maps API Key",
-                value=session_api_key,
-                help="Pega aquí tu clave si no puedes configurarla como variable de entorno.",
-            )
-            submitted_key = st.form_submit_button("Guardar clave en esta sesión")
-
-        if submitted_key:
-            provided_key = provided_key.strip()
-            if provided_key:
-                st.session_state["maps_api_key"] = provided_key
-                st.session_state.pop("gmaps_client", None)
-                st.session_state.pop("gmaps_client_key", None)
-                st.success("La clave se guardó para la sesión actual. Recarga la página para reintentar la conexión.")
-                st.experimental_rerun()
-            else:
-                st.warning("Ingresa una clave válida antes de guardar.")
-
-        if session_api_key:
-            if st.button("Olvidar clave almacenada en esta sesión"):
-                st.session_state.pop("maps_api_key", None)
-                st.session_state.pop("gmaps_client", None)
-                st.session_state.pop("gmaps_client_key", None)
-                st.info("La clave se eliminó de la sesión actual.")
-                st.experimental_rerun()
 maps_cache = st.session_state.setdefault("gmaps_cache", {})
 for bucket in ("autocomplete", "place_details", "directions", "plaza_lookup", "plaza_geometry"):
     maps_cache.setdefault(bucket, {})
