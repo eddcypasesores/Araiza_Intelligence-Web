@@ -23,6 +23,9 @@ from core.pdf import build_pdf_cotizacion
 from core.driver_costs import read_trabajadores, costo_diario_trabajador_auto
 from core.params import read_params
 from core.maps import GoogleMapsClient, GoogleMapsError
+from core.streamlit_components import gmaps_autocomplete_component
+
+HARDCODED_MAPS_API_KEY = "AIzaSyBqSuQGWucHtypH60GpAAIxJVap76CgRL8"
 
 # ===============================
 # Configuración de página + CSS
@@ -45,6 +48,10 @@ st.markdown(
       [data-testid="stExpander"]{ border:1px solid rgba(15,23,42,.08); background:transparent; }
       [data-testid="stExpander"]>div{ background:transparent !important; }
       .section input[aria-label=""], .section textarea[aria-label=""]{ display:none !important; }
+      .gmaps-field { margin-bottom: 0.75rem; }
+      .gmaps-label { display:block; font-size:.95rem; font-weight:700; letter-spacing:.05em; color:#334155; margin-bottom:.25rem; text-transform:uppercase; }
+      .gmaps-input [data-baseweb="input"] input { font-size:1.05rem; padding:.85rem 1rem; border-radius:.8rem; }
+      .gmaps-input .stTextInput>label { display:none; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -69,20 +76,32 @@ ensure_schema(conn)
 ROUTES = load_routes()
 PLAZAS = plazas_catalog(ROUTES)
 
+maps_api_key = (GOOGLE_MAPS_API_KEY or HARDCODED_MAPS_API_KEY).strip()
+
 MAPS_ERROR = None
 maps_client: GoogleMapsClient | None = None
-if not GOOGLE_MAPS_API_KEY:
+
+if maps_api_key:
+    cached_key = st.session_state.get("gmaps_client_key")
+    maps_client = st.session_state.get("gmaps_client")
+    if maps_client is not None and cached_key != maps_api_key:
+        maps_client = None
+        st.session_state.pop("gmaps_client", None)
+        st.session_state.pop("gmaps_client_key", None)
+
+    if maps_client is None:
+        try:
+            maps_client = GoogleMapsClient(api_key=maps_api_key)
+            st.session_state["gmaps_client"] = maps_client
+            st.session_state["gmaps_client_key"] = maps_api_key
+        except GoogleMapsError as exc:
+            MAPS_ERROR = str(exc)
+            st.session_state.pop("gmaps_client", None)
+            st.session_state.pop("gmaps_client_key", None)
+else:
     MAPS_ERROR = (
         "Configura la variable de entorno GOOGLE_MAPS_API_KEY para habilitar el autocompletado y el cálculo de rutas."
     )
-else:
-    maps_client = st.session_state.get("gmaps_client")
-    if maps_client is None:
-        try:
-            maps_client = GoogleMapsClient()
-            st.session_state["gmaps_client"] = maps_client
-        except GoogleMapsError as exc:
-            MAPS_ERROR = str(exc)
 
 maps_client = st.session_state.get("gmaps_client")
 MAPS_AVAILABLE = maps_client is not None
@@ -92,27 +111,6 @@ if MAPS_ERROR:
     if not MAPS_AVAILABLE:
         msg += " Se habilitó el modo manual sin integración con Google Maps."
     st.warning(msg)
-
-if not GOOGLE_MAPS_API_KEY:
-    with st.expander("Cómo configurar la llave de Google Maps", expanded=False):
-        st.markdown(
-            """
-            1. Crea un proyecto en [Google Cloud Console](https://console.cloud.google.com/) y habilita las APIs **Places**, **Directions** y **Geocoding**.
-            2. Genera una clave de tipo "API key" y limita su uso al dominio o IP donde se ejecutará la calculadora.
-            3. Expón la llave a la aplicación mediante una variable de entorno o `secrets.toml`:
-
-               ```bash
-               export GOOGLE_MAPS_API_KEY="tu_clave_api"
-               ```
-
-               o bien en `.streamlit/secrets.toml`:
-
-               ```toml
-               GOOGLE_MAPS_API_KEY = "tu_clave_api"
-               ```
-            4. Reinicia la aplicación para que la clave quede disponible y se reactive la experiencia con Google Maps.
-            """
-        )
 maps_cache = st.session_state.setdefault("gmaps_cache", {})
 for bucket in ("autocomplete", "place_details", "directions", "plaza_lookup", "plaza_geometry"):
     maps_cache.setdefault(bucket, {})
@@ -236,19 +234,32 @@ def section(title: str, icon: str | None, total_value: float | None, body_fn=Non
 
 def autocomplete_input(label: str, key_prefix: str) -> dict[str, str] | None:
     query_key = f"{key_prefix}_query"
-    options_key = f"{key_prefix}_options"
     selection_key = f"{key_prefix}_selection"
     data_key = f"{key_prefix}_data"
+    legacy_options_key = f"{key_prefix}_options"
 
-    query_value = st.text_input(
-        label,
-        value=st.session_state.get(query_key, ""),
-        key=query_key,
-        placeholder="Ingresa dirección, ciudad o caseta",
-    )
+    # Limpia residuales del componente previo basado en botones
+    st.session_state.pop(legacy_options_key, None)
 
-    trimmed = (query_value or "").strip()
     if not MAPS_AVAILABLE:
+        st.markdown(
+            f"<div class='gmaps-field'><label class='gmaps-label'>{label}</label>",
+            unsafe_allow_html=True,
+        )
+        with st.container():
+            st.markdown("<div class='gmaps-input'>", unsafe_allow_html=True)
+            query_value = st.text_input(
+                label,
+                value=st.session_state.get(query_key, ""),
+                key=query_key,
+                placeholder="Ingresa dirección, ciudad o caseta",
+                label_visibility="collapsed",
+            )
+            st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        trimmed = (query_value or "").strip()
+        st.session_state[query_key] = trimmed
         if trimmed:
             data = {
                 "description": trimmed,
@@ -259,54 +270,40 @@ def autocomplete_input(label: str, key_prefix: str) -> dict[str, str] | None:
                 "address": trimmed,
             }
             st.session_state[data_key] = data
+            st.session_state[selection_key] = trimmed
         else:
             st.session_state.pop(data_key, None)
-        st.session_state.pop(options_key, None)
-        st.session_state.pop(selection_key, None)
-        if trimmed:
-            st.caption(f"Entrada manual: **{trimmed}**")
+            st.session_state.pop(selection_key, None)
         return st.session_state.get(data_key)
 
-    predictions: list[dict[str, str]] = []
-    if trimmed and len(trimmed) >= 3:
-        try:
-            predictions = maps_client.autocomplete(
-                trimmed,
-                session_token=session_token,
-                cache=maps_cache["autocomplete"],
-            )
-        except GoogleMapsError as exc:
-            st.warning(f"Google Maps (autocomplete) respondió con un error: {exc}")
-            predictions = []
-        st.session_state[options_key] = predictions
-    else:
-        st.session_state[options_key] = []
+    stored_data = st.session_state.get(data_key)
+    default_text = (
+        st.session_state.get(selection_key)
+        or (stored_data or {}).get("description")
+        or ""
+    )
 
-    predictions = st.session_state.get(options_key, []) or []
-    if predictions:
-        options = [pred.get("description", "") for pred in predictions]
-        prev = st.session_state.get(selection_key)
-        default_idx = options.index(prev) if prev in options else 0
-        selected_desc = st.selectbox(
-            "Coincidencias",
-            options,
-            index=default_idx,
-            key=selection_key,
-            label_visibility="collapsed",
-        )
-        chosen = next((pred for pred in predictions if pred.get("description", "") == selected_desc), None)
-        if chosen and chosen.get("place_id"):
-            place_id = chosen.get("place_id")
-            details_lat: float | None = None
-            details_lng: float | None = None
-            formatted_address: str | None = None
-            existing = st.session_state.get(data_key) or {}
+    component_value = gmaps_autocomplete_component(
+        label=label,
+        value=default_text,
+        stored=stored_data or {},
+        placeholder="Ingresa dirección, ciudad o caseta",
+        apiKey=maps_api_key,
+        elementId=f"{key_prefix}_gmaps_input",
+        key=f"{key_prefix}_component",
+        default=stored_data or None,
+    )
 
-            if existing.get("place_id") == place_id and existing.get("lat") is not None and existing.get("lng") is not None:
-                details_lat = existing.get("lat")
-                details_lng = existing.get("lng")
-                formatted_address = existing.get("address")
-            else:
+    if component_value is not None:
+        description = (component_value.get("description") or component_value.get("raw_query") or "").strip()
+        st.session_state[query_key] = description
+        place_id = component_value.get("place_id")
+        lat = component_value.get("lat")
+        lng = component_value.get("lng")
+        address = component_value.get("address") or description
+
+        if place_id:
+            if (lat is None or lng is None or not address) and maps_client is not None:
                 try:
                     details = maps_client.place_details(
                         place_id,
@@ -324,40 +321,29 @@ def autocomplete_input(label: str, key_prefix: str) -> dict[str, str] | None:
                     lat_val = location.get("lat")
                     lng_val = location.get("lng")
                     try:
-                        details_lat = float(lat_val) if lat_val is not None else None
+                        lat = float(lat_val) if lat_val is not None else lat
                     except (TypeError, ValueError):
-                        details_lat = None
+                        lat = None
                     try:
-                        details_lng = float(lng_val) if lng_val is not None else None
+                        lng = float(lng_val) if lng_val is not None else lng
                     except (TypeError, ValueError):
-                        details_lng = None
-                formatted_address = result.get("formatted_address") if isinstance(result, dict) else None
+                        lng = None
+                address = result.get("formatted_address") or address
 
-            matched_plaza = match_plaza_in_text(selected_desc, PLAZAS)
+            matched_plaza = match_plaza_in_text(address or description, PLAZAS)
             data = {
-                "description": selected_desc,
+                "description": description or address,
                 "place_id": place_id,
                 "matched_plaza": matched_plaza,
-                "lat": details_lat,
-                "lng": details_lng,
-                "address": formatted_address,
+                "lat": lat,
+                "lng": lng,
+                "address": address,
             }
             st.session_state[data_key] = data
-            caption = f"Elegiste: **{selected_desc}**"
-            if matched_plaza:
-                caption += f" · Caseta detectada: **{matched_plaza}**"
-            if details_lat is not None and details_lng is not None:
-                caption += f" · Coordenadas: ({details_lat:.5f}, {details_lng:.5f})"
-            st.caption(caption)
-            return data
-    else:
-        st.session_state.pop(selection_key, None)
-        st.session_state.pop(data_key, None)
-        if trimmed:
-            if len(trimmed) < 3:
-                st.caption("Escribe al menos 3 caracteres para buscar.")
-            else:
-                st.info("Sin coincidencias para la búsqueda.")
+            st.session_state[selection_key] = data["description"]
+        else:
+            st.session_state.pop(data_key, None)
+            st.session_state.pop(selection_key, None)
 
     return st.session_state.get(data_key)
 
@@ -366,8 +352,6 @@ def _calculate_route(
     origin: dict[str, str] | None,
     destination: dict[str, str] | None,
     waypoint: dict[str, str] | None,
-    *,
-    avoid_tolls: bool,
 ):
     if not origin or not destination:
         return None, "Selecciona un origen y un destino válidos."
@@ -380,7 +364,6 @@ def _calculate_route(
             origin["place_id"],
             destination["place_id"],
             waypoints=waypoint_ids,
-            avoid="tolls" if avoid_tolls else None,
             cache=maps_cache["directions"],
         )
     except GoogleMapsError as exc:
@@ -393,14 +376,10 @@ def _calculate_route(
 # Encabezado + Selecciones TOP (orden solicitado)
 # ===============================
 st.markdown("<div class='hero-title'>COSTOS DE TRASLADO</div>", unsafe_allow_html=True)
-st.caption(f"Conectado como **{st.session_state['usuario']}** · Rol: **{st.session_state['rol']}**")
 
-# 1) Fila 1: ORIGEN / DESTINO
-r1c1, r1c2 = st.columns([1.2, 1.2])
-with r1c1:
-    origen = autocomplete_input("ORIGEN", "top_origen")
-with r1c2:
-    destino = autocomplete_input("DESTINO", "top_destino")
+# 1) Búsquedas de origen / destino
+origen = autocomplete_input("ORIGEN", "top_origen")
+destino = autocomplete_input("DESTINO", "top_destino")
 
 # 2) Fila 2: CLASE (tipo de auto)
 clases = ["MOTO","AUTOMOVIL","B2","B3","B4","T2","T3","T4","T5","T6","T7","T8","T9"]
@@ -434,19 +413,7 @@ with r3c2:
         parada = None  # oculto completamente
 
 st.markdown("")  # espacio
-opts_c1, opts_c2 = st.columns([0.4, 0.6])
-with opts_c1:
-    if "chk_avoid_tolls" not in st.session_state:
-        st.session_state["chk_avoid_tolls"] = False
-    if MANUAL_MODE and st.session_state.get("chk_avoid_tolls"):
-        st.session_state["chk_avoid_tolls"] = False
-    evitar_cuotas = st.checkbox(
-        "EVITAR CASETAS (RUTA LIBRE)",
-        key="chk_avoid_tolls",
-        disabled=MANUAL_MODE,
-    )
-with opts_c2:
-    st.caption("Si se activa, Google Maps intentará evitar peajes; la ruta puede ser más larga.")
+st.session_state.pop("chk_avoid_tolls", None)
 
 origin_label = origen.get("description", "") if origen else ""
 destination_label = destino.get("description", "") if destino else ""
@@ -459,7 +426,7 @@ def compute_route_data():
     """Consulta Google Maps, calcula la ruta y determina las casetas aplicables."""
 
     waypoint = parada if (usar_parada and parada) else None
-    summary, route_error = _calculate_route(origen, destino, waypoint, avoid_tolls=evitar_cuotas)
+    summary, route_error = _calculate_route(origen, destino, waypoint)
     if route_error:
         return None, None, None, route_error
     if summary is None:
@@ -611,7 +578,6 @@ sel = (
     clase,
     usar_parada,
     (parada["place_id"] if usar_parada and parada else None),
-    evitar_cuotas,
 )
 if st.session_state.get("last_sel_top") != sel:
     for k in list(st.session_state.keys()):
@@ -624,21 +590,6 @@ if st.session_state.get("route_name") != ruta_nombre:
     st.session_state["route_name"] = ruta_nombre
     st.session_state.setdefault("excluded_set", set())
     st.session_state["excluded_set"].clear()
-
-distance_km_detected = float(st.session_state.get("maps_distance_km") or 0.0)
-caption_parts = []
-if ruta_nombre:
-    caption_parts.append(f"Ruta detectada: **{ruta_nombre}**")
-summary_label = route_summary.summary or ""
-if summary_label and summary_label not in (ruta_nombre or ""):
-    label_prefix = "Resumen Google" if MAPS_AVAILABLE else "Resumen"
-    caption_parts.append(f"{label_prefix}: {summary_label}")
-caption_parts.append(f"Distancia: {distance_km_detected:,.2f} km")
-if evitar_cuotas:
-    caption_parts.append("Ruta libre solicitada")
-if MANUAL_MODE:
-    caption_parts.append("Modo manual activado")
-st.caption(" · ".join(caption_parts))
 
 if getattr(route_summary, "warnings", None):
     prefix = "Google Maps advierte" if MAPS_AVAILABLE else "Aviso"
