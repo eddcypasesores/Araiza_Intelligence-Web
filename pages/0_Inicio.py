@@ -21,7 +21,7 @@ conn = get_conn(); ensure_schema(conn)
 
 # -------- Parámetros visuales --------
 MAX_W        = 1100
-NAV_H        = 60
+NAV_H        = 64
 HERO_H       = 420  # MISMA altura para imagen y texto
 
 # -------- CSS --------
@@ -50,70 +50,113 @@ css_template = Template(
     padding-top: 0 !important;
   }
 
-  /* Contenedor principal centrado y sin huecos extra */
   .block-container {
     max-width: var(--maxw) !important;
     margin: 0 auto !important;
-    padding: 0 !important;
+    padding: calc(var(--navh) + 24px) clamp(16px, 4vw, 32px) clamp(48px, 8vw, 72px) !important;
   }
 
-  /* ===== NAVBAR STICKY (sin huecos) =====
-     Hacemos sticky el contenedor que contiene la 'nav-sentinel' + columns. */
-  .block-container > div:has(> .nav-sentinel) {
-    position: sticky;
+  /* ===== NAVBAR FIJA ===== */
+  .nav-sentinel {
+    display: none;
+  }
+
+  .nav-anchor {
+    display: block;
+  }
+
+  .nav-anchor + div[data-testid="stHorizontalBlock"] {
+    position: fixed;
     top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: min(100%, var(--maxw));
     z-index: 1000;
     background: #fff;
     border-bottom: 1px solid #e5e7eb;
-    height: var(--navh);
-    display: flex;
+    display: flex !important;
     align-items: center;
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-  /* Quitamos padding/margins propios del bloque de columnas */
-  .block-container > div:has(> .nav-sentinel) [data-testid="stHorizontalBlock"] > div {
-    padding: 0 !important;
-    margin: 0 !important;
+    gap: clamp(12px, 2.5vw, 32px);
+    padding: 0 clamp(16px, 4vw, 24px) !important;
+    height: var(--navh);
   }
 
-  /* Enlaces del menú: tipografía roja, una línea, separados */
+  .nav-anchor + div[data-testid="stHorizontalBlock"] > div {
+    padding: 0 !important;
+    margin: 0 !important;
+    flex: 0 0 auto !important;
+    width: auto !important;
+  }
+
+  .nav-anchor + div[data-testid="stHorizontalBlock"] > div:last-child {
+    margin-left: auto !important;
+  }
+
+  .nav-scope {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+  }
+
   .nav-scope [data-testid="stPageLink"] {
-    display: inline-block !important;
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
     color: var(--brand-red) !important;
     font-weight: 700;
-    font-size: 18px;
+    font-size: clamp(15px, 1.7vw, 18px);
     padding: 10px 14px !important;
     white-space: nowrap !important;
     line-height: 24px !important;
     text-decoration: none !important;
   }
+
   .nav-scope [data-testid="stPageLink"]:hover {
     color: var(--brand-red-dark) !important;
     text-decoration: underline !important;
   }
 
-  /* Botón SALIR rojo */
-  .nav-scope .logout button {
+  .nav-scope.logout {
+    justify-content: flex-end;
+  }
+
+  .nav-scope.logout button {
     background: var(--brand-red) !important;
     color: #fff !important;
     border: 1px solid var(--brand-red) !important;
-    padding: 10px 16px !important;
-    border-radius: 10px !important;
+    padding: 10px 18px !important;
+    border-radius: 999px !important;
     font-weight: 800 !important;
+    font-size: clamp(14px, 1.6vw, 17px) !important;
   }
-  .nav-scope .logout button:hover {
+
+  .nav-scope.logout button:hover {
     background: var(--brand-red-dark) !important;
     border-color: var(--brand-red-dark) !important;
   }
 
-  /* ===== HERO (pegado a la barra, sin huecos, columnas igual altura) ===== */
-  .block-container > div:has(> .hero-sentinel) {
-    margin: 0 !important;
-    padding: 8px 0 0 !important;
+  /* ===== HERO ===== */
+  .hero-sentinel {
+    display: none;
   }
 
-  .block-container > div:has(> .hero-sentinel) [data-testid="column"] > div:first-child {
+  .hero-anchor + div[data-testid="stHorizontalBlock"] {
+    display: flex !important;
+    flex-wrap: wrap;
+    gap: clamp(28px, 5vw, 48px);
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .hero-anchor + div[data-testid="stHorizontalBlock"] > div {
+    flex: 1 1 360px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    min-width: 0;
+  }
+
+  .hero-anchor + div[data-testid="stHorizontalBlock"] > div > div:first-child {
     height: 100%;
   }
 
@@ -123,21 +166,22 @@ css_template = Template(
     min-height: ${hero_h}px;
     display: flex;
     flex-direction: column;
-    justify-content: flex-start;
-    align-items: stretch;
   }
 
   .hero-img-wrap {
     overflow: hidden;
-    border-radius: 16px;
+    border-radius: 18px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
   }
 
   .hero-image {
     width: 100%;
     height: 100%;
     object-fit: cover;
-    border-radius: 16px;
-    box-shadow: 0 6px 20px rgba(0,0,0,.08);
+  }
+
+  .hero-text-wrap {
+    padding: clamp(4px, 1vw, 12px) clamp(4px, 1vw, 12px);
   }
 
   .text-box {
@@ -145,46 +189,120 @@ css_template = Template(
     height: 100%;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: clamp(14px, 2.5vw, 22px);
   }
 
   .text-box .copy {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: clamp(10px, 2vw, 16px);
     flex: 1;
   }
 
-  .title { font-size: 32px; font-weight: 800; margin: 0; letter-spacing: .2px; }
-  .lead  { font-size: 16px; color: #334155; margin: 0; text-align: justify; }
-  .bullets { margin: 8px 0 0 1.2rem; color: #0f172a; }
-  .bullets li { margin: 6px 0; }
+  .title {
+    font-size: clamp(28px, 3.2vw, 42px);
+    font-weight: 800;
+    margin: 0;
+    letter-spacing: 0.3px;
+  }
 
-  .cta-area { margin-top: auto; padding-top: 16px; }
+  .lead {
+    font-size: clamp(15px, 1.55vw, 18px);
+    color: #334155;
+    margin: 0;
+    line-height: 1.7;
+    text-align: justify;
+  }
+
+  .bullets {
+    margin: 4px 0 0 clamp(18px, 2vw, 24px);
+    color: #0f172a;
+    font-size: clamp(14px, 1.4vw, 17px);
+  }
+
+  .bullets li {
+    margin-bottom: clamp(6px, 1.6vw, 12px);
+  }
+
+  .cta-area {
+    margin-top: auto;
+    padding-top: clamp(12px, 2vw, 20px);
+    display: flex;
+    justify-content: flex-start;
+  }
+
   .cta-area button[kind="primary"] {
-    font-size: 18px !important;
-    padding: 10px 20px !important;
+    font-size: clamp(16px, 1.8vw, 20px) !important;
+    padding: clamp(10px, 1.6vw, 16px) clamp(22px, 4vw, 36px) !important;
     border-radius: 999px !important;
     background: var(--brand-red) !important;
     border-color: var(--brand-red) !important;
   }
+
   .cta-area button[kind="primary"]:hover {
     background: var(--brand-red-dark) !important;
     border-color: var(--brand-red-dark) !important;
   }
 
-  @media (max-width: 980px) {
+  @media (max-width: 1024px) {
     .hero-img-wrap,
     .hero-text-wrap {
       min-height: auto;
     }
+  }
+
+  @media (max-width: 780px) {
+    .nav-anchor + div[data-testid="stHorizontalBlock"] {
+      gap: clamp(8px, 3vw, 16px);
+    }
+
+    .hero-anchor + div[data-testid="stHorizontalBlock"] {
+      flex-direction: column;
+    }
 
     .hero-img-wrap {
-      margin-bottom: 24px;
+      min-height: 260px;
+    }
+
+    .hero-text-wrap {
+      padding: clamp(12px, 4vw, 20px) 0;
     }
 
     .cta-area {
-      margin-top: 16px;
+      justify-content: center;
+    }
+  }
+
+  @media (max-width: 520px) {
+    .block-container {
+      padding: calc(var(--navh) + 20px) clamp(14px, 5vw, 18px) clamp(40px, 12vw, 60px) !important;
+    }
+
+    .nav-anchor + div[data-testid="stHorizontalBlock"] {
+      flex-wrap: wrap;
+      justify-content: center;
+      row-gap: 8px;
+      height: auto;
+      padding: clamp(10px, 4vw, 16px) clamp(16px, 6vw, 24px) !important;
+    }
+
+    .nav-anchor + div[data-testid="stHorizontalBlock"] > div:last-child {
+      margin-left: 0 !important;
+      width: 100% !important;
+      display: flex;
+      justify-content: center;
+    }
+
+    .nav-scope.logout {
+      justify-content: center;
+    }
+
+    .nav-scope.logout button {
+      width: min(220px, 100%);
+    }
+
+    .cta-area {
+      padding-top: clamp(18px, 4vw, 28px);
     }
   }
 </style>
@@ -198,28 +316,27 @@ st.markdown(
 
 # -------- NAVBAR (1 sola fila con columns) --------
 with st.container():
-    st.markdown('<div class="nav-sentinel"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True)
 
-    #   [esp] [Tarifas] [Usuarios] [Parámetros] [Salir]
-    c0, c1, c2, c3, c4 = st.columns([1.2, 1, 1, 1, 0.9], gap="small")
+    col_tarifas, col_usuarios, col_parametros, col_logout = st.columns(4, gap="small")
 
-    with c1:
+    with col_tarifas:
         st.markdown('<div class="nav-scope">', unsafe_allow_html=True)
         st.page_link("pages/2_Administrar_tarifas.py", label="Tarifas")
         st.markdown('</div>', unsafe_allow_html=True)
 
-    with c2:
+    with col_usuarios:
         st.markdown('<div class="nav-scope">', unsafe_allow_html=True)
         st.page_link("pages/4_Usuarios.py", label="Usuarios")
         st.markdown('</div>', unsafe_allow_html=True)
 
-    with c3:
+    with col_parametros:
         st.markdown('<div class="nav-scope">', unsafe_allow_html=True)
         st.page_link("pages/5_Parametros.py", label="Parámetros")
         st.markdown('</div>', unsafe_allow_html=True)
 
-    with c4:
-        st.markdown('<div class="nav-scope logout" style="text-align:right;">', unsafe_allow_html=True)
+    with col_logout:
+        st.markdown('<div class="nav-scope logout">', unsafe_allow_html=True)
         if st.button("Salir", key="logout_btn"):
             for k in ("usuario", "rol", "excluded_set", "route", "show_detail"):
                 if k in st.session_state:
@@ -259,7 +376,7 @@ img_data = to_data_url(img_path) if img_path else None
 
 # -------- HERO (imagen izquierda | texto derecha, MISMA altura) --------
 with st.container():
-    st.markdown('<div class="hero-sentinel"></div>', unsafe_allow_html=True)
+    st.markdown('<div class="hero-anchor"></div>', unsafe_allow_html=True)
     col_img, col_txt = st.columns(2, gap="large")
 
     with col_img:
