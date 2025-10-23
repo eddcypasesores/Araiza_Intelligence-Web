@@ -1,5 +1,6 @@
 # pages/0_Inicio.py — Navbar horizontal sticky + hero sin huecos (misma altura)
 from pathlib import Path
+from string import Template
 import base64
 import streamlit as st
 from core.db import get_conn, ensure_schema
@@ -24,14 +25,15 @@ NAV_H        = 60
 HERO_H       = 420  # MISMA altura para imagen y texto
 
 # -------- CSS --------
-st.markdown(f"""
+css_template = Template(
+    """
 <style>
-  :root {{
-    --maxw: {MAX_W}px;
-    --navh: {NAV_H}px;
+  :root {
+    --maxw: ${max_w}px;
+    --navh: ${nav_h}px;
     --brand-red: #dc2626;
     --brand-red-dark: #b91c1c;
-  }}
+  }
 
   /* Ocultar elementos nativos de Streamlit que compiten con la barra */
   [data-testid="stSidebar"],
@@ -49,15 +51,15 @@ st.markdown(f"""
   }
 
   /* Contenedor principal centrado y sin huecos extra */
-  .block-container {{
+  .block-container {
     max-width: var(--maxw) !important;
     margin: 0 auto !important;
     padding: 0 !important;
-  }}
+  }
 
   /* ===== NAVBAR STICKY (sin huecos) =====
      Hacemos sticky el contenedor que contiene la 'nav-sentinel' + columns. */
-  .block-container > div:has(> .nav-sentinel) {{
+  .block-container > div:has(> .nav-sentinel) {
     position: sticky;
     top: 0;
     z-index: 1000;
@@ -68,14 +70,15 @@ st.markdown(f"""
     align-items: center;
     margin: 0 !important;
     padding: 0 !important;
-  }}
+  }
   /* Quitamos padding/margins propios del bloque de columnas */
-  .block-container > div:has(> .nav-sentinel) [data-testid="stHorizontalBlock"] > div {{
-    padding: 0 !important; margin: 0 !important;
-  }}
+  .block-container > div:has(> .nav-sentinel) [data-testid="stHorizontalBlock"] > div {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
 
   /* Enlaces del menú: tipografía roja, una línea, separados */
-  .nav-scope [data-testid="stPageLink"] {{
+  .nav-scope [data-testid="stPageLink"] {
     display: inline-block !important;
     color: var(--brand-red) !important;
     font-weight: 700;
@@ -84,25 +87,25 @@ st.markdown(f"""
     white-space: nowrap !important;
     line-height: 24px !important;
     text-decoration: none !important;
-  }}
-  .nav-scope [data-testid="stPageLink"]:hover {{
+  }
+  .nav-scope [data-testid="stPageLink"]:hover {
     color: var(--brand-red-dark) !important;
     text-decoration: underline !important;
-  }}
+  }
 
   /* Botón SALIR rojo */
-  .nav-scope .logout button {{
+  .nav-scope .logout button {
     background: var(--brand-red) !important;
     color: #fff !important;
     border: 1px solid var(--brand-red) !important;
     padding: 10px 16px !important;
     border-radius: 10px !important;
     font-weight: 800 !important;
-  }}
-  .nav-scope .logout button:hover {{
+  }
+  .nav-scope .logout button:hover {
     background: var(--brand-red-dark) !important;
     border-color: var(--brand-red-dark) !important;
-  }}
+  }
 
   /* ===== HERO (pegado a la barra, sin huecos, columnas igual altura) ===== */
   .block-container > div:has(> .hero-sentinel) {
@@ -117,7 +120,7 @@ st.markdown(f"""
   .hero-img-wrap,
   .hero-text-wrap {
     height: 100%;
-    min-height: {HERO_H}px;
+    min-height: ${hero_h}px;
     display: flex;
     align-items: center;
   }
@@ -133,7 +136,7 @@ st.markdown(f"""
   .hero-image {
     width: 100%;
     height: 100%;
-    max-height: {HERO_H}px;
+    max-height: ${hero_h}px;
     object-fit: cover;
     border-radius: 16px;
     box-shadow: 0 6px 20px rgba(0,0,0,.08);
@@ -146,9 +149,9 @@ st.markdown(f"""
     gap: 10px;
   }
 
-  .title { font-size: 32px; font-weight: 800; margin: 0; letter-spacing:.2px; }
-  .lead  { font-size: 16px; color:#334155; margin: 0; text-align: justify; }
-  .bullets { margin: 8px 0 0 1.2rem; color:#0f172a; }
+  .title { font-size: 32px; font-weight: 800; margin: 0; letter-spacing: .2px; }
+  .lead  { font-size: 16px; color: #334155; margin: 0; text-align: justify; }
+  .bullets { margin: 8px 0 0 1.2rem; color: #0f172a; }
   .bullets li { margin: 6px 0; }
 
   .cta-area { margin-top: 16px; }
@@ -171,7 +174,13 @@ st.markdown(f"""
     }
   }
 </style>
-""", unsafe_allow_html=True)
+"""
+)
+
+st.markdown(
+    css_template.substitute(max_w=MAX_W, nav_h=NAV_H, hero_h=HERO_H),
+    unsafe_allow_html=True,
+)
 
 # -------- NAVBAR (1 sola fila con columns) --------
 with st.container():
