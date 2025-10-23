@@ -1,4 +1,4 @@
-# pages/0_Inicio.py — Sticky navbar (1 fila), sin hueco, hero pegado y texto justificado
+# pages/0_Inicio.py — Navbar horizontal sticky + hero sin huecos (misma altura)
 from pathlib import Path
 import base64
 import streamlit as st
@@ -6,7 +6,7 @@ from core.db import get_conn, ensure_schema
 
 st.set_page_config(page_title="Inicio | Costos de Rutas", layout="wide")
 
-# --- Seguridad ---
+# -------- Seguridad --------
 if "usuario" not in st.session_state or "rol" not in st.session_state:
     st.warning("⚠️ Debes iniciar sesión primero.")
     try:
@@ -15,97 +15,167 @@ if "usuario" not in st.session_state or "rol" not in st.session_state:
         st.stop()
     st.stop()
 
-# --- DB ---
+# -------- DB --------
 conn = get_conn(); ensure_schema(conn)
 
-# --- Visual ---
-HERO_MAX_WIDTH = 1100
-HERO_HEIGHT    = 360
-NAV_HEIGHT     = 56  # alto barra
+# -------- Parámetros visuales --------
+MAX_W        = 1100
+NAV_H        = 60
+HERO_H       = 420  # MISMA altura para imagen y texto
 
-# --- CSS ---
+# -------- CSS --------
 st.markdown(f"""
 <style>
   :root {{
-    --nav-h:{NAV_HEIGHT}px;
-    --brand-red:#b91c1c; /* rojo para links */
+    --maxw: {MAX_W}px;
+    --navh: {NAV_H}px;
+    --brand-red: #dc2626;
+    --brand-red-dark: #b91c1c;
   }}
 
-  /* Quitar sidebar */
+  /* Ocultar sidebar */
   [data-testid="stSidebar"], [data-testid="collapsedControl"] {{ display:none !important; }}
 
-  /* Contenedor principal: agregamos el offset de la barra sticky y eliminamos huecos */
+  /* Contenedor principal centrado y sin huecos extra */
   .block-container {{
-    max-width:{HERO_MAX_WIDTH}px !important;
-    margin:0 auto !important;
-    padding-top:12px !important;        /* pequeño respiro superior */
-    padding-bottom:0 !important;
+    max-width: var(--maxw) !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
   }}
 
-  /* ===== NAVBAR STICKY =====
-     El truco: creamos un 'sentinel' y hacemos sticky el contenedor que LO TIENE como hijo. */
+  /* ===== NAVBAR STICKY (sin huecos) =====
+     Hacemos sticky el contenedor que contiene la 'nav-sentinel' + columns. */
   .block-container > div:has(> .nav-sentinel) {{
     position: sticky;
     top: 0;
-    z-index: 999;
-    background: #ffffffee;             /* leve transparencia con blur */
-    backdrop-filter: saturate(180%) blur(8px);
-    border-bottom:1px solid #e5e7eb;
-    height: var(--nav-h);
-    display:flex;
-    align-items:center;
-    padding:0 !important;
-    margin:0 0 8px 0 !important;       /* nada de margen arriba, un respiro abajo */
+    z-index: 1000;
+    background: #fff;
+    border-bottom: 1px solid #e5e7eb;
+    height: var(--navh);
+    display: flex;
+    align-items: center;
+    margin: 0 !important;
+    padding: 0 !important;
   }}
-
-  /* El bloque horizontal (columns) no debe añadir padding extra */
+  /* Quitamos padding/margins propios del bloque de columnas */
   .block-container > div:has(> .nav-sentinel) [data-testid="stHorizontalBlock"] > div {{
-    padding:0 !important; margin:0 !important;
+    padding: 0 !important; margin: 0 !important;
   }}
 
-  /* Links del menú: rojo y sin recortes */
-  .nav a, .nav [data-testid="stPageLink"] {{
-    display:inline-block !important;
-    font-size:15px; font-weight:700; color:var(--brand-red) !important;
-    padding:10px 10px !important;
-    line-height:22px !important;
-    white-space:nowrap !important;
-    text-decoration:none !important;
+  /* Enlaces del menú: tipografía roja, una línea, separados */
+  .nav-scope [data-testid="stPageLink"] {{
+    display: inline-block !important;
+    color: var(--brand-red) !important;
+    font-weight: 700;
+    font-size: 18px;
+    padding: 10px 14px !important;
+    white-space: nowrap !important;
+    line-height: 24px !important;
+    text-decoration: none !important;
   }}
-  .nav [data-testid="stPageLink"]:hover {{ text-decoration:underline !important; }}
-
-  /* Botón de salir en rojo */
-  .logout button {{
-    background:transparent !important;
-    border:1px solid var(--brand-red) !important;
-    color:var(--brand-red) !important;
-    padding:6px 12px !important;
-    border-radius:8px !important;
-    font-weight:700 !important;
+  .nav-scope [data-testid="stPageLink"]:hover {{
+    color: var(--brand-red-dark) !important;
+    text-decoration: underline !important;
   }}
 
-  /* ===== HERO pegado a la barra (sin huecos arriba) ===== */
-  .hero-wrap {{ margin-top:0 !important; }}
+  /* Botón SALIR rojo */
+  .nav-scope .logout button {{
+    background: var(--brand-red) !important;
+    color: #fff !important;
+    border: 1px solid var(--brand-red) !important;
+    padding: 10px 16px !important;
+    border-radius: 10px !important;
+    font-weight: 800 !important;
+  }}
+  .nav-scope .logout button:hover {{
+    background: var(--brand-red-dark) !important;
+    border-color: var(--brand-red-dark) !important;
+  }}
+
+  /* ===== HERO (pegado a la barra, sin huecos, columnas igual altura) ===== */
+  .hero-wrap {{ margin-top: 0 !important; }}
   .hero-grid {{
-    display:grid; grid-template-columns:1fr 1fr; gap:20px; align-items:stretch;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    align-items: stretch;  /* clave para igual altura */
   }}
-  @media (max-width:980px) {{ .hero-grid {{ grid-template-columns:1fr; }} }}
+  @media (max-width: 980px) {{
+    .hero-grid {{ grid-template-columns: 1fr; }}
+  }}
 
-  .img-cell, .text-cell {{ display:flex; align-items:center; justify-content:center; min-height:{HERO_HEIGHT}px; }}
-  .hero-image {{ width:100%; height:{HERO_HEIGHT}px; object-fit:cover; border-radius:16px; box-shadow:0 6px 20px rgba(0,0,0,.08); }}
+  .img-cell, .text-cell {{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: {HERO_H}px;   /* MISMA altura en ambos lados */
+  }}
+  .hero-image {{
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: 16px;
+    box-shadow: 0 6px 20px rgba(0,0,0,.08);
+  }}
 
-  .text-box {{ width:100%; display:flex; flex-direction:column; justify-content:center; gap:10px; }}
-  .title {{ font-size:30px; font-weight:800; margin:0; letter-spacing:.2px; }}
-  .lead {{ font-size:16px; color:#334155; margin:0; text-align:justify; }}
-  .bullets {{ margin:8px 0 0 1.2rem; color:#0f172a; }}
-  .bullets li {{ margin:6px 0; }}
+  .text-box {{ width: 100%; display: flex; flex-direction: column; gap: 10px; }}
+  .title {{ font-size: 32px; font-weight: 800; margin: 0; letter-spacing:.2px; }}
+  .lead  {{ font-size: 16px; color:#334155; margin: 0; text-align: justify; }}
+  .bullets {{ margin: 8px 0 0 1.2rem; color:#0f172a; }}
+  .bullets li {{ margin: 6px 0; }}
 
-  .cta-area {{ margin-top:12px; }}
-  .cta-area button[kind="primary"] {{ font-size:18px !important; padding:10px 18px !important; border-radius:999px !important; }}
+  .cta-area {{ margin-top: 12px; }}
+  .cta-area button[kind="primary"] {{
+    font-size: 18px !important;
+    padding: 10px 18px !important;
+    border-radius: 999px !important;
+    background: var(--brand-red) !important;
+    border-color: var(--brand-red) !important;
+  }}
+  .cta-area button[kind="primary"]:hover {{
+    background: var(--brand-red-dark) !important;
+    border-color: var(--brand-red-dark) !important;
+  }}
 </style>
 """, unsafe_allow_html=True)
 
-# --- Resolver imagen ---
+# -------- NAVBAR (1 sola fila con columns) --------
+with st.container():
+    st.markdown('<div class="nav-sentinel"></div>', unsafe_allow_html=True)
+
+    #   [esp] [Tarifas] [Usuarios] [Parámetros] [Calculadora] [esp] [Salir]
+    c0, c1, c2, c3, c4, c5, c6 = st.columns([1.2, 1, 1, 1, 1, 1.2, 0.9], gap="small")
+
+    with c1:
+        st.markdown('<div class="nav-scope">', unsafe_allow_html=True)
+        st.page_link("pages/2_Administrar_tarifas.py", label="Tarifas")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with c2:
+        st.markdown('<div class="nav-scope">', unsafe_allow_html=True)
+        st.page_link("pages/4_Usuarios.py", label="Usuarios")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with c3:
+        st.markdown('<div class="nav-scope">', unsafe_allow_html=True)
+        st.page_link("pages/5_Parametros.py", label="Parámetros")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with c4:
+        st.markdown('<div class="nav-scope">', unsafe_allow_html=True)
+        st.page_link("pages/1_Calculadora.py", label="Calculadora")
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    with c6:
+        st.markdown('<div class="nav-scope logout" style="text-align:right;">', unsafe_allow_html=True)
+        if st.button("Salir", key="logout_btn"):
+            for k in ("usuario","rol","excluded_set","route","show_detail"):
+                if k in st.session_state: del st.session_state[k]
+            try: st.switch_page("app.py")
+            except Exception: st.experimental_rerun()
+        st.markdown('</div>', unsafe_allow_html=True)
+
+# -------- Resolver imagen --------
 APP_DIR = Path(__file__).resolve().parent
 ASSET_DIRS = [
     APP_DIR / "assets",
@@ -128,31 +198,13 @@ def to_data_url(p: Path):
         return f"data:{mime};base64," + base64.b64encode(p.read_bytes()).decode()
     except Exception:
         return None
+
 img_path = resolve_asset("assets/inicio_card.png") or resolve_asset("inicio_card.png")
 img_data = to_data_url(img_path) if img_path else None
 
-# === NAVBAR (solo Streamlit; el contenedor se vuelve sticky vía :has) ===
-with st.container():
-    # Este div marca el contenedor para que el CSS lo haga sticky
-    st.markdown('<div class="nav-sentinel"></div>', unsafe_allow_html=True)
-
-    # Estructura: spacer | 4 links | spacer | salir
-    c0, c1, c2, c3, c4, c5, c6 = st.columns([1.2, 1, 1, 1, 1, 1.2, 0.9], gap="small")
-    with c1: st.markdown('<div class="nav">', unsafe_allow_html=True); st.page_link("pages/2_Administrar_tarifas.py", label="Tarifas de Casetas ▾"); st.markdown('</div>', unsafe_allow_html=True)
-    with c2: st.markdown('<div class="nav">', unsafe_allow_html=True); st.page_link("pages/4_Usuarios.py", label="Usuarios ▾"); st.markdown('</div>', unsafe_allow_html=True)
-    with c3: st.markdown('<div class="nav">', unsafe_allow_html=True); st.page_link("pages/5_Parametros.py", label="Parámetros ▾"); st.markdown('</div>', unsafe_allow_html=True)
-    with c4: st.markdown('<div class="nav">', unsafe_allow_html=True); st.page_link("pages/1_Calculadora.py", label="Calculadora"); st.markdown('</div>', unsafe_allow_html=True)
-    with c6:
-        st.markdown('<div class="logout" style="text-align:right;">', unsafe_allow_html=True)
-        if st.button("Salir", key="logout_btn"):
-            for k in ("usuario","rol","excluded_set","route","show_detail"):
-                if k in st.session_state: del st.session_state[k]
-            try: st.switch_page("app.py")
-            except Exception: st.experimental_rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
-
-# === HERO (imagen izquierda | texto derecha) ===
+# -------- HERO (imagen izquierda | texto derecha, MISMA altura) --------
 st.markdown('<div class="hero-wrap"><div class="hero-grid">', unsafe_allow_html=True)
+
 col_img, col_txt = st.columns(2, gap="large")
 
 with col_img:
