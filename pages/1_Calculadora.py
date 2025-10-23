@@ -386,7 +386,6 @@ def _calculate_route(
 # Encabezado + Selecciones TOP (orden solicitado)
 # ===============================
 st.markdown("<div class='hero-title'>COSTOS DE TRASLADO</div>", unsafe_allow_html=True)
-st.caption(f"Conectado como **{st.session_state['usuario']}** · Rol: **{st.session_state['rol']}**")
 
 # 1) Fila 1: ORIGEN / DESTINO
 r1c1, r1c2 = st.columns([1.2, 1.2])
