@@ -69,11 +69,15 @@
         font-family: "Source Sans Pro", "Segoe UI", Tahoma, sans-serif;
         color: #0f172a;
       }
+      * {
+        box-sizing: border-box;
+      }
       .gmaps-field {
         display: flex;
         flex-direction: column;
         gap: 0.35rem;
         margin-bottom: 0.75rem;
+        width: 100%;
       }
       .gmaps-label {
         font-weight: 600;
@@ -86,21 +90,22 @@
         position: relative;
         display: flex;
         align-items: center;
-        background: #fff;
-        border: 1px solid #dfe1e5;
+        background: #fff !important;
+        border: 1px solid #dfe1e5 !important;
         border-radius: 999px;
-        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12) !important;
+        width: 100%;
         transition: border 0.2s ease, box-shadow 0.2s ease;
         padding: 0.25rem 0.75rem 0.25rem 2.5rem;
       }
       .gmaps-input:focus-within {
-        border-color: #4285f4;
-        box-shadow: 0 4px 12px rgba(66, 133, 244, 0.25);
+        border-color: #4285f4 !important;
+        box-shadow: 0 4px 12px rgba(66, 133, 244, 0.25) !important;
       }
       .gmaps-input.is-disabled {
-        background: #f1f5f9;
-        box-shadow: none;
-        border-color: #d1d5db;
+        background: #f1f5f9 !important;
+        box-shadow: none !important;
+        border-color: #d1d5db !important;
       }
       .gmaps-icon {
         position: absolute;
@@ -300,7 +305,7 @@
                   <path fill="currentColor" d="M12 2a7 7 0 0 0-7 7c0 4.77 6.07 12.39 6.33 12.7a1 1 0 0 0 1.34 0C12.93 21.39 19 13.77 19 9a7 7 0 0 0-7-7Zm0 10a3 3 0 1 1 0-6 3 3 0 0 1 0 6Z" />
                 </svg>
               </span>
-              <input type="text" id="${elementId}" ${disabledAttr} placeholder="${placeholder}" autocomplete="off" spellcheck="false" />
+              <input type="text" id="${elementId}" ${disabledAttr} placeholder="${placeholder}" aria-label="${label || placeholder}" autocomplete="off" spellcheck="false" />
               <button type="button" class="gmaps-clear" id="${clearId}" ${disabledAttr} aria-label="Limpiar búsqueda">
                 <svg viewBox="0 0 24 24" focusable="false" role="presentation">
                   <path fill="currentColor" d="m12 10.586 4.95-4.95 1.414 1.414L13.414 12l4.95 4.95-1.414 1.414L12 13.414l-4.95 4.95-1.414-1.414L10.586 12l-4.95-4.95L7.05 5.636z" />
