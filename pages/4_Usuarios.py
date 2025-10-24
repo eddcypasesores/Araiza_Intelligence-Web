@@ -2,6 +2,7 @@ import sqlite3
 import pandas as pd
 import streamlit as st
 
+from core.auth import ensure_session_from_token
 from core.db import (
     get_conn,
     ensure_schema,
@@ -25,6 +26,7 @@ def rol_to_db(rol_ui: str) -> str:
 
 
 st.set_page_config(page_title="Usuarios y Trabajadores", layout="wide")
+ensure_session_from_token()
 
 # ---- Seguridad ----
 if "usuario" not in st.session_state or "rol" not in st.session_state:
