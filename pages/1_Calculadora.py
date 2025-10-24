@@ -36,7 +36,7 @@ inject_css("styles.css")
 st.markdown(
     """
     <style>
-      :root { --section-max-height: 150px; }
+      :root { --section-max-height: 2cm; }
       .block-container { padding-top: 0.85rem; }
       .section, .section * { background: transparent !important; box-shadow: none !important; }
       .section { padding: 0 !important; margin: 0 0 .25rem 0 !important; border: none !important; }
