@@ -244,10 +244,19 @@ NAV_CSS = """
 PAGE_PARAM_NAMES: dict[str, str] = {
     "pages/0_Inicio.py": "Inicio",
     "pages/1_Calculadora.py": "Calculadora",
-    "pages/2_Administrar_tarifas.py": "Administrar tarifas",
+    "pages/2_Tarifas_consultar.py": "Tarifas — Consultar",
+    "pages/3_Tarifas_agregar.py": "Tarifas — Agregar",
+    "pages/4_Tarifas_modificar.py": "Tarifas — Modificar",
+    "pages/5_Tarifas_eliminar.py": "Tarifas — Eliminar",
     "pages/3_Trabajadores.py": "Trabajadores",
-    "pages/4_Usuarios.py": "Usuarios",
-    "pages/5_Parametros.py": "Parametros",
+    "pages/6_Usuarios_consultar.py": "Usuarios — Consultar",
+    "pages/7_Usuarios_agregar.py": "Usuarios — Agregar",
+    "pages/8_Usuarios_modificar.py": "Usuarios — Modificar",
+    "pages/9_Usuarios_eliminar.py": "Usuarios — Eliminar",
+    "pages/10_Parametros_consultar.py": "Parámetros — Consultar",
+    "pages/11_Parametros_agregar.py": "Parámetros — Agregar",
+    "pages/12_Parametros_modificar.py": "Parámetros — Modificar",
+    "pages/13_Parametros_eliminar.py": "Parámetros — Eliminar",
 }
 
 
@@ -256,9 +265,9 @@ class DropdownAction:
     """Represents an action inside a dropdown menu."""
 
     label: str
-    view_key: str
-    view_value: str
+    child_id: str
     target_page: str
+    query: dict[str, str] | None = None
 
 
 def _handle_logout_query() -> None:
@@ -308,9 +317,9 @@ def _dropdown_html(
 
     items: list[str] = []
     for action in actions:
-        href = _page_href(action.target_page, {action.view_key: action.view_value})
+        href = _page_href(action.target_page, action.query)
         option_class = "nav-option"
-        if active_child == action.view_value and active_top == top_key:
+        if active_child == action.child_id and active_top == top_key:
             option_class += " active"
         items.append(
             f'<a class="{option_class}" href="{href}" target="_self">{action.label}</a>'
@@ -363,10 +372,10 @@ def render_nav(
         _dropdown_html(
             label="Tarifas",
             actions=[
-                DropdownAction("Consultar", "tarifas_view", "consultar", "pages/2_Administrar_tarifas.py"),
-                DropdownAction("Agregar", "tarifas_view", "agregar", "pages/2_Administrar_tarifas.py"),
-                DropdownAction("Modificar", "tarifas_view", "modificar", "pages/2_Administrar_tarifas.py"),
-                DropdownAction("Eliminar", "tarifas_view", "eliminar", "pages/2_Administrar_tarifas.py"),
+                DropdownAction("Consultar", "consultar", "pages/2_Tarifas_consultar.py"),
+                DropdownAction("Agregar", "agregar", "pages/3_Tarifas_agregar.py"),
+                DropdownAction("Modificar", "modificar", "pages/4_Tarifas_modificar.py"),
+                DropdownAction("Eliminar", "eliminar", "pages/5_Tarifas_eliminar.py"),
             ],
             active_top=active_top,
             active_child=active_child,
@@ -378,10 +387,10 @@ def render_nav(
         _dropdown_html(
             label="Usuarios",
             actions=[
-                DropdownAction("Consultar", "usuarios_view", "consultar", "pages/4_Usuarios.py"),
-                DropdownAction("Agregar", "usuarios_view", "agregar", "pages/4_Usuarios.py"),
-                DropdownAction("Modificar", "usuarios_view", "modificar", "pages/4_Usuarios.py"),
-                DropdownAction("Eliminar", "usuarios_view", "eliminar", "pages/4_Usuarios.py"),
+                DropdownAction("Consultar", "consultar", "pages/6_Usuarios_consultar.py"),
+                DropdownAction("Agregar", "agregar", "pages/7_Usuarios_agregar.py"),
+                DropdownAction("Modificar", "modificar", "pages/8_Usuarios_modificar.py"),
+                DropdownAction("Eliminar", "eliminar", "pages/9_Usuarios_eliminar.py"),
             ],
             active_top=active_top,
             active_child=active_child,
@@ -393,10 +402,10 @@ def render_nav(
         _dropdown_html(
             label="Parámetros",
             actions=[
-                DropdownAction("Consultar", "parametros_view", "consultar", "pages/5_Parametros.py"),
-                DropdownAction("Agregar", "parametros_view", "agregar", "pages/5_Parametros.py"),
-                DropdownAction("Modificar", "parametros_view", "modificar", "pages/5_Parametros.py"),
-                DropdownAction("Eliminar", "parametros_view", "eliminar", "pages/5_Parametros.py"),
+                DropdownAction("Consultar", "consultar", "pages/10_Parametros_consultar.py"),
+                DropdownAction("Agregar", "agregar", "pages/11_Parametros_agregar.py"),
+                DropdownAction("Modificar", "modificar", "pages/12_Parametros_modificar.py"),
+                DropdownAction("Eliminar", "eliminar", "pages/13_Parametros_eliminar.py"),
             ],
             active_top=active_top,
             active_child=active_child,
