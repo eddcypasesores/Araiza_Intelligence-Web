@@ -43,15 +43,27 @@ def process_logout_flag() -> bool:
     params = st.query_params
     logout_flag = _normalize_flag(params.get("logout"))
     if logout_flag != "1":
+        # Reset any stale marker from prior logouts.
+        st.session_state.pop("_logout_processed", None)
+        return False
+
+    # Avoid handling the same logout flag repeatedly when Streamlit reruns.
+    if st.session_state.get("_logout_processed") == logout_flag:
         return False
 
     clear_session_state()
 
+    remaining_params = {k: v for k, v in params.items() if k != "logout"}
     try:
-        params.clear()
+        st.experimental_set_query_params(**remaining_params)
     except Exception:
-        # ``st.query_params`` may not support ``clear`` on older Streamlit versions.
-        pass
+        try:
+            params.clear()
+        except Exception:
+            # ``st.query_params`` may not support ``clear`` on older Streamlit versions.
+            pass
+
+    st.session_state["_logout_processed"] = logout_flag
 
     return True
 
