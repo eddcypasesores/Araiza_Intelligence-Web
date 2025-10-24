@@ -50,15 +50,16 @@ st.markdown(
       [data-testid="stExpander"]{ border:1px solid rgba(15,23,42,.08); background:transparent; }
       [data-testid="stExpander"]>div{ background:transparent !important; }
       .section input[aria-label=""], .section textarea[aria-label=""]{ display:none !important; }
-      .top-form { display:flex; flex-wrap:wrap; gap:1.5rem; align-items:flex-start; margin-bottom:1.2rem; }
-      .top-form .add-stop-card { flex:0 0 130px; display:flex; flex-direction:column; align-items:center; gap:.4rem; }
+      .top-form { display:flex; flex-wrap:wrap; gap:1.5rem; align-items:stretch; margin-bottom:1.1rem; }
+      .top-form > div[data-testid="column"] { display:flex; }
+      .top-form > div[data-testid="column"] > div { flex:1; display:flex; }
+      .top-form .add-stop-card { flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; }
       .top-form .add-stop-card .add-stop-button { width:100%; }
       .top-form .add-stop-card .add-stop-button button { height:120px; font-size:3.25rem; line-height:1; border-radius:18px; }
-      .top-form .add-stop-card .hint { font-weight:600; text-align:center; color:#1e293b; }
-      .top-form .add-stop-card .hint.disabled { color:#94a3b8; }
-      .top-form .address-stack > div[data-testid="stVerticalBlock"] { margin-bottom:.55rem; }
-      .top-form .controls-stack > div[data-testid="stVerticalBlock"] { width:100%; }
-      .top-form .controls-stack .compact-row > div { margin-bottom:.55rem; }
+      .top-form .address-stack { width:100%; display:flex; flex-direction:column; gap:.55rem; }
+      .top-form .address-stack > div[data-testid="stVerticalBlock"] { margin-bottom:0 !important; }
+      .top-form .address-stack > div[data-testid="stHorizontalBlock"] { margin-top:.4rem; }
+      .top-form .address-stack > div[data-testid="stVerticalBlock"]:last-child { margin-top:.6rem; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -398,11 +399,14 @@ if MANUAL_MODE and st.session_state.get(stop_state_key):
 
 with st.container():
     st.markdown("<div class='top-form'>", unsafe_allow_html=True)
-    col_plus, col_addresses, col_controls = st.columns([0.2, 1.15, 0.95])
+    col_plus, col_addresses = st.columns([0.2, 1.0], gap="large")
 
     with col_plus:
         st.markdown("<div class='add-stop-card'>", unsafe_allow_html=True)
         btn_disabled = MANUAL_MODE
+        help_text = "Maps no disponible" if btn_disabled else (
+            "Agregar parada" if not st.session_state.get(stop_state_key) else "Quitar parada"
+        )
         st.markdown("<div class='add-stop-button'>", unsafe_allow_html=True)
         if st.button(
             "➕",
@@ -410,16 +414,10 @@ with st.container():
             type="primary",
             use_container_width=True,
             disabled=btn_disabled,
+            help=help_text,
         ):
             st.session_state[stop_state_key] = not st.session_state.get(stop_state_key, False)
         st.markdown("</div>", unsafe_allow_html=True)
-
-        hint_class = "hint disabled" if btn_disabled else "hint"
-        if btn_disabled:
-            hint_text = "Maps no disponible"
-        else:
-            hint_text = "Agregar parada" if not st.session_state.get(stop_state_key) else "Quitar parada"
-        st.markdown(f"<div class='{hint_class}'>{hint_text}</div>", unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
     with col_addresses:
@@ -435,15 +433,11 @@ with st.container():
             st.session_state.pop("top_parada_selection", None)
             st.session_state.pop("top_parada_data", None)
             parada = None
-        st.markdown("</div>", unsafe_allow_html=True)
 
-    with col_controls:
-        st.markdown("<div class='controls-stack'>", unsafe_allow_html=True)
-        st.markdown("<div class='compact-row'>", unsafe_allow_html=True)
-        ctrl_row = st.columns([1.0, 0.85, 0.85])
-        with ctrl_row[0]:
+        meta_cols = st.columns(3, gap="medium")
+        with meta_cols[0]:
             clase = st.selectbox("CLASE (TIPO DE AUTO)", clases, index=default_idx, key="top_clase")
-        with ctrl_row[1]:
+        with meta_cols[1]:
             viaticos_mxn = st.number_input(
                 "VIÁTICOS (MXN)",
                 min_value=0.0,
@@ -452,8 +446,9 @@ with st.container():
                 format="%.2f",
                 key="viat_input_main",
             )
-        dias_placeholder = ctrl_row[2].empty()
-        st.markdown("</div>", unsafe_allow_html=True)
+        with meta_cols[2]:
+            dias_placeholder = st.empty()
+
         conductor_placeholder = st.empty()
         st.markdown("</div>", unsafe_allow_html=True)
 
@@ -688,22 +683,18 @@ diesel_params = PARAMS.get("diesel", {}) if isinstance(PARAMS, dict) else {}
 rendimiento = float(diesel_params.get("rendimiento_km_l") or 0.0)
 precio_litro = float(diesel_params.get("precio_litro") or 0.0)
 
-c1, c2 = st.columns([1.0, 1.0])
 distancia_km_val = float(st.session_state.get("maps_distance_km") or 0.0)
-with c1:
-    st.number_input(
-        "DISTANCIA (KM)",
-        min_value=0.0,
-        value=distancia_km_val,
-        step=0.1,
-        format="%.2f",
-        key="distance_display_km",
-        disabled=True,
-    )
-with c2:
-    viaje_redondo = st.checkbox("VIAJE REDONDO", value=False)
+st.number_input(
+    "DISTANCIA (KM)",
+    min_value=0.0,
+    value=distancia_km_val,
+    step=0.1,
+    format="%.2f",
+    key="distance_display_km",
+    disabled=True,
+)
 
-km_totales = float(distancia_km_val or 0.0) * (2 if viaje_redondo else 1)
+km_totales = float(distancia_km_val or 0.0)
 litros_estimados = (km_totales / rendimiento) if rendimiento > 0 else 0.0
 subtotal_combustible = float(litros_estimados) * precio_litro
 
