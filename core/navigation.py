@@ -52,12 +52,14 @@ NAV_CSS = """
     transform: translateX(-50%);
     width: min(100%, var(--nav-max-width));
     z-index: 1000;
-    background: #fff;
-    border-bottom: 1px solid #e5e7eb;
+    background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid rgba(148, 163, 184, 0.28);
     padding: 0 clamp(16px, 4vw, 24px);
     height: var(--nav-height);
     display: flex;
     align-items: center;
+    border-radius: 16px;
+    box-shadow: 0 18px 32px rgba(15, 23, 42, 0.12);
   }
 
   .nav-inner {
@@ -85,19 +87,20 @@ NAV_CSS = """
     align-items: center;
     justify-content: center;
     color: var(--nav-text);
-    font-weight: 500;
+    font-weight: 600;
     font-size: clamp(15px, 1.7vw, 18px);
-    padding: 8px 14px;
+    padding: 10px 18px;
     white-space: nowrap;
     line-height: 20px;
     text-decoration: none;
     border-bottom: 2px solid transparent;
-    transition: color .15s ease;
+    transition: color .15s ease, border-color .15s ease;
   }
 
   .nav-scope.root-link.active .nav-link,
   .nav-scope.root-link .nav-link:hover {
     color: var(--nav-text-hover);
+    border-color: rgba(37, 99, 235, 0.35);
   }
 
   .nav-scope.has-dropdown {
@@ -106,9 +109,9 @@ NAV_CSS = """
 
   .nav-label {
     color: var(--nav-text);
-    font-weight: 500;
+    font-weight: 600;
     font-size: clamp(15px, 1.7vw, 18px);
-    padding: 8px 14px;
+    padding: 10px 18px;
     white-space: nowrap;
     cursor: default;
     display: inline-flex;
@@ -131,25 +134,29 @@ NAV_CSS = """
   .nav-scope.has-dropdown:hover .nav-label,
   .nav-scope.has-dropdown.active .nav-label {
     color: var(--nav-text-hover);
+    border-color: rgba(37, 99, 235, 0.35);
   }
 
   .nav-dropdown {
     display: none;
     position: absolute;
     top: calc(100% - 2px);
-    left: 0;
+    left: 50%;
+    transform: translateX(-50%);
     flex-direction: column;
     background: rgba(255, 255, 255, 0.98);
     border: 1px solid rgba(148, 163, 184, 0.28);
-    border-radius: 12px;
-    padding: 6px 0;
-    box-shadow: 0 18px 32px rgba(15, 23, 42, 0.12);
-    min-width: 210px;
+    border-radius: 16px;
+    padding: 12px 10px;
+    box-shadow: 0 18px 32px rgba(15, 23, 42, 0.18);
+    min-width: 230px;
     z-index: 1001;
     backdrop-filter: blur(10px);
+    gap: 6px;
   }
 
-  .nav-scope.has-dropdown:hover .nav-dropdown {
+  .nav-scope.has-dropdown:hover .nav-dropdown,
+  .nav-scope.has-dropdown:focus-within .nav-dropdown {
     display: flex;
   }
 
@@ -157,16 +164,28 @@ NAV_CSS = """
     display: block;
     width: 100%;
     text-decoration: none;
-    padding: 10px 18px;
+    padding: 10px 16px;
     font-size: 15px;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--nav-text);
-    transition: color .15s ease;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: linear-gradient(145deg, #f8fafc 0%, #eef2ff 100%);
+    text-align: center;
+    transition: all .18s ease;
   }
 
-  .nav-option:hover,
+  .nav-option:hover {
+    color: #1d4ed8;
+    border-color: rgba(59, 130, 246, 0.55);
+    box-shadow: 0 10px 18px rgba(59, 130, 246, 0.16);
+  }
+
   .nav-option.active {
-    color: var(--nav-text-hover);
+    color: #1d4ed8;
+    border-color: rgba(59, 130, 246, 0.65);
+    background: linear-gradient(145deg, #dbeafe 0%, #bfdbfe 100%);
+    box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.45);
   }
 
   .nav-scope.logout {
@@ -180,31 +199,38 @@ NAV_CSS = """
     background: var(--brand-red);
     color: #fff;
     border: 1px solid var(--brand-red);
-    padding: 10px 20px;
+    padding: 10px 22px;
     border-radius: 999px;
     font-weight: 800;
     font-size: clamp(14px, 1.6vw, 17px);
     text-decoration: none;
-    transition: background .15s ease, border-color .15s ease;
+    transition: background .15s ease, border-color .15s ease, transform .15s ease;
   }
 
   .nav-logout:hover {
     background: var(--brand-red-dark);
     border-color: var(--brand-red-dark);
+    transform: translateY(-1px);
   }
 
   @media (max-width: 900px) {
+    .nav-bar {
+      border-radius: 12px;
+      padding: 0 clamp(12px, 4vw, 16px);
+    }
+
     .nav-main {
       gap: 12px;
     }
 
-    .nav-label {
+    .nav-label,
+    .nav-scope.root-link .nav-link {
       font-size: 15px;
-      padding: 6px 10px;
+      padding: 8px 12px;
     }
 
     .nav-dropdown {
-      min-width: 180px;
+      min-width: 190px;
     }
 
     .block-container {
@@ -213,6 +239,7 @@ NAV_CSS = """
   }
 </style>
 """
+
 
 PAGE_PARAM_NAMES: dict[str, str] = {
     "pages/0_Inicio.py": "Inicio",
@@ -294,9 +321,9 @@ def _dropdown_html(
         dropdown_class += " active"
 
     return (
-        f'<div class="{dropdown_class}">'
-        f'<div class="nav-label">{label}</div>'
-        f'<div class="nav-dropdown">{"".join(items)}</div>'
+        f'<div class="{dropdown_class}">' \
+        f'<div class="nav-label">{label}</div>' \
+        f'<div class="nav-dropdown">{"".join(items)}</div>' \
         f"</div>"
     )
 
@@ -327,8 +354,8 @@ def render_nav(
         if active_top == "inicio":
             root_class += " active"
         nav_parts.append(
-            f'<div class="{root_class}">'
-            f'<a class="nav-link" href="{_page_href("pages/0_Inicio.py")}" target="_self">Inicio</a>'
+            f'<div class="{root_class}">' \
+            f'<a class="nav-link" href="{_page_href("pages/0_Inicio.py")}" target="_self">Inicio</a>' \
             "</div>"
         )
 
