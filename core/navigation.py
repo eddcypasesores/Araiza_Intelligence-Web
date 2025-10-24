@@ -14,6 +14,8 @@ NAV_CSS = """
   :root {
     --nav-height: 58px;
     --nav-max-width: 1100px;
+    --nav-text: #111827;
+    --nav-text-hover: #4b5563;
     --brand-red: #dc2626;
     --brand-red-dark: #b91c1c;
   }
@@ -80,21 +82,20 @@ NAV_CSS = """
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: var(--brand-red);
-    font-weight: 700;
+    color: var(--nav-text);
+    font-weight: 500;
     font-size: clamp(15px, 1.7vw, 18px);
     padding: 8px 14px;
     white-space: nowrap;
     line-height: 20px;
     text-decoration: none;
     border-bottom: 2px solid transparent;
-    transition: color .15s ease, border-color .15s ease;
+    transition: color .15s ease;
   }
 
   .nav-scope.root-link.active .nav-link,
   .nav-scope.root-link .nav-link:hover {
-    color: var(--brand-red-dark);
-    border-color: var(--brand-red-dark);
+    color: var(--nav-text-hover);
   }
 
   .nav-scope.has-dropdown {
@@ -102,8 +103,8 @@ NAV_CSS = """
   }
 
   .nav-label {
-    color: var(--brand-red);
-    font-weight: 700;
+    color: var(--nav-text);
+    font-weight: 500;
     font-size: clamp(15px, 1.7vw, 18px);
     padding: 8px 14px;
     white-space: nowrap;
@@ -112,7 +113,7 @@ NAV_CSS = """
     align-items: center;
     gap: 6px;
     border-bottom: 2px solid transparent;
-    transition: color .15s ease, border-color .15s ease;
+    transition: color .15s ease;
   }
 
   .nav-scope.has-dropdown::after {
@@ -127,8 +128,7 @@ NAV_CSS = """
 
   .nav-scope.has-dropdown:hover .nav-label,
   .nav-scope.has-dropdown.active .nav-label {
-    color: var(--brand-red-dark);
-    border-color: var(--brand-red-dark);
+    color: var(--nav-text-hover);
   }
 
   .nav-dropdown {
@@ -137,11 +137,11 @@ NAV_CSS = """
     top: calc(100% - 2px);
     left: 0;
     flex-direction: column;
-    background: #fff;
-    border: 1px solid #e5e7eb;
-    border-radius: 10px;
+    background: transparent;
+    border: none;
+    border-radius: 0;
     padding: 6px 0;
-    box-shadow: 0 16px 30px rgba(15, 23, 42, 0.12);
+    box-shadow: none;
     min-width: 210px;
     z-index: 1001;
   }
@@ -157,19 +157,13 @@ NAV_CSS = """
     padding: 10px 18px;
     font-size: 15px;
     font-weight: 500;
-    color: #1f2937;
-    transition: background .15s ease, color .15s ease;
+    color: var(--nav-text);
+    transition: color .15s ease;
   }
 
-  .nav-option:hover {
-    background: #f3f4f6;
-    color: var(--brand-red);
-  }
-
+  .nav-option:hover,
   .nav-option.active {
-    color: var(--brand-red);
-    font-weight: 700;
-    background: #f9fafb;
+    color: var(--nav-text-hover);
   }
 
   .nav-scope.logout {
@@ -292,7 +286,9 @@ def _dropdown_html(
         option_class = "nav-option"
         if active_child == action.view_value and active_top == top_key:
             option_class += " active"
-        items.append(f'<a class="{option_class}" href="{href}">{action.label}</a>')
+        items.append(
+            f'<a class="{option_class}" href="{href}" target="_self">{action.label}</a>'
+        )
 
     dropdown_class = "nav-scope has-dropdown"
     if active_top == top_key:
@@ -306,21 +302,36 @@ def _dropdown_html(
     )
 
 
-def render_nav(active_top: str | None = None, active_child: str | None = None) -> None:
-    """Inject shared CSS and render the sticky navigation bar."""
+def render_nav(
+    active_top: str | None = None,
+    active_child: str | None = None,
+    *,
+    show_inicio: bool = True,
+) -> None:
+    """Inject shared CSS and render the sticky navigation bar.
+
+    Parameters
+    ----------
+    active_top, active_child
+        Optional identifiers used to highlight the active dropdown and option.
+    show_inicio
+        If ``True`` the "Inicio" link is shown; disable it on the landing page to
+        avoid duplicating the current location.
+    """
 
     _handle_logout_query()
     st.markdown(NAV_CSS, unsafe_allow_html=True)
 
     nav_parts: list[str] = []
-    root_class = "nav-scope root-link"
-    if active_top == "inicio":
-        root_class += " active"
-    nav_parts.append(
-        f'<div class="{root_class}">'
-        f'<a class="nav-link" href="{_page_href("pages/0_Inicio.py")}">Inicio</a>'
-        "</div>"
-    )
+    if show_inicio:
+        root_class = "nav-scope root-link"
+        if active_top == "inicio":
+            root_class += " active"
+        nav_parts.append(
+            f'<div class="{root_class}">'
+            f'<a class="nav-link" href="{_page_href("pages/0_Inicio.py")}" target="_self">Inicio</a>'
+            "</div>"
+        )
 
     nav_parts.append(
         _dropdown_html(
@@ -368,7 +379,7 @@ def render_nav(active_top: str | None = None, active_child: str | None = None) -
     )
 
     nav_html = "".join(nav_parts)
-    logout_html = '<div class="nav-scope logout"><a class="nav-logout" href="/?logout=1">Salir</a></div>'
+    logout_html = '<div class="nav-scope logout"><a class="nav-logout" href="/?logout=1" target="_self">Salir</a></div>'
 
     markup = (
         '<div class="nav-anchor"></div>'

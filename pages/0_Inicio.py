@@ -178,7 +178,7 @@ CUSTOM_CSS = """
 
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-render_nav(active_top="inicio", active_child=None)
+render_nav(active_top="inicio", active_child=None, show_inicio=False)
 
 # -------- Resolver imagen --------
 APP_DIR = Path(__file__).resolve().parent
