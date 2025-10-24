@@ -188,6 +188,11 @@ NAV_CSS = """
     transition: background .15s ease, border-color .15s ease;
   }
 
+  .nav-logout:visited,
+  .nav-logout:hover {
+    color: #fff;
+  }
+
   .nav-logout:hover {
     background: var(--brand-red-dark);
     border-color: var(--brand-red-dark);
@@ -400,7 +405,11 @@ def render_nav(
 
     nav_html = "".join(nav_parts)
     logout_href = _page_href(None, {"logout": "1"})
-    logout_html = f'<div class="nav-scope logout"><a class="nav-logout" href="{logout_href}" target="_self">Salir</a></div>'
+    logout_html = (
+        f'<div class="nav-scope logout">'
+        f'<a class="nav-logout" href="{logout_href}" target="_self">Cerrar sesión</a>'
+        "</div>"
+    )
 
     markup = (
         '<div class="nav-anchor"></div>'
