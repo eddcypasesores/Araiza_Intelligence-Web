@@ -67,13 +67,22 @@ ensure_schema(conn)
 if process_logout_flag():
     st.experimental_rerun()
 
-# Si ya hay sesión iniciada -> manda a Inicio
+# Si ya hay sesión iniciada -> maneja navegación adecuada
 # -------------------------------
 if "usuario" in st.session_state and "rol" in st.session_state:
+    params = st.query_params
+    if "page" in params:
+        # Ya se solicitó una página concreta (?page=...), permitimos que Streamlit
+        # cargue directamente ese módulo deteniendo este script.
+        st.stop()
+
     try:
         st.switch_page("pages/0_Inicio.py")
     except Exception:
-        st.success(f"Ya has iniciado sesión como: {st.session_state['usuario']} ({st.session_state['rol']}).")
+        st.success(
+            f"Ya has iniciado sesión como: {st.session_state['usuario']} "
+            f"({st.session_state['rol']})."
+        )
         st.info("Ve a **Inicio** desde el menú lateral.")
     st.stop()
 
