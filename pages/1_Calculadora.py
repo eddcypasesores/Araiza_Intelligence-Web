@@ -39,9 +39,12 @@ st.markdown(
       .block-container { padding-top: 1.2rem; }
       .section, .section * { background: transparent !important; box-shadow: none !important; }
       .section { padding: 0 !important; margin: 0 0 .25rem 0 !important; border: none !important; }
-      .section-head { display:flex; align-items:center; gap:.5rem; font-weight:800; color:#1e293b; letter-spacing:.2px; margin:.25rem 0; }
-      .section-head .title { text-transform:uppercase; font-size:1.25rem; }
-      .total-right { display:flex; justify-content:flex-end; margin:.25rem 0 .4rem 0; }
+      .section-head { display:flex; align-items:center; gap:1rem; font-weight:800; color:#1e293b; letter-spacing:.2px; margin:.25rem 0 .75rem 0; }
+      .section-head .title { text-transform:uppercase; font-size:1.25rem; flex:1 1 auto; }
+      .section-head .total-pill { margin:0; }
+      .section-head .section-icon { display:flex; align-items:center; justify-content:center; min-width:120px; }
+      .section-head .section-icon img { max-width:120px; height:auto; }
+      .section-head .section-icon .emoji { font-size:54px; line-height:1; }
       .total-pill { display:inline-block; padding:.35rem .6rem; border-radius:999px; border:1px solid rgba(37,99,235,.25); min-width:110px; text-align:center; }
       .section-divider { height:0; border:0; border-top:3px solid #2563eb; margin:8px 0 14px 0; opacity:1; }
       [data-testid="stExpander"]{ border:1px solid rgba(15,23,42,.08); background:transparent; }
@@ -176,21 +179,15 @@ def img_to_data_url(path: Path) -> str | None:
         return None
 def section(title: str, icon: str | None, total_value: float | None, body_fn=None, icon_img: str | None = None):
     """
-    Layout por sección:
-      - Izquierda: título grande + expander (desglose)
-      - Derecha: imagen/icono arriba y, debajo, el total (pill) alineado a la derecha
-    Devuelve el total utilizado (float).
+    Layout por sección. Devuelve el total utilizado (float).
     """
     st.markdown("<div class='section'>", unsafe_allow_html=True)
+    header_placeholder = st.empty()
     left, right = st.columns([0.68, 0.32], gap="large")
 
     computed_total = total_value if total_value is not None else 0.0
 
     with left:
-        st.markdown(
-            f"<div class='section-head' style='margin-bottom:.25rem'><span class='title'>{title}</span></div>",
-            unsafe_allow_html=True,
-        )
         if body_fn:
             with st.expander("Desglose / cálculo", expanded=False):
                 # Si el body_fn devuelve un número, se toma como total de la sección
@@ -199,35 +196,29 @@ def section(title: str, icon: str | None, total_value: float | None, body_fn=Non
                     computed_total = float(ret)
 
     with right:
-        data_url = None
-        if icon_img:
-            p = resolve_asset(icon_img)
-            if p:
-                data_url = img_to_data_url(p)
+        st.write("")
 
-        st.markdown(
-            f"<div class='total-right' style='justify-content:flex-end; margin-bottom:.75rem'>"
-            f"<div class='total-pill'>${computed_total:,.2f}</div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
+    data_url = None
+    if icon_img:
+        p = resolve_asset(icon_img)
+        if p:
+            data_url = img_to_data_url(p)
 
-        if data_url:
-            st.markdown(
-                f"<div style='display:flex; justify-content:flex-end; margin-bottom:.5rem'>"
-                f"<img src='{data_url}' alt='icon' style='max-width:120px; height:auto;'/>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-        elif icon:
-            st.markdown(
-                f"<div style='display:flex; justify-content:flex-end; margin-bottom:.5rem'>"
-                f"<div style='font-size:54px; line-height:1'>{icon}</div>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+    if data_url:
+        icon_markup = f"<div class='section-icon'><img src='{data_url}' alt='icon'/></div>"
+    elif icon:
+        icon_markup = f"<div class='section-icon'><span class='emoji'>{icon}</span></div>"
+    else:
+        icon_markup = "<div class='section-icon'></div>"
+
+    header_html = (
+        "<div class='section-head'>"
+        f"<span class='title'>{title}</span>"
+        f"<span class='total-pill'>${computed_total:,.2f}</span>"
+        f"{icon_markup}"
+        "</div>"
+    )
+    header_placeholder.markdown(header_html, unsafe_allow_html=True)
 
     st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
     return computed_total
@@ -425,18 +416,7 @@ with r3c2:
         st.session_state.pop("top_parada_data", None)
         parada = None  # oculto completamente
 
-st.markdown("")  # espacio
-opts_c1, _ = st.columns([0.4, 0.6])
-with opts_c1:
-    if "chk_avoid_tolls" not in st.session_state:
-        st.session_state["chk_avoid_tolls"] = False
-    if MANUAL_MODE and st.session_state.get("chk_avoid_tolls"):
-        st.session_state["chk_avoid_tolls"] = False
-    evitar_cuotas = st.checkbox(
-        "EVITAR CASETAS (RUTA LIBRE)",
-        key="chk_avoid_tolls",
-        disabled=MANUAL_MODE,
-    )
+evitar_cuotas = False
 
 origin_label = origen.get("description", "") if origen else ""
 destination_label = destino.get("description", "") if destino else ""
