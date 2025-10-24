@@ -227,20 +227,18 @@ with st.container():
     with col_txt:
         # El texto define la altura. La imagen se estira para igualarla.
         st.markdown('<div class="hero-text-wrap"><div class="text-box">', unsafe_allow_html=True)
-        st.markdown('<div class="title">Tu ruta, nuestro compromiso.</div>', unsafe_allow_html=True)
+        st.markdown('<div class="title">Precisión en movimiento</div>', unsafe_allow_html=True)
         st.markdown('<div class="copy">', unsafe_allow_html=True)
         st.markdown(
             """
           <p class="lead">
-          Somos una empresa mexicana dedicada al transporte de carga y logística de fletes, ofreciendo soluciones precisas, seguras
-    y transparentes para mover mercancías en todo el país.
+          Nuestra plataforma calcula con exactitud los costos reales de cada flete, integrando tecnología avanzada, APIs de Google Maps y bases de datos inteligentes para ofrecer resultados precisos y actualizados en tiempo real.
           </p>
           <p class="lead">
-          Nuestra plataforma integra tecnología de Google Maps (Places, Directions y Geocoding APIs), bases de datos inteligentes y
-    cálculos automatizados para ofrecerte resultados precisos y en tiempo real.
+          Obtén en segundos el costo total de una ruta — peajes, combustible, mantenimiento y demás gastos operativos — con una interfaz ágil, intuitiva y confiable.
           </p>
           <p class="lead">
-          Calculamos tus costos de traslado, optimizamos rutas y te ayudamos a tomar mejores decisiones con datos reales y actualizados.
+          Además, administra fácilmente usuarios y trabajadores, garantizando control, trazabilidad y eficiencia en cada viaje.
           </p>
         """,
             unsafe_allow_html=True,
@@ -250,9 +248,10 @@ with st.container():
           <p class="lead" style="font-weight:700; margin-top: 8px;">Características principales:</p>
           <ul class="bullets">
             <li>Cálculo automático de rutas, distancias y casetas.</li>
-            <li>Estimaciones de combustible y costos operativos detallados.</li>
-            <li>Reportes profesionales para clientes y transportistas.</li>
-            <li>Transparencia total y datos actualizados en cada viaje.</li>
+            <li>Estimación real de combustible y costos operativos.</li>
+            <li>Gestión integrada de usuarios y trabajadores.</li>
+            <li>Reportes claros y listos para la toma de decisiones.</li>
+            <li>Transparencia y precisión en cada operación.</li>
           </ul>
         """,
             unsafe_allow_html=True,
