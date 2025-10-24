@@ -8,6 +8,8 @@ from urllib.parse import urlencode
 
 import streamlit as st
 
+from .session import process_logout_flag
+
 
 NAV_CSS = """
 <style>
@@ -235,36 +237,14 @@ class DropdownAction:
 def _handle_logout_query() -> None:
     """Detect the logout flag in the query string and reset the session."""
 
-    params = st.query_params
-    logout_value = params.get("logout")
-    if isinstance(logout_value, list):
-        logout_flag = logout_value[-1] if logout_value else "0"
-    else:
-        logout_flag = logout_value or "0"
+    if not process_logout_flag():
+        return
 
-    if logout_flag == "1":
-        for key in (
-            "usuario",
-            "rol",
-            "excluded_set",
-            "route",
-            "show_detail",
-            "tarifas_view",
-            "usuarios_view",
-            "parametros_view",
-        ):
-            st.session_state.pop(key, None)
-
-        try:
-            params.clear()
-        except Exception:
-            pass
-
-        try:
-            st.switch_page("app.py")
-        except Exception:
-            st.experimental_rerun()
-        st.stop()
+    try:
+        st.switch_page("app.py")
+    except Exception:
+        st.experimental_rerun()
+    st.stop()
 
 
 def _page_href(page: str | None, extra: dict[str, str] | None = None) -> str:

@@ -3,6 +3,7 @@ import base64
 from pathlib import Path
 import streamlit as st
 from core.db import get_conn, ensure_schema, validar_usuario
+from core.session import process_logout_flag
 
 # -------------------------------
 # Configuración de página (login)
@@ -61,6 +62,11 @@ conn = get_conn()
 ensure_schema(conn)
 
 # -------------------------------
+# Si llegamos con ?logout=1 -> limpiar sesión y recargar
+# -------------------------------
+if process_logout_flag():
+    st.experimental_rerun()
+
 # Si ya hay sesión iniciada -> manda a Inicio
 # -------------------------------
 if "usuario" in st.session_state and "rol" in st.session_state:
