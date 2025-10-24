@@ -37,10 +37,15 @@ st.markdown(
     """
     <style>
       .section { padding: 0 !important; margin: 0 0 1.1rem 0 !important; border: none !important; }
-      .section-title-row { display:flex; align-items:center; gap:.45rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#1e293b; font-size:1.18rem; }
+      .section-header { margin-bottom:.35rem; }
+      .section-header > div[data-testid="stHorizontalBlock"] { margin:0 !important; }
+      .section-header > div[data-testid="stHorizontalBlock"] > div[data-testid="column"] { padding-top:0 !important; padding-bottom:0 !important; }
+      .section-header > div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(2) { padding-left:0 !important; margin-left:-0.45rem; }
+      .section-title-row { display:flex; align-items:center; gap:0; font-weight:800; letter-spacing:.08em; text-transform:uppercase; color:#1e293b; font-size:1.18rem; }
       .section-title-row .section-title { font-size:inherit; }
-      .section-toggle { display:flex; justify-content:flex-end; align-items:center; }
-      .section-toggle .stButton>button { width:36px; height:36px; border-radius:999px; background:#eff6ff !important; border:1px solid rgba(59,130,246,.35) !important; color:#1d4ed8 !important; font-size:1rem !important; padding:0 !important; line-height:1 !important; }
+      .section-toggle { display:flex; justify-content:flex-start; align-items:center; }
+      .section-toggle .stButton { margin:0 !important; }
+      .section-toggle .stButton>button { width:34px; height:34px; border-radius:999px; background:#eff6ff !important; border:1px solid rgba(59,130,246,.45) !important; color:#1d4ed8 !important; font-size:1.2rem !important; padding:0 !important; line-height:1 !important; }
       .section-toggle .stButton>button:hover { background:#dbeafe !important; }
       .section-total-pill { display:inline-flex; align-items:center; justify-content:center; min-width:120px; padding:.35rem .85rem; border-radius:999px; background:#dbeafe; color:#1e3a8a; border:1px solid rgba(59,130,246,.25); font-weight:700; }
       .small-note { font-size:.8rem; color:#475569; display:block; margin-bottom:.35rem; }
@@ -157,20 +162,19 @@ def section(title: str, total_value: float | None, body_fn=None) -> SectionOutpu
 
     toggle_key = f"section_toggle_{normalize_name(title)}"
     show_details = bool(st.session_state.get(toggle_key, False))
-    icon_char = "🔽" if show_details else "▶️"
+    icon_char = "▾" if show_details else "▸"
 
     st.markdown("<div class='section'>", unsafe_allow_html=True)
-    header_cols = st.columns([0.7, 0.3], gap="small")
-    total_placeholder = header_cols[1].empty()
-
-    with header_cols[0]:
-        title_cols = st.columns([0.88, 0.12])
-        with title_cols[0]:
+    header_container = st.container()
+    with header_container:
+        st.markdown("<div class='section-header'>", unsafe_allow_html=True)
+        header_cols = st.columns([0.72, 0.08, 0.2], gap="small")
+        with header_cols[0]:
             st.markdown(
                 f"<div class='section-title-row'><span class='section-title'>{title}</span></div>",
                 unsafe_allow_html=True,
             )
-        with title_cols[1]:
+        with header_cols[1]:
             st.markdown("<div class='section-toggle'>", unsafe_allow_html=True)
             if st.button(
                 icon_char,
@@ -179,8 +183,10 @@ def section(title: str, total_value: float | None, body_fn=None) -> SectionOutpu
             ):
                 st.session_state[toggle_key] = not show_details
                 show_details = not show_details
-                icon_char = "🔽" if show_details else "▶️"
+                icon_char = "▾" if show_details else "▸"
             st.markdown("</div>", unsafe_allow_html=True)
+        total_placeholder = header_cols[2].empty()
+        st.markdown("</div>", unsafe_allow_html=True)
 
     computed_total = float(total_value) if total_value is not None else 0.0
     result = SectionBodyResult()

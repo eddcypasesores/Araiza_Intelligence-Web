@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Iterable
+from urllib.parse import urlencode
 
 import streamlit as st
 
-from .session import clear_session_state, process_logout_flag
+from .session import process_logout_flag
 
 
 NAV_CSS = """
@@ -50,12 +52,14 @@ NAV_CSS = """
     transform: translateX(-50%);
     width: min(100%, var(--nav-max-width));
     z-index: 1000;
-    background: #fff;
-    border-bottom: 1px solid #e5e7eb;
+    background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid rgba(148, 163, 184, 0.28);
     padding: 0 clamp(16px, 4vw, 24px);
     height: var(--nav-height);
     display: flex;
     align-items: center;
+    border-radius: 16px;
+    box-shadow: 0 18px 32px rgba(15, 23, 42, 0.12);
   }
 
   .nav-inner {
@@ -78,23 +82,25 @@ NAV_CSS = """
     position: relative;
   }
 
-  .nav-scope.root-link [data-testid="stPageLink"] {
-    display: inline-flex !important;
+  .nav-scope.root-link .nav-link {
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    color: var(--nav-text) !important;
-    font-weight: 500 !important;
-    font-size: clamp(15px, 1.7vw, 18px) !important;
-    padding: 8px 14px !important;
-    white-space: nowrap !important;
-    line-height: 20px !important;
-    text-decoration: none !important;
-    border-bottom: 2px solid transparent !important;
-    transition: color .15s ease !important;
+    color: var(--nav-text);
+    font-weight: 600;
+    font-size: clamp(15px, 1.7vw, 18px);
+    padding: 10px 18px;
+    white-space: nowrap;
+    line-height: 20px;
+    text-decoration: none;
+    border-bottom: 2px solid transparent;
+    transition: color .15s ease, border-color .15s ease;
   }
 
-  .nav-scope.root-link [data-testid="stPageLink"]:hover {
-    color: var(--nav-text-hover) !important;
+  .nav-scope.root-link.active .nav-link,
+  .nav-scope.root-link .nav-link:hover {
+    color: var(--nav-text-hover);
+    border-color: rgba(37, 99, 235, 0.35);
   }
 
   .nav-scope.has-dropdown {
@@ -103,9 +109,9 @@ NAV_CSS = """
 
   .nav-label {
     color: var(--nav-text);
-    font-weight: 500;
+    font-weight: 600;
     font-size: clamp(15px, 1.7vw, 18px);
-    padding: 8px 14px;
+    padding: 10px 18px;
     white-space: nowrap;
     cursor: default;
     display: inline-flex;
@@ -128,25 +134,29 @@ NAV_CSS = """
   .nav-scope.has-dropdown:hover .nav-label,
   .nav-scope.has-dropdown.active .nav-label {
     color: var(--nav-text-hover);
+    border-color: rgba(37, 99, 235, 0.35);
   }
 
   .nav-dropdown {
     display: none;
     position: absolute;
     top: calc(100% - 2px);
-    left: 0;
+    left: 50%;
+    transform: translateX(-50%);
     flex-direction: column;
     background: rgba(255, 255, 255, 0.98);
     border: 1px solid rgba(148, 163, 184, 0.28);
-    border-radius: 12px;
-    padding: 6px 0;
-    box-shadow: 0 18px 32px rgba(15, 23, 42, 0.12);
-    min-width: 210px;
+    border-radius: 16px;
+    padding: 12px 10px;
+    box-shadow: 0 18px 32px rgba(15, 23, 42, 0.18);
+    min-width: 230px;
     z-index: 1001;
     backdrop-filter: blur(10px);
+    gap: 6px;
   }
 
-  .nav-scope.has-dropdown:hover .nav-dropdown {
+  .nav-scope.has-dropdown:hover .nav-dropdown,
+  .nav-scope.has-dropdown:focus-within .nav-dropdown {
     display: flex;
   }
 
@@ -154,29 +164,28 @@ NAV_CSS = """
     display: block;
     width: 100%;
     text-decoration: none;
-    padding: 10px 18px;
+    padding: 10px 16px;
     font-size: 15px;
-    font-weight: 500;
+    font-weight: 600;
     color: var(--nav-text);
-    transition: color .15s ease;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.35);
+    background: linear-gradient(145deg, #f8fafc 0%, #eef2ff 100%);
+    text-align: center;
+    transition: all .18s ease;
   }
 
-  .nav-option.active button {
-    color: var(--nav-text-hover) !important;
-    font-weight: 600 !important;
+  .nav-option:hover {
+    color: #1d4ed8;
+    border-color: rgba(59, 130, 246, 0.55);
+    box-shadow: 0 10px 18px rgba(59, 130, 246, 0.16);
   }
 
-  .nav-option button {
-    width: 100%;
-    background: transparent !important;
-    border: none !important;
-    text-align: left !important;
-    color: inherit !important;
-    padding: 6px 0 !important;
-  }
-
-  .nav-option button:hover {
-    color: var(--nav-text-hover) !important;
+  .nav-option.active {
+    color: #1d4ed8;
+    border-color: rgba(59, 130, 246, 0.65);
+    background: linear-gradient(145deg, #dbeafe 0%, #bfdbfe 100%);
+    box-shadow: inset 0 0 0 1px rgba(59, 130, 246, 0.45);
   }
 
   .nav-scope.logout {
@@ -190,31 +199,38 @@ NAV_CSS = """
     background: var(--brand-red);
     color: #fff;
     border: 1px solid var(--brand-red);
-    padding: 10px 20px;
+    padding: 10px 22px;
     border-radius: 999px;
     font-weight: 800;
     font-size: clamp(14px, 1.6vw, 17px);
     text-decoration: none;
-    transition: background .15s ease, border-color .15s ease;
+    transition: background .15s ease, border-color .15s ease, transform .15s ease;
   }
 
   .nav-logout:hover {
     background: var(--brand-red-dark);
     border-color: var(--brand-red-dark);
+    transform: translateY(-1px);
   }
 
   @media (max-width: 900px) {
+    .nav-bar {
+      border-radius: 12px;
+      padding: 0 clamp(12px, 4vw, 16px);
+    }
+
     .nav-main {
       gap: 12px;
     }
 
-    .nav-label {
+    .nav-label,
+    .nav-scope.root-link .nav-link {
       font-size: 15px;
-      padding: 6px 10px;
+      padding: 8px 12px;
     }
 
     .nav-dropdown {
-      min-width: 180px;
+      min-width: 190px;
     }
 
     .block-container {
@@ -223,6 +239,16 @@ NAV_CSS = """
   }
 </style>
 """
+
+
+PAGE_PARAM_NAMES: dict[str, str] = {
+    "pages/0_Inicio.py": "Inicio",
+    "pages/1_Calculadora.py": "Calculadora",
+    "pages/2_Administrar_tarifas.py": "Administrar tarifas",
+    "pages/3_Trabajadores.py": "Trabajadores",
+    "pages/4_Usuarios.py": "Usuarios",
+    "pages/5_Parametros.py": "Parametros",
+}
 
 
 @dataclass(frozen=True)
@@ -248,40 +274,58 @@ def _handle_logout_query() -> None:
     st.stop()
 
 
-def _nav_dropdown(
+def _page_href(page: str | None, extra: dict[str, str] | None = None) -> str:
+    """Build a Streamlit multipage URL for the given page and query params."""
+
+    query: dict[str, str] = {}
+    if page:
+        page_param = PAGE_PARAM_NAMES.get(page)
+        if page_param is None:
+            cleaned = (
+                page.replace("pages/", "")
+                .replace(".py", "")
+                .replace("_", " ")
+                .strip()
+            )
+            page_param = cleaned or page
+        query["page"] = page_param
+    if extra:
+        query.update(extra)
+    if not query:
+        return "/"
+    return "/?" + urlencode(query, doseq=False)
+
+
+def _dropdown_html(
     *,
     label: str,
-    actions: list[DropdownAction],
+    actions: Iterable[DropdownAction],
     active_top: str | None,
     active_child: str | None,
     top_key: str,
-) -> None:
-    """Render a dropdown menu inside the navbar."""
+) -> str:
+    """Return the HTML for a dropdown menu inside the navbar."""
 
-    active_class = " active" if active_top == top_key else ""
-    st.markdown(
-        f'<div class="nav-scope has-dropdown{active_class}">',
-        unsafe_allow_html=True,
-    )
-    st.markdown(f'<div class="nav-label">{label}</div>', unsafe_allow_html=True)
-    st.markdown('<div class="nav-dropdown">', unsafe_allow_html=True)
-
+    items: list[str] = []
     for action in actions:
-        option_active = " active" if (active_child == action.view_value and active_top == top_key) else ""
-        st.markdown(f'<div class="nav-option{option_active}">', unsafe_allow_html=True)
-        if st.button(
-            action.label,
-            key=f"nav_{top_key}_{action.view_value}",
-            use_container_width=True,
-        ):
-            st.session_state[action.view_key] = action.view_value
-            try:
-                st.switch_page(action.target_page)
-            except Exception:
-                st.experimental_rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
+        href = _page_href(action.target_page, {action.view_key: action.view_value})
+        option_class = "nav-option"
+        if active_child == action.view_value and active_top == top_key:
+            option_class += " active"
+        items.append(
+            f'<a class="{option_class}" href="{href}" target="_self">{action.label}</a>'
+        )
 
-    st.markdown('</div></div>', unsafe_allow_html=True)
+    dropdown_class = "nav-scope has-dropdown"
+    if active_top == top_key:
+        dropdown_class += " active"
+
+    return (
+        f'<div class="{dropdown_class}">' \
+        f'<div class="nav-label">{label}</div>' \
+        f'<div class="nav-dropdown">{"".join(items)}</div>' \
+        f"</div>"
+    )
 
 
 def render_nav(
@@ -290,71 +334,86 @@ def render_nav(
     *,
     show_inicio: bool = True,
 ) -> None:
-    """Inject shared CSS and render the sticky navigation bar."""
+    """Inject shared CSS and render the sticky navigation bar.
+
+    Parameters
+    ----------
+    active_top, active_child
+        Optional identifiers used to highlight the active dropdown and option.
+    show_inicio
+        If ``True`` the "Inicio" link is shown; disable it on the landing page to
+        avoid duplicating the current location.
+    """
 
     _handle_logout_query()
     st.markdown(NAV_CSS, unsafe_allow_html=True)
 
-    with st.container():
-        st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True)
-        nav_cols = st.columns([1.0, 1.2, 1.2, 1.3, 1.0], gap="small")
+    nav_parts: list[str] = []
+    if show_inicio:
+        root_class = "nav-scope root-link"
+        if active_top == "inicio":
+            root_class += " active"
+        nav_parts.append(
+            f'<div class="{root_class}">' \
+            f'<a class="nav-link" href="{_page_href("pages/0_Inicio.py")}" target="_self">Inicio</a>' \
+            "</div>"
+        )
 
-        col_inicio, col_tarifas, col_usuarios, col_parametros, col_logout = nav_cols
+    nav_parts.append(
+        _dropdown_html(
+            label="Tarifas",
+            actions=[
+                DropdownAction("Consultar", "tarifas_view", "consultar", "pages/2_Administrar_tarifas.py"),
+                DropdownAction("Agregar", "tarifas_view", "agregar", "pages/2_Administrar_tarifas.py"),
+                DropdownAction("Modificar", "tarifas_view", "modificar", "pages/2_Administrar_tarifas.py"),
+                DropdownAction("Eliminar", "tarifas_view", "eliminar", "pages/2_Administrar_tarifas.py"),
+            ],
+            active_top=active_top,
+            active_child=active_child,
+            top_key="tarifas",
+        )
+    )
 
-        if show_inicio:
-            with col_inicio:
-                st.markdown('<div class="nav-scope root-link">', unsafe_allow_html=True)
-                st.page_link("pages/0_Inicio.py", label="Inicio")
-                st.markdown('</div>', unsafe_allow_html=True)
+    nav_parts.append(
+        _dropdown_html(
+            label="Usuarios",
+            actions=[
+                DropdownAction("Consultar", "usuarios_view", "consultar", "pages/4_Usuarios.py"),
+                DropdownAction("Agregar", "usuarios_view", "agregar", "pages/4_Usuarios.py"),
+                DropdownAction("Modificar", "usuarios_view", "modificar", "pages/4_Usuarios.py"),
+                DropdownAction("Eliminar", "usuarios_view", "eliminar", "pages/4_Usuarios.py"),
+            ],
+            active_top=active_top,
+            active_child=active_child,
+            top_key="usuarios",
+        )
+    )
 
-        with col_tarifas:
-            _nav_dropdown(
-                label="Tarifas",
-                actions=[
-                    DropdownAction("Consultar", "tarifas_view", "consultar", "pages/2_Administrar_tarifas.py"),
-                    DropdownAction("Agregar", "tarifas_view", "agregar", "pages/2_Administrar_tarifas.py"),
-                    DropdownAction("Modificar", "tarifas_view", "modificar", "pages/2_Administrar_tarifas.py"),
-                    DropdownAction("Eliminar", "tarifas_view", "eliminar", "pages/2_Administrar_tarifas.py"),
-                ],
-                active_top=active_top,
-                active_child=active_child,
-                top_key="tarifas",
-            )
+    nav_parts.append(
+        _dropdown_html(
+            label="Parámetros",
+            actions=[
+                DropdownAction("Consultar", "parametros_view", "consultar", "pages/5_Parametros.py"),
+                DropdownAction("Agregar", "parametros_view", "agregar", "pages/5_Parametros.py"),
+                DropdownAction("Modificar", "parametros_view", "modificar", "pages/5_Parametros.py"),
+                DropdownAction("Eliminar", "parametros_view", "eliminar", "pages/5_Parametros.py"),
+            ],
+            active_top=active_top,
+            active_child=active_child,
+            top_key="parametros",
+        )
+    )
 
-        with col_usuarios:
-            _nav_dropdown(
-                label="Usuarios",
-                actions=[
-                    DropdownAction("Consultar", "usuarios_view", "consultar", "pages/4_Usuarios.py"),
-                    DropdownAction("Agregar", "usuarios_view", "agregar", "pages/4_Usuarios.py"),
-                    DropdownAction("Modificar", "usuarios_view", "modificar", "pages/4_Usuarios.py"),
-                    DropdownAction("Eliminar", "usuarios_view", "eliminar", "pages/4_Usuarios.py"),
-                ],
-                active_top=active_top,
-                active_child=active_child,
-                top_key="usuarios",
-            )
+    nav_html = "".join(nav_parts)
+    logout_html = '<div class="nav-scope logout"><a class="nav-logout" href="/?logout=1" target="_self">Salir</a></div>'
 
-        with col_parametros:
-            _nav_dropdown(
-                label="Parámetros",
-                actions=[
-                    DropdownAction("Consultar", "parametros_view", "consultar", "pages/5_Parametros.py"),
-                    DropdownAction("Agregar", "parametros_view", "agregar", "pages/5_Parametros.py"),
-                    DropdownAction("Modificar", "parametros_view", "modificar", "pages/5_Parametros.py"),
-                    DropdownAction("Eliminar", "parametros_view", "eliminar", "pages/5_Parametros.py"),
-                ],
-                active_top=active_top,
-                active_child=active_child,
-                top_key="parametros",
-            )
+    markup = (
+        '<div class="nav-anchor"></div>'
+        '<nav class="nav-bar">'
+        '<div class="nav-inner">'
+        f'<div class="nav-main">{nav_html}</div>'
+        f"{logout_html}"
+        "</div></nav>"
+    )
 
-        with col_logout:
-            st.markdown('<div class="nav-scope logout">', unsafe_allow_html=True)
-            if st.button("Salir", key="logout_btn_nav"):
-                clear_session_state()
-                try:
-                    st.switch_page("app.py")
-                except Exception:
-                    st.experimental_rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown(markup, unsafe_allow_html=True)
