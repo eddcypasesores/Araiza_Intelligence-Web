@@ -137,13 +137,14 @@ NAV_CSS = """
     top: calc(100% - 2px);
     left: 0;
     flex-direction: column;
-    background: transparent;
-    border: none;
-    border-radius: 0;
+    background: rgba(255, 255, 255, 0.98);
+    border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: 12px;
     padding: 6px 0;
-    box-shadow: none;
+    box-shadow: 0 18px 32px rgba(15, 23, 42, 0.12);
     min-width: 210px;
     z-index: 1001;
+    backdrop-filter: blur(10px);
   }
 
   .nav-scope.has-dropdown:hover .nav-dropdown {
@@ -211,6 +212,15 @@ NAV_CSS = """
 </style>
 """
 
+PAGE_PARAM_NAMES: dict[str, str] = {
+    "pages/0_Inicio.py": "Inicio",
+    "pages/1_Calculadora.py": "Calculadora",
+    "pages/2_Administrar_tarifas.py": "Administrar tarifas",
+    "pages/3_Trabajadores.py": "Trabajadores",
+    "pages/4_Usuarios.py": "Usuarios",
+    "pages/5_Parametros.py": "Parametros",
+}
+
 
 @dataclass(frozen=True)
 class DropdownAction:
@@ -262,7 +272,16 @@ def _page_href(page: str | None, extra: dict[str, str] | None = None) -> str:
 
     query: dict[str, str] = {}
     if page:
-        query["p"] = page
+        page_param = PAGE_PARAM_NAMES.get(page)
+        if page_param is None:
+            cleaned = (
+                page.replace("pages/", "")
+                .replace(".py", "")
+                .replace("_", " ")
+                .strip()
+            )
+            page_param = cleaned or page
+        query["page"] = page_param
     if extra:
         query.update(extra)
     if not query:

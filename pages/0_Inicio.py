@@ -92,15 +92,35 @@ CUSTOM_CSS = """
     height: 100%;
     display: flex;
     flex-direction: column;
-    gap: clamp(10px, 2vw, 18px);
+    gap: clamp(18px, 2.6vw, 28px);
   }
 
-  .text-box .copy {
+  .headline-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .headline-stack .copy {
+    margin-top: 0;
     display: flex;
     flex-direction: column;
     gap: clamp(8px, 1.5vw, 12px);
-    flex: 1;
-    margin-bottom: 0;
+  }
+
+  .headline-stack .copy .lead {
+    margin: 0;
+  }
+
+  .features {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(8px, 1.6vw, 14px);
+  }
+
+  .features .features-title {
+    font-weight: 700;
+    margin: 0;
   }
 
   .title {
@@ -226,7 +246,10 @@ with st.container():
 
     with col_txt:
         # El texto define la altura. La imagen se estira para igualarla.
-        st.markdown('<div class="hero-text-wrap"><div class="text-box">', unsafe_allow_html=True)
+        st.markdown(
+            '<div class="hero-text-wrap"><div class="text-box"><div class="headline-stack">',
+            unsafe_allow_html=True,
+        )
         st.markdown('<div class="title">Precisión en movimiento</div>', unsafe_allow_html=True)
         st.markdown('<div class="copy">', unsafe_allow_html=True)
         st.markdown(
@@ -243,20 +266,22 @@ with st.container():
         """,
             unsafe_allow_html=True,
         )
+        st.markdown('</div></div>', unsafe_allow_html=True)
         st.markdown(
             """
-          <p class="lead" style="font-weight:700; margin-top: 8px;">Características principales:</p>
-          <ul class="bullets">
-            <li>Cálculo automático de rutas, distancias y casetas.</li>
-            <li>Estimación real de combustible y costos operativos.</li>
-            <li>Gestión integrada de usuarios y trabajadores.</li>
-            <li>Reportes claros y listos para la toma de decisiones.</li>
-            <li>Transparencia y precisión en cada operación.</li>
-          </ul>
+          <div class="features">
+            <p class="lead features-title">Características principales:</p>
+            <ul class="bullets">
+              <li>Cálculo automático de rutas, distancias y casetas.</li>
+              <li>Estimación real de combustible y costos operativos.</li>
+              <li>Gestión integrada de usuarios y trabajadores.</li>
+              <li>Reportes claros y listos para la toma de decisiones.</li>
+              <li>Transparencia y precisión en cada operación.</li>
+            </ul>
+          </div>
         """,
             unsafe_allow_html=True,
         )
-        st.markdown('</div>', unsafe_allow_html=True)
         st.markdown('<div class="cta-area">', unsafe_allow_html=True)
         if st.button("Calcular ruta", key="cta_calc", type="primary"):
             st.switch_page("pages/1_Calculadora.py")
