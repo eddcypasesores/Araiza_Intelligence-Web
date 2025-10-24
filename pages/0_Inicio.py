@@ -47,6 +47,30 @@ CUSTOM_CSS = """
     height: 100%;
   }
 
+  .hero-anchor + div[data-testid="stHorizontalBlock"] > div > div:first-child {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .hero-img-wrap,
+  .hero-text-wrap {
+    height: 100%;
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .hero-img-wrap > div,
+  .hero-img-wrap > div > div,
+  .hero-img-wrap > div > div > div {
+    flex: 1 1 0%;
+    height: 100%;
+    min-height: 0;
+  }
+
   .hero-img-wrap {
     overflow: hidden;
     border-radius: 18px;
@@ -68,7 +92,35 @@ CUSTOM_CSS = """
     height: 100%;
     display: flex;
     flex-direction: column;
-    gap: clamp(10px, 2vw, 18px);
+    gap: clamp(18px, 2.6vw, 28px);
+  }
+
+  .headline-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .headline-stack .copy {
+    margin-top: 0;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(8px, 1.5vw, 12px);
+  }
+
+  .headline-stack .copy .lead {
+    margin: 0;
+  }
+
+  .features {
+    display: flex;
+    flex-direction: column;
+    gap: clamp(8px, 1.6vw, 14px);
+  }
+
+  .features .features-title {
+    font-weight: 700;
+    margin: 0;
   }
 
   .title {
@@ -146,7 +198,7 @@ CUSTOM_CSS = """
 
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-render_nav(active_top="inicio", active_child=None)
+render_nav(active_top="inicio", active_child=None, show_inicio=False)
 
 # -------- Resolver imagen --------
 APP_DIR = Path(__file__).resolve().parent
@@ -183,6 +235,7 @@ with st.container():
     with col_img:
         st.markdown('<div class="hero-img-wrap">', unsafe_allow_html=True)
         if img_data:
+            # Aquí inyectamos la imagen con la clase hero-image
             st.markdown(
                 f"<img src='{img_data}' class='hero-image' alt='Transporte y rutas' />",
                 unsafe_allow_html=True,
@@ -192,38 +245,43 @@ with st.container():
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col_txt:
-        # Texto y título actualizado
-        st.markdown('<div class="hero-text-wrap"><div class="text-box">', unsafe_allow_html=True)
-        st.markdown('<div class="title">Precisión en movimiento.</div>', unsafe_allow_html=True)
+        # El texto define la altura. La imagen se estira para igualarla.
+        st.markdown(
+            '<div class="hero-text-wrap"><div class="text-box"><div class="headline-stack">',
+            unsafe_allow_html=True,
+        )
+        st.markdown('<div class="title">Precisión en movimiento</div>', unsafe_allow_html=True)
         st.markdown('<div class="copy">', unsafe_allow_html=True)
         st.markdown(
             """
           <p class="lead">
-          Nuestra plataforma calcula con exactitud los costos reales de cada flete, integrando tecnología avanzada, APIs de Google Maps y bases de datos inteligentes para darte resultados precisos y actualizados en tiempo real.
+          Nuestra plataforma calcula con exactitud los costos reales de cada flete, integrando tecnología avanzada, APIs de Google Maps y bases de datos inteligentes para ofrecer resultados precisos y actualizados en tiempo real.
           </p>
           <p class="lead">
-          Obtén en segundos el costo total de una ruta — peajes, combustible, mantenimiento y demás gastos operativos — con una interfaz ágil y confiable.
+          Obtén en segundos el costo total de una ruta — peajes, combustible, mantenimiento y demás gastos operativos — con una interfaz ágil, intuitiva y confiable.
           </p>
           <p class="lead">
-          Además, administra usuarios y trabajadores desde un mismo sistema para tener control, trazabilidad y eficiencia en cada viaje.
+          Además, administra fácilmente usuarios y trabajadores, garantizando control, trazabilidad y eficiencia en cada viaje.
           </p>
         """,
             unsafe_allow_html=True,
         )
+        st.markdown('</div></div>', unsafe_allow_html=True)
         st.markdown(
             """
-          <p class="lead" style="font-weight:700; margin-top: 8px;">Características principales:</p>
-          <ul class="bullets">
-            <li>Cálculo automático de rutas, distancias y casetas.</li>
-            <li>Estimación real de combustible y costos operativos.</li>
-            <li>Gestión integrada de usuarios y trabajadores.</li>
-            <li>Reportes claros y listos para decisión.</li>
-            <li>Transparencia y precisión en cada operación.</li>
-          </ul>
+          <div class="features">
+            <p class="lead features-title">Características principales:</p>
+            <ul class="bullets">
+              <li>Cálculo automático de rutas, distancias y casetas.</li>
+              <li>Estimación real de combustible y costos operativos.</li>
+              <li>Gestión integrada de usuarios y trabajadores.</li>
+              <li>Reportes claros y listos para la toma de decisiones.</li>
+              <li>Transparencia y precisión en cada operación.</li>
+            </ul>
+          </div>
         """,
             unsafe_allow_html=True,
         )
-        st.markdown('</div>', unsafe_allow_html=True)
         st.markdown('<div class="cta-area">', unsafe_allow_html=True)
         if st.button("Calcular ruta", key="cta_calc", type="primary"):
             st.switch_page("pages/1_Calculadora.py")

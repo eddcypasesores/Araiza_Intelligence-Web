@@ -29,6 +29,18 @@ ensure_schema(conn)
 
 VIEW_KEY = "parametros_view"
 VALID_VIEWS = {"consultar", "agregar", "modificar", "eliminar"}
+params = st.query_params
+query_view = params.get(VIEW_KEY)
+if isinstance(query_view, list):
+    candidate = query_view[-1] if query_view else None
+elif query_view is None:
+    candidate = None
+else:
+    candidate = query_view
+
+if candidate in VALID_VIEWS:
+    st.session_state[VIEW_KEY] = candidate
+
 view = st.session_state.get(VIEW_KEY, "consultar")
 if view not in VALID_VIEWS:
     view = "consultar"
