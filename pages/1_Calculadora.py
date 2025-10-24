@@ -50,6 +50,15 @@ st.markdown(
       [data-testid="stExpander"]{ border:1px solid rgba(15,23,42,.08); background:transparent; }
       [data-testid="stExpander"]>div{ background:transparent !important; }
       .section input[aria-label=""], .section textarea[aria-label=""]{ display:none !important; }
+      .top-form { display:flex; flex-wrap:wrap; gap:1.5rem; align-items:flex-start; margin-bottom:1.2rem; }
+      .top-form .add-stop-card { flex:0 0 130px; display:flex; flex-direction:column; align-items:center; gap:.4rem; }
+      .top-form .add-stop-card .add-stop-button { width:100%; }
+      .top-form .add-stop-card .add-stop-button button { height:120px; font-size:3.25rem; line-height:1; border-radius:18px; }
+      .top-form .add-stop-card .hint { font-weight:600; text-align:center; color:#1e293b; }
+      .top-form .add-stop-card .hint.disabled { color:#94a3b8; }
+      .top-form .address-stack > div[data-testid="stVerticalBlock"] { margin-bottom:.55rem; }
+      .top-form .controls-stack > div[data-testid="stVerticalBlock"] { width:100%; }
+      .top-form .controls-stack .compact-row > div { margin-bottom:.55rem; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -378,44 +387,79 @@ def _calculate_route(
 # ===============================
 st.markdown("<div class='hero-title'>COSTOS DE TRASLADO</div>", unsafe_allow_html=True)
 
-# 1) Fila 1: ORIGEN / DESTINO
-r1c1, r1c2 = st.columns([1.2, 1.2])
-with r1c1:
-    origen = autocomplete_input("ORIGEN", "top_origen")
-with r1c2:
-    destino = autocomplete_input("DESTINO", "top_destino")
-
-# 2) Fila 2: CLASE (tipo de auto)
-clases = ["MOTO","AUTOMOVIL","B2","B3","B4","T2","T3","T4","T5","T6","T7","T8","T9"]
+clases = ["MOTO", "AUTOMOVIL", "B2", "B3", "B4", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9"]
 default_idx = clases.index("T5")
-st.markdown("")  # espacio
-cl_col = st.columns([0.9])[0]
-with cl_col:
-    clase = st.selectbox("CLASE (TIPO DE AUTO)", clases, index=default_idx, key="top_clase")
 
-# 3) Fila 3: Agregar parada (checkbox) + selector visible solo si se activa
-st.markdown("")  # espacio
-r3c1, r3c2 = st.columns([0.35, 1.05])
-with r3c1:
-    if "chk_parada" not in st.session_state:
-        st.session_state["chk_parada"] = False
-    if MANUAL_MODE and st.session_state.get("chk_parada"):
-        st.session_state["chk_parada"] = False
-    usar_parada = st.checkbox(
-        "AGREGAR PARADA",
-        key="chk_parada",
-        disabled=MANUAL_MODE,
-    )
-with r3c2:
-    if usar_parada:
-        parada = autocomplete_input("PARADA (OPCIONAL)", "top_parada")
-    else:
-        st.session_state.pop("top_parada_query", None)
-        st.session_state.pop("top_parada_options", None)
-        st.session_state.pop("top_parada_selection", None)
-        st.session_state.pop("top_parada_data", None)
-        parada = None  # oculto completamente
+stop_state_key = "show_intermediate_stop"
+if stop_state_key not in st.session_state:
+    st.session_state[stop_state_key] = False
+if MANUAL_MODE and st.session_state.get(stop_state_key):
+    st.session_state[stop_state_key] = False
 
+with st.container():
+    st.markdown("<div class='top-form'>", unsafe_allow_html=True)
+    col_plus, col_addresses, col_controls = st.columns([0.2, 1.15, 0.95])
+
+    with col_plus:
+        st.markdown("<div class='add-stop-card'>", unsafe_allow_html=True)
+        btn_disabled = MANUAL_MODE
+        st.markdown("<div class='add-stop-button'>", unsafe_allow_html=True)
+        if st.button(
+            "➕",
+            key="toggle_stop_btn",
+            type="primary",
+            use_container_width=True,
+            disabled=btn_disabled,
+        ):
+            st.session_state[stop_state_key] = not st.session_state.get(stop_state_key, False)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        hint_class = "hint disabled" if btn_disabled else "hint"
+        if btn_disabled:
+            hint_text = "Maps no disponible"
+        else:
+            hint_text = "Agregar parada" if not st.session_state.get(stop_state_key) else "Quitar parada"
+        st.markdown(f"<div class='{hint_class}'>{hint_text}</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with col_addresses:
+        st.markdown("<div class='address-stack'>", unsafe_allow_html=True)
+        origen = autocomplete_input("ORIGEN", "top_origen")
+        destino = autocomplete_input("DESTINO", "top_destino")
+        show_stop = bool(st.session_state.get(stop_state_key)) and not MANUAL_MODE
+        if show_stop:
+            parada = autocomplete_input("PARADA (OPCIONAL)", "top_parada")
+        else:
+            st.session_state.pop("top_parada_query", None)
+            st.session_state.pop("top_parada_options", None)
+            st.session_state.pop("top_parada_selection", None)
+            st.session_state.pop("top_parada_data", None)
+            parada = None
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with col_controls:
+        st.markdown("<div class='controls-stack'>", unsafe_allow_html=True)
+        st.markdown("<div class='compact-row'>", unsafe_allow_html=True)
+        ctrl_row = st.columns([1.0, 0.85, 0.85])
+        with ctrl_row[0]:
+            clase = st.selectbox("CLASE (TIPO DE AUTO)", clases, index=default_idx, key="top_clase")
+        with ctrl_row[1]:
+            viaticos_mxn = st.number_input(
+                "VIÁTICOS (MXN)",
+                min_value=0.0,
+                value=float(st.session_state.get("viat_input_main", 0.0)),
+                step=50.0,
+                format="%.2f",
+                key="viat_input_main",
+            )
+        dias_placeholder = ctrl_row[2].empty()
+        st.markdown("</div>", unsafe_allow_html=True)
+        conductor_placeholder = st.empty()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+usar_parada = bool(st.session_state.get(stop_state_key)) and not MANUAL_MODE
 evitar_cuotas = False
 
 origin_label = origen.get("description", "") if origen else ""
@@ -676,11 +720,23 @@ section("DIESEL", None, subtotal_combustible, _diesel_body, icon_img="diesel_car
 # ===============================
 trab_df = read_trabajadores(conn)
 trab_opc = ["(Sin conductor)"] + [f"{r['nombre_completo']} — {r['numero_economico']}" for _, r in trab_df.iterrows()]
-cT1, cT2 = st.columns([1.6, .8])
-with cT1: trab_show = st.selectbox("SELECCIONAR CONDUCTOR", trab_opc, index=0)
-with cT2:
-    dias_sugeridos = max(1.0, round((km_totales or 0.0)/600.0, 1))
-    dias_est = st.number_input("DÍAS ESTIMADOS", min_value=1.0, step=0.5, value=dias_sugeridos)
+with conductor_placeholder:
+    trab_show = st.selectbox(
+        "SELECCIONAR CONDUCTOR",
+        trab_opc,
+        index=0,
+        key="conductor_select",
+    )
+
+dias_sugeridos = max(1.0, round((km_totales or 0.0) / 600.0, 1))
+dias_est = dias_placeholder.number_input(
+    "DÍAS ESTIMADOS",
+    min_value=1.0,
+    step=0.5,
+    value=dias_sugeridos,
+    format="%.2f",
+    key="dias_estimados_input",
+)
 
 trabajador_sel = None
 if trab_show != "(Sin conductor)":
@@ -772,7 +828,6 @@ section("SEGUROS", None, sub_seg, _mo_body, icon_img="seguros_card.png")
 # ===============================
 # 9) VIÁTICOS
 # ===============================
-viaticos_mxn = st.number_input("VIÁTICOS (MXN)", min_value=0.0, value=0.0, step=50.0, format="%.2f", key="viat_input_main")
 def _viat_body():
     st.write(f"Monto fijo ingresado: ${viaticos_mxn:,.2f}")
 section("Viaticos", None, viaticos_mxn, _mo_body, icon_img="viaticos_card.png")
