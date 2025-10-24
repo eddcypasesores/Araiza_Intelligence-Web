@@ -36,6 +36,7 @@ inject_css("styles.css")
 st.markdown(
     """
     <style>
+      :root { --section-max-height: 4.8cm; }
       .block-container { padding-top: 0.85rem; }
       .section, .section * { background: transparent !important; box-shadow: none !important; }
       .section { padding: 0 !important; margin: 0 0 .25rem 0 !important; border: none !important; }
@@ -44,12 +45,15 @@ st.markdown(
       .section-head .total-pill { margin:0; }
       .total-pill { display:inline-block; padding:.35rem .6rem; border-radius:999px; border:1px solid rgba(37,99,235,.25); min-width:110px; text-align:center; }
       .section-divider { height:0; border:0; border-top:3px solid #2563eb; margin:8px 0 14px 0; opacity:1; }
-      .section-main { display:flex; flex-direction:column; gap:.55rem; height:100%; min-height:120px; }
+      .section-main { display:flex; flex-direction:column; gap:.55rem; height:var(--section-max-height); max-height:var(--section-max-height); overflow:hidden; }
       .section-main > div:first-child { margin-bottom:.35rem; }
-      .section-main [data-testid="stExpander"] { flex:1 1 auto; }
-      .section-art { display:flex; align-items:center; justify-content:center; height:100%; min-height:120px; }
-      .section-art img { max-height:150px; width:auto; }
-      .section-art .emoji { font-size:54px; line-height:1; }
+      .section-main [data-testid="stExpander"] { flex:1 1 auto; display:flex; }
+      .section-main [data-testid="stExpander"] details { display:flex; flex-direction:column; width:100%; }
+      .section-main [data-testid="stExpander"] summary { flex:0 0 auto; }
+      .section-main [data-testid="stExpander"] summary + div { flex:1 1 auto; overflow:auto; }
+      .section-art { display:flex; align-items:center; justify-content:center; height:var(--section-max-height); max-height:var(--section-max-height); }
+      .section-art img { height:var(--section-max-height); max-height:var(--section-max-height); width:auto; }
+      .section-art .emoji { font-size:calc(var(--section-max-height) * 0.55); line-height:1; }
       [data-testid="stExpander"]{ border:1px solid rgba(15,23,42,.08); background:transparent; }
       [data-testid="stExpander"]>div{ background:transparent !important; }
       .section input[aria-label=""], .section textarea[aria-label=""]{ display:none !important; }
