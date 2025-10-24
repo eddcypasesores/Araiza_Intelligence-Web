@@ -36,17 +36,39 @@ inject_css("styles.css")
 st.markdown(
     """
     <style>
-      .block-container { padding-top: 1.2rem; }
+      .block-container { padding-top: 0.85rem; }
       .section, .section * { background: transparent !important; box-shadow: none !important; }
       .section { padding: 0 !important; margin: 0 0 .25rem 0 !important; border: none !important; }
-      .section-head { display:flex; align-items:center; gap:.5rem; font-weight:800; color:#1e293b; letter-spacing:.2px; margin:.25rem 0; }
-      .section-head .title { text-transform:uppercase; font-size:1.25rem; }
-      .total-right { display:flex; justify-content:flex-end; margin:.25rem 0 .4rem 0; }
+      .section-head { display:flex; align-items:center; gap:1rem; font-weight:800; color:#1e293b; letter-spacing:.2px; margin:.1rem 0 .45rem 0; }
+      .section-head .title { text-transform:uppercase; font-size:1.25rem; flex:1 1 auto; }
+      .section-head .total-pill { margin:0; }
       .total-pill { display:inline-block; padding:.35rem .6rem; border-radius:999px; border:1px solid rgba(37,99,235,.25); min-width:110px; text-align:center; }
       .section-divider { height:0; border:0; border-top:3px solid #2563eb; margin:8px 0 14px 0; opacity:1; }
+      .section-main { display:flex; flex-direction:column; gap:.55rem; height:3cm; max-height:3cm; overflow:hidden; flex:0 0 3cm; }
+      .section-main > div:first-child { margin-bottom:.35rem; }
+      .section-main [data-testid="stExpander"] { flex:1 1 auto; display:flex; }
+      .section-main [data-testid="stExpander"] details { display:flex; flex-direction:column; width:100%; }
+      .section-main [data-testid="stExpander"] summary { flex:0 0 auto; }
+      .section-main [data-testid="stExpander"] summary + div { flex:1 1 auto; overflow:auto; }
+      .section-art { display:flex; align-items:center; justify-content:center; height:3cm; max-height:3cm; flex:0 0 3cm; }
+      .section-art img { height:2cm; max-height:2cm; width:auto; object-fit:contain; }
+      .section-art .emoji { font-size:1.1cm; line-height:1; }
       [data-testid="stExpander"]{ border:1px solid rgba(15,23,42,.08); background:transparent; }
       [data-testid="stExpander"]>div{ background:transparent !important; }
       .section input[aria-label=""], .section textarea[aria-label=""]{ display:none !important; }
+      .top-form { display:flex; flex-wrap:wrap; gap:1.35rem; align-items:stretch; margin-bottom:.85rem; }
+      .top-form > div[data-testid="column"] { display:flex; }
+      .top-form > div[data-testid="column"] > div { flex:1; display:flex; }
+      .top-form .add-stop-card { flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; min-height:120px; }
+      .top-form .add-stop-card .add-stop-button { width:100%; }
+      .top-form .add-stop-card .add-stop-button button { height:120px; font-size:3.1rem; line-height:1; border-radius:18px; }
+      .top-form .address-stack { width:100%; display:flex; flex-direction:column; gap:.5rem; }
+      .top-form .address-stack > div[data-testid="stVerticalBlock"] { margin-bottom:0 !important; }
+      .top-form .address-stack > div[data-testid="stHorizontalBlock"] { margin-top:.4rem; }
+      .top-form .address-stack > div[data-testid="stVerticalBlock"]:last-child { margin-top:.35rem; }
+      .top-form .meta-row { display:flex; gap:1rem; }
+      .top-form .meta-row > div[data-testid="column"] { display:flex; }
+      .top-form .meta-row > div[data-testid="column"] > div { flex:1; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -176,58 +198,45 @@ def img_to_data_url(path: Path) -> str | None:
         return None
 def section(title: str, icon: str | None, total_value: float | None, body_fn=None, icon_img: str | None = None):
     """
-    Layout por sección:
-      - Izquierda: título grande + expander (desglose)
-      - Derecha: imagen/icono arriba y, debajo, el total (pill) alineado a la derecha
-    Devuelve el total utilizado (float).
+    Layout por sección. Devuelve el total utilizado (float).
     """
     st.markdown("<div class='section'>", unsafe_allow_html=True)
-    left, right = st.columns([0.68, 0.32], gap="large")
+    col_main, col_icon = st.columns([0.90, 0.10], gap="large")
 
     computed_total = total_value if total_value is not None else 0.0
 
-    with left:
-        st.markdown(
-            f"<div class='section-head' style='margin-bottom:.25rem'><span class='title'>{title}</span></div>",
-            unsafe_allow_html=True,
-        )
+    with col_main:
+        st.markdown("<div class='section-main'>", unsafe_allow_html=True)
+        header_placeholder = st.empty()
         if body_fn:
             with st.expander("Desglose / cálculo", expanded=False):
                 # Si el body_fn devuelve un número, se toma como total de la sección
                 ret = body_fn()
                 if isinstance(ret, (int, float)):
                     computed_total = float(ret)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-    with right:
-        data_url = None
-        if icon_img:
-            p = resolve_asset(icon_img)
-            if p:
-                data_url = img_to_data_url(p)
+    data_url = None
+    if icon_img:
+        p = resolve_asset(icon_img)
+        if p:
+            data_url = img_to_data_url(p)
 
-        st.markdown(
-            f"<div class='total-right' style='justify-content:flex-end; margin-bottom:.75rem'>"
-            f"<div class='total-pill'>${computed_total:,.2f}</div>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
-
+    with col_icon:
+        st.markdown("<div class='section-art'>", unsafe_allow_html=True)
         if data_url:
-            st.markdown(
-                f"<div style='display:flex; justify-content:flex-end; margin-bottom:.5rem'>"
-                f"<img src='{data_url}' alt='icon' style='max-width:120px; height:auto;'/>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
+            st.markdown(f"<img src='{data_url}' alt='icon'/>", unsafe_allow_html=True)
         elif icon:
-            st.markdown(
-                f"<div style='display:flex; justify-content:flex-end; margin-bottom:.5rem'>"
-                f"<div style='font-size:54px; line-height:1'>{icon}</div>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
-        else:
-            st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+            st.markdown(f"<span class='emoji'>{icon}</span>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    header_html = (
+        "<div class='section-head'>"
+        f"<span class='title'>{title}</span>"
+        f"<span class='total-pill'>${computed_total:,.2f}</span>"
+        "</div>"
+    )
+    header_placeholder.markdown(header_html, unsafe_allow_html=True)
 
     st.markdown("<div class='section-divider'></div>", unsafe_allow_html=True)
     return computed_total
@@ -387,56 +396,103 @@ def _calculate_route(
 # ===============================
 st.markdown("<div class='hero-title'>COSTOS DE TRASLADO</div>", unsafe_allow_html=True)
 
-# 1) Fila 1: ORIGEN / DESTINO
-r1c1, r1c2 = st.columns([1.2, 1.2])
-with r1c1:
-    origen = autocomplete_input("ORIGEN", "top_origen")
-with r1c2:
-    destino = autocomplete_input("DESTINO", "top_destino")
-
-# 2) Fila 2: CLASE (tipo de auto)
-clases = ["MOTO","AUTOMOVIL","B2","B3","B4","T2","T3","T4","T5","T6","T7","T8","T9"]
+clases = ["MOTO", "AUTOMOVIL", "B2", "B3", "B4", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9"]
 default_idx = clases.index("T5")
-st.markdown("")  # espacio
-cl_col = st.columns([0.9])[0]
-with cl_col:
-    clase = st.selectbox("CLASE (TIPO DE AUTO)", clases, index=default_idx, key="top_clase")
 
-# 3) Fila 3: Agregar parada (checkbox) + selector visible solo si se activa
-st.markdown("")  # espacio
-r3c1, r3c2 = st.columns([0.35, 1.05])
-with r3c1:
-    if "chk_parada" not in st.session_state:
-        st.session_state["chk_parada"] = False
-    if MANUAL_MODE and st.session_state.get("chk_parada"):
-        st.session_state["chk_parada"] = False
-    usar_parada = st.checkbox(
-        "AGREGAR PARADA",
-        key="chk_parada",
-        disabled=MANUAL_MODE,
-    )
-with r3c2:
-    if usar_parada:
-        parada = autocomplete_input("PARADA (OPCIONAL)", "top_parada")
-    else:
-        st.session_state.pop("top_parada_query", None)
-        st.session_state.pop("top_parada_options", None)
-        st.session_state.pop("top_parada_selection", None)
-        st.session_state.pop("top_parada_data", None)
-        parada = None  # oculto completamente
+trab_df = read_trabajadores(conn)
+trab_opc = ["(Sin conductor)"] + [f"{r['nombre_completo']} — {r['numero_economico']}" for _, r in trab_df.iterrows()]
 
-st.markdown("")  # espacio
-opts_c1, _ = st.columns([0.4, 0.6])
-with opts_c1:
-    if "chk_avoid_tolls" not in st.session_state:
-        st.session_state["chk_avoid_tolls"] = False
-    if MANUAL_MODE and st.session_state.get("chk_avoid_tolls"):
-        st.session_state["chk_avoid_tolls"] = False
-    evitar_cuotas = st.checkbox(
-        "EVITAR CASETAS (RUTA LIBRE)",
-        key="chk_avoid_tolls",
-        disabled=MANUAL_MODE,
-    )
+dias_manual_flag_key = "dias_input_manual"
+if dias_manual_flag_key not in st.session_state:
+    st.session_state[dias_manual_flag_key] = False
+
+
+def _mark_dias_manual():
+    st.session_state[dias_manual_flag_key] = True
+
+stop_state_key = "show_intermediate_stop"
+if stop_state_key not in st.session_state:
+    st.session_state[stop_state_key] = False
+if MANUAL_MODE and st.session_state.get(stop_state_key):
+    st.session_state[stop_state_key] = False
+
+with st.container():
+    st.markdown("<div class='top-form'>", unsafe_allow_html=True)
+    col_plus, col_addresses = st.columns([0.2, 1.0], gap="large")
+
+    with col_plus:
+        st.markdown("<div class='add-stop-card'>", unsafe_allow_html=True)
+        btn_disabled = MANUAL_MODE
+        help_text = "Maps no disponible" if btn_disabled else (
+            "Agregar parada" if not st.session_state.get(stop_state_key) else "Quitar parada"
+        )
+        st.markdown("<div class='add-stop-button'>", unsafe_allow_html=True)
+        if st.button(
+            "➕",
+            key="toggle_stop_btn",
+            type="primary",
+            use_container_width=True,
+            disabled=btn_disabled,
+            help=help_text,
+        ):
+            st.session_state[stop_state_key] = not st.session_state.get(stop_state_key, False)
+        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with col_addresses:
+        st.markdown("<div class='address-stack'>", unsafe_allow_html=True)
+        origen = autocomplete_input("ORIGEN", "top_origen")
+        destino = autocomplete_input("DESTINO", "top_destino")
+        show_stop = bool(st.session_state.get(stop_state_key)) and not MANUAL_MODE
+        if show_stop:
+            parada = autocomplete_input("PARADA (OPCIONAL)", "top_parada")
+        else:
+            st.session_state.pop("top_parada_query", None)
+            st.session_state.pop("top_parada_options", None)
+            st.session_state.pop("top_parada_selection", None)
+            st.session_state.pop("top_parada_data", None)
+            parada = None
+
+        meta_cols = st.columns(3, gap="medium")
+        with meta_cols[0]:
+            clase = st.selectbox("CLASE (TIPO DE AUTO)", clases, index=default_idx, key="top_clase")
+        with meta_cols[1]:
+            viaticos_mxn = st.number_input(
+                "VIÁTICOS (MXN)",
+                min_value=0.0,
+                value=float(st.session_state.get("viat_input_main", 0.0)),
+                step=50.0,
+                format="%.2f",
+                key="viat_input_main",
+            )
+        with meta_cols[2]:
+            distancia_base = float(st.session_state.get("maps_distance_km") or 0.0)
+            dias_sugeridos = max(1.0, round(distancia_base / 600.0, 1))
+            dias_init = float(st.session_state.get("dias_estimados_input", dias_sugeridos))
+            dias_est = st.number_input(
+                "DÍAS ESTIMADOS",
+                min_value=1.0,
+                step=0.5,
+                value=dias_init,
+                format="%.2f",
+                key="dias_estimados_input",
+                on_change=_mark_dias_manual,
+            )
+
+        current_conductor = st.session_state.get("conductor_select", trab_opc[0])
+        default_conductor_idx = trab_opc.index(current_conductor) if current_conductor in trab_opc else 0
+        trab_show = st.selectbox(
+            "SELECCIONAR CONDUCTOR",
+            trab_opc,
+            index=default_conductor_idx,
+            key="conductor_select",
+        )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+usar_parada = bool(st.session_state.get(stop_state_key)) and not MANUAL_MODE
+evitar_cuotas = False
 
 origin_label = origen.get("description", "") if origen else ""
 destination_label = destino.get("description", "") if destino else ""
@@ -664,22 +720,8 @@ diesel_params = PARAMS.get("diesel", {}) if isinstance(PARAMS, dict) else {}
 rendimiento = float(diesel_params.get("rendimiento_km_l") or 0.0)
 precio_litro = float(diesel_params.get("precio_litro") or 0.0)
 
-c1, c2 = st.columns([1.0, 1.0])
 distancia_km_val = float(st.session_state.get("maps_distance_km") or 0.0)
-with c1:
-    st.number_input(
-        "DISTANCIA (KM)",
-        min_value=0.0,
-        value=distancia_km_val,
-        step=0.1,
-        format="%.2f",
-        key="distance_display_km",
-        disabled=True,
-    )
-with c2:
-    viaje_redondo = st.checkbox("VIAJE REDONDO", value=False)
-
-km_totales = float(distancia_km_val or 0.0) * (2 if viaje_redondo else 1)
+km_totales = float(distancia_km_val or 0.0)
 litros_estimados = (km_totales / rendimiento) if rendimiento > 0 else 0.0
 subtotal_combustible = float(litros_estimados) * precio_litro
 
@@ -694,13 +736,19 @@ section("DIESEL", None, subtotal_combustible, _diesel_body, icon_img="diesel_car
 # ===============================
 # 3) MANO DE OBRA (método Edwin)
 # ===============================
-trab_df = read_trabajadores(conn)
-trab_opc = ["(Sin conductor)"] + [f"{r['nombre_completo']} — {r['numero_economico']}" for _, r in trab_df.iterrows()]
-cT1, cT2 = st.columns([1.6, .8])
-with cT1: trab_show = st.selectbox("SELECCIONAR CONDUCTOR", trab_opc, index=0)
-with cT2:
-    dias_sugeridos = max(1.0, round((km_totales or 0.0)/600.0, 1))
-    dias_est = st.number_input("DÍAS ESTIMADOS", min_value=1.0, step=0.5, value=dias_sugeridos)
+trab_show = st.session_state.get("conductor_select", trab_opc[0])
+
+dias_sugeridos = max(1.0, round((km_totales or 0.0) / 600.0, 1))
+if not st.session_state.get(dias_manual_flag_key) and (
+    float(st.session_state.get("dias_estimados_input", dias_sugeridos)) != float(dias_sugeridos)
+):
+    st.session_state["dias_estimados_input"] = dias_sugeridos
+elif st.session_state.get(dias_manual_flag_key) and (
+    float(st.session_state.get("dias_estimados_input", dias_sugeridos)) == float(dias_sugeridos)
+):
+    st.session_state[dias_manual_flag_key] = False
+
+dias_est = float(st.session_state.get("dias_estimados_input", dias_sugeridos))
 
 trabajador_sel = None
 if trab_show != "(Sin conductor)":
@@ -748,7 +796,7 @@ def _llantas_body():
     st.write(f"KM: {km_totales:,.2f}")
     st.write(f"Total: ${sub_llantas:,.2f}")
 
-section("LLANTAS", None, sub_llantas, _mo_body, icon_img="llanta_card.png")
+section("LLANTAS", None, sub_llantas, _llantas_body, icon_img="llanta_card.png")
 
 
 # ===============================
@@ -759,7 +807,7 @@ def _mantto_body():
     st.write(f"Costo por km: ${PARAMS['costos_km']['costo_mantto_km']}/km")
     st.write(f"KM: {km_totales:,.2f}")
     st.write(f"Total: ${sub_mantto:,.2f}")
-section("MANTENIMIENTO", None, sub_mantto, _mo_body, icon_img="mantenimiento_card.png")
+section("MANTENIMIENTO", None, sub_mantto, _mantto_body, icon_img="mantenimiento_card.png")
 
 # ===============================
 # 7) DEPRECIACIÓN
@@ -774,7 +822,7 @@ def _dep_body():
     st.write(f"Vida: {int(dep['vida_anios'])} años · KM/año: {int(dep['km_anuales'])}")
     st.write(f"Depreciación por km: ${dep_km:,.4f}")
     st.write(f"Total: ${sub_dep:,.2f}")
-section("DEPRECIACIÓN", None, sub_dep, _mo_body, icon_img="depreciacion_card.png")
+section("DEPRECIACIÓN", None, sub_dep, _dep_body, icon_img="depreciacion_card.png")
 
 # ===============================
 # 8) SEGUROS
@@ -786,16 +834,15 @@ def _seg_body():
     st.write(f"Prima anual: ${float(seg['prima_anual']):,.2f} · KM/año: {int(seg['km_anuales'])}")
     st.write(f"Seguro por km: ${seg_km:,.4f}")
     st.write(f"Total: ${sub_seg:,.2f}")
-section("SEGUROS", None, sub_seg, _mo_body, icon_img="seguros_card.png")
+section("SEGUROS", None, sub_seg, _seg_body, icon_img="seguros_card.png")
 
 
 # ===============================
 # 9) VIÁTICOS
 # ===============================
-viaticos_mxn = st.number_input("VIÁTICOS (MXN)", min_value=0.0, value=0.0, step=50.0, format="%.2f", key="viat_input_main")
 def _viat_body():
     st.write(f"Monto fijo ingresado: ${viaticos_mxn:,.2f}")
-section("Viaticos", None, viaticos_mxn, _mo_body, icon_img="viaticos_card.png")
+section("VIÁTICOS", None, viaticos_mxn, _viat_body, icon_img="viaticos_card.png")
 
 # ===============================
 # 10) CUSTODIA
@@ -805,7 +852,7 @@ def _cust_body():
     st.write(f"Costo por km: ${PARAMS['otros']['custodia_km']}/km")
     st.write(f"KM: {km_totales:,.2f}")
     st.write(f"Total: ${sub_custodia:,.2f}")
-section("CUSTODIA", None, sub_custodia, _mo_body, icon_img="custodia_card.png")
+section("CUSTODIA", None, sub_custodia, _cust_body, icon_img="custodia_card.png")
 
 # ===============================
 # 11) PERMISOS
@@ -813,7 +860,7 @@ section("CUSTODIA", None, sub_custodia, _mo_body, icon_img="custodia_card.png")
 sub_permiso = float(PARAMS["otros"]["permiso_viaje"] or 0.0)
 def _perm_body():
     st.write(f"Permiso por viaje: ${sub_permiso:,.2f}")
-section("PERMISOS", None, sub_permiso, _mo_body, icon_img="permiso_card.png")
+section("PERMISOS", None, sub_permiso, _perm_body, icon_img="permiso_card.png")
 
 # ===============================
 # 12) DEF
@@ -826,7 +873,7 @@ def _def_body():
     st.write(f"% DEF vs diésel: {pct_def*100:.2f}%")
     st.write(f"Litros DEF: {litros_def:,.2f} · Precio DEF/L: ${precio_def:,.2f}")
     st.write(f"Total: ${sub_def:,.2f}")
-section("DEF", None, sub_def, _mo_body, icon_img="def_card.png")
+section("DEF", None, sub_def, _def_body, icon_img="def_card.png")
 
 # ===============================
 # 13) COMISIÓN TAG
@@ -837,7 +884,7 @@ def _tag_body():
     st.write(f"Comisión TAG %: {pct_tag*100:.2f}%")
     st.write(f"Base peajes: ${peajes_ajustados:,.2f}")
     st.write(f"Total: ${sub_tag:,.2f}")
-section("COMISIÓN TAG", None, sub_tag, _mo_body, icon_img="tag_card.png")
+section("COMISIÓN TAG", None, sub_tag, _tag_body, icon_img="tag_card.png")
 
 # ===============================
 # Base para (14) Financiamiento, (15) Overhead, (16) Utilidad
@@ -868,7 +915,7 @@ def _fin_body():
     st.write(f"Tasa anual: {tasa*100:.2f}% · Días de cobro: {dias_cobro}")
     st.write(f"Base: ${base_val:,.2f}")
     st.write(f"Total: ${sub_fin:,.2f}")
-section("FINANCIAMIENTO", None, sub_fin, _mo_body, icon_img="financiamiento_card.png")
+section("FINANCIAMIENTO", None, sub_fin, _fin_body, icon_img="financiamiento_card.png")
 
 # ===============================
 # 15) OVERHEAD
@@ -879,7 +926,7 @@ def _ov_body():
     st.write(f"Overhead %: {pct_ov*100:.2f}%")
     st.write(f"Base: ${base_val:,.2f}")
     st.write(f"Total: ${sub_ov:,.2f}")
-section("OVERHEAD", None, sub_ov, _mo_body, icon_img="overhead_card.png")
+section("OVERHEAD", None, sub_ov, _ov_body, icon_img="overhead_card.png")
 
 # ===============================
 # 16) UTILIDAD
@@ -890,7 +937,7 @@ def _ut_body():
     st.write(f"Utilidad %: {pct_ut*100:.2f}%")
     st.write(f"Base + Overhead: ${(base_val+sub_ov):,.2f}")
     st.write(f"Total: ${sub_ut:,.2f}")
-section("UTILIDAD", None, sub_ut, _mo_body, icon_img="utilidad_card.png")
+section("UTILIDAD", None, sub_ut, _ut_body, icon_img="utilidad_card.png")
 
 # ===============================
 # TOTAL GENERAL + PDF
