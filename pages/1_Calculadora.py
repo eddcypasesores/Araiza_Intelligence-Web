@@ -36,7 +36,7 @@ inject_css("styles.css")
 st.markdown(
     """
     <style>
-      :root { --section-max-height: 4.8cm; }
+      :root { --section-max-height: 150px; }
       .block-container { padding-top: 0.85rem; }
       .section, .section * { background: transparent !important; box-shadow: none !important; }
       .section { padding: 0 !important; margin: 0 0 .25rem 0 !important; border: none !important; }
@@ -52,7 +52,7 @@ st.markdown(
       .section-main [data-testid="stExpander"] summary { flex:0 0 auto; }
       .section-main [data-testid="stExpander"] summary + div { flex:1 1 auto; overflow:auto; }
       .section-art { display:flex; align-items:center; justify-content:center; height:var(--section-max-height); max-height:var(--section-max-height); }
-      .section-art img { height:var(--section-max-height); max-height:var(--section-max-height); width:auto; }
+      .section-art img { height:100%; max-height:var(--section-max-height); width:auto; object-fit:contain; }
       .section-art .emoji { font-size:calc(var(--section-max-height) * 0.55); line-height:1; }
       [data-testid="stExpander"]{ border:1px solid rgba(15,23,42,.08); background:transparent; }
       [data-testid="stExpander"]>div{ background:transparent !important; }
