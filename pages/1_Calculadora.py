@@ -23,6 +23,7 @@ from core.pdf import build_pdf_cotizacion
 from core.driver_costs import read_trabajadores, costo_diario_trabajador_auto
 from core.params import read_params
 from core.maps import GoogleMapsClient, GoogleMapsError
+from core.navigation import render_nav
 
 HARDCODED_MAPS_API_KEY = "AIzaSyBqSuQGWucHtypH60GpAAIxJVap76CgRL8"
 
@@ -36,7 +37,6 @@ inject_css("styles.css")
 st.markdown(
     """
     <style>
-      .block-container { padding-top: 0.85rem; }
       .section, .section * { background: transparent !important; box-shadow: none !important; }
       .section { padding: 0 !important; margin: 0 0 .25rem 0 !important; border: none !important; }
       .section-head { display:flex; align-items:center; gap:1rem; font-weight:800; color:#1e293b; letter-spacing:.2px; margin:.1rem 0 .45rem 0; }
@@ -84,6 +84,9 @@ if "usuario" not in st.session_state or "rol" not in st.session_state:
     except Exception:
         st.stop()
     st.stop()
+
+# Barra de navegación compartida
+render_nav(active_top=None, active_child=None)
 
 # ===============================
 # Conexión y datos base
