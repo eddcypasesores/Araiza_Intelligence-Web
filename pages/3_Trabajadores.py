@@ -3,6 +3,7 @@ import io
 import pandas as pd
 import streamlit as st
 from core.db import get_conn, ensure_schema
+from core.navigation import render_nav
 
 st.set_page_config(page_title="Trabajadores (solo lectura)", layout="wide")
 
@@ -26,6 +27,8 @@ try:
     conn.execute("PRAGMA foreign_keys = ON")
 except Exception:
     pass
+
+render_nav(active_top=None, active_child=None)
 
 st.title("👷 Trabajadores — Solo lectura")
 

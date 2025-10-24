@@ -1,9 +1,10 @@
-# pages/0_Inicio.py — Navbar horizontal sticky + hero flexible y centrado
+# pages/0_Inicio.py — Inicio con héroe centrado y navegación compartida
 from pathlib import Path
-from string import Template
 import base64
 import streamlit as st
+
 from core.db import get_conn, ensure_schema
+from core.navigation import render_nav
 
 st.set_page_config(page_title="Inicio | Costos de Rutas", layout="wide")
 
@@ -19,128 +20,12 @@ if "usuario" not in st.session_state or "rol" not in st.session_state:
 # -------- DB --------
 conn = get_conn(); ensure_schema(conn)
 
-# -------- Parámetros visuales --------
-MAX_W        = 1100
-# Reducimos la altura de la barra de navegación para centrar los textos más arriba
-NAV_H        = 56 
-
-# -------- CSS --------
-css_template = Template(
-    """
+# -------- CSS específico de la portada --------
+CUSTOM_CSS = """
 <style>
   :root {
-    --maxw: ${max_w}px;
-    --navh: ${nav_h}px;
     --brand-red: #dc2626;
     --brand-red-dark: #b91c1c;
-  }
-
-  /* Ocultar elementos nativos de Streamlit que compiten con la barra */
-  [data-testid="stSidebar"],
-  [data-testid="collapsedControl"] {
-    display: none !important;
-  }
-  header[data-testid="stHeader"],
-  div[data-testid="stToolbar"],
-  #MainMenu {
-    display: none !important;
-  }
-
-  [data-testid="stAppViewContainer"] > .main {
-    padding-top: 0 !important;
-  }
-  
-  /* Se mantiene el padding superior reducido */
-  .block-container {
-    max-width: var(--maxw) !important;
-    margin: 0 auto !important;
-    padding: calc(var(--navh) + 8px) clamp(16px, 4vw, 32px) clamp(48px, 8vw, 72px) !important; 
-  }
-
-  /* ===== NAVBAR FIJA ===== */
-  .nav-sentinel {
-    display: none;
-  }
-
-  .nav-anchor {
-    display: block;
-  }
-
-  .nav-anchor + div[data-testid="stHorizontalBlock"] {
-    position: fixed;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: min(100%, var(--maxw));
-    z-index: 1000;
-    background: #fff;
-    border-bottom: 1px solid #e5e7eb;
-    display: flex !important;
-    align-items: center;
-    gap: clamp(12px, 2.5vw, 32px);
-    padding: 0 clamp(16px, 4vw, 24px) !important;
-    height: var(--navh); /* Nueva altura: 56px */
-  }
-
-  .nav-anchor + div[data-testid="stHorizontalBlock"] > div {
-    padding: 0 !important;
-    margin: 0 !important;
-    flex: 0 0 auto !important;
-    width: auto !important;
-  }
-
-  .nav-anchor + div[data-testid="stHorizontalBlock"] > div:last-child {
-    margin-left: auto !important;
-  }
-
-  .nav-scope {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    height: 100%;
-  }
-
-  .nav-scope [data-testid="stPageLink"] {
-    display: inline-flex !important;
-    align-items: center;
-    justify-content: center;
-    color: var(--brand-red) !important;
-    font-weight: 700;
-    font-size: clamp(15px, 1.7vw, 18px);
-    /* Reducimos el padding vertical para centrar el texto en la nueva altura de 56px */
-    padding: 8px 14px !important; 
-    white-space: nowrap !important;
-    line-height: 20px !important; /* Ligeramente más pequeño */
-    text-decoration: none !important;
-  }
-
-  .nav-scope [data-testid="stPageLink"]:hover {
-    color: var(--brand-red-dark) !important;
-    text-decoration: underline !important;
-  }
-
-  .nav-scope.logout {
-    justify-content: flex-end;
-  }
-
-  .nav-scope.logout button {
-    background: var(--brand-red) !important;
-    color: #fff !important;
-    border: 1px solid var(--brand-red) !important;
-    padding: 8px 16px !important; /* Ligeramente reducido */
-    border-radius: 999px !important;
-    font-weight: 800 !important;
-    font-size: clamp(14px, 1.6vw, 17px) !important;
-  }
-
-  .nav-scope.logout button:hover {
-    background: var(--brand-red-dark) !important;
-    border-color: var(--brand-red-dark) !important;
-  }
-
-  /* ===== HERO (Altura flexible y centrado) ===== */
-  .hero-sentinel {
-    display: none;
   }
 
   .hero-anchor + div[data-testid="stHorizontalBlock"] {
@@ -149,7 +34,7 @@ css_template = Template(
     gap: clamp(28px, 5vw, 48px);
     margin: 0 !important;
     padding: 0 !important;
-    align-items: center; 
+    align-items: center;
   }
 
   .hero-anchor + div[data-testid="stHorizontalBlock"] > div {
@@ -157,9 +42,9 @@ css_template = Template(
     padding: 0 !important;
     margin: 0 !important;
     min-width: 0;
-    display: flex; 
-    align-items: center; 
-    height: 100%; 
+    display: flex;
+    align-items: center;
+    height: 100%;
   }
 
   .hero-anchor + div[data-testid="stHorizontalBlock"] > div > div:first-child {
@@ -172,18 +57,18 @@ css_template = Template(
 
   .hero-img-wrap,
   .hero-text-wrap {
-    height: 100%; 
+    height: 100%;
     width: 100%;
     display: flex;
     flex-direction: column;
   }
 
-  .hero-img-wrap > div, 
+  .hero-img-wrap > div,
   .hero-img-wrap > div > div,
   .hero-img-wrap > div > div > div {
     flex: 1 1 0%;
-    height: 100%; 
-    min-height: 0; 
+    height: 100%;
+    min-height: 0;
   }
 
   .hero-img-wrap {
@@ -193,9 +78,9 @@ css_template = Template(
   }
 
   .hero-img-wrap > div > div > div > img {
-      height: 100%;
-      width: 100%;
-      object-fit: cover;
+    height: 100%;
+    width: 100%;
+    object-fit: cover;
   }
 
   .hero-text-wrap {
@@ -207,19 +92,19 @@ css_template = Template(
     height: 100%;
     display: flex;
     flex-direction: column;
-    gap: clamp(10px, 2vw, 18px); 
+    gap: clamp(10px, 2vw, 18px);
   }
 
   .text-box .copy {
     display: flex;
     flex-direction: column;
-    gap: clamp(8px, 1.5vw, 12px); 
+    gap: clamp(8px, 1.5vw, 12px);
     flex: 1;
-    margin-bottom: 0; 
+    margin-bottom: 0;
   }
 
   .title {
-    font-size: clamp(24px, 2.8vw, 36px); 
+    font-size: clamp(24px, 2.8vw, 36px);
     font-weight: 800;
     margin: 0;
     letter-spacing: 0.3px;
@@ -229,30 +114,28 @@ css_template = Template(
   .lead {
     font-size: clamp(15px, 1.55vw, 18px);
     color: #334155;
-    margin: 0; 
+    margin: 0;
     line-height: 1.5;
     text-align: justify;
   }
 
   .bullets {
-    /* Ajustamos el margen superior para juntarlo más con el texto anterior */
-    margin: 2px 0 0 clamp(18px, 2vw, 24px); 
+    margin: 2px 0 0 clamp(18px, 2vw, 24px);
     color: #0f172a;
     font-size: clamp(14px, 1.4vw, 17px);
   }
 
   .bullets li {
-    /* Reducimos aún más el espacio entre líneas de los bullets */
-    margin-bottom: clamp(2px, 0.8vw, 4px); 
-    line-height: 1.3; /* Hacemos la altura de línea más pequeña */
+    margin-bottom: clamp(2px, 0.8vw, 4px);
+    line-height: 1.3;
   }
 
   .cta-area {
-    margin-top: auto; 
-    padding-top: 0px; 
+    margin-top: auto;
+    padding-top: 0px;
     display: flex;
-    justify-content: flex-end; 
-    padding-bottom: 0; 
+    justify-content: flex-end;
+    padding-bottom: 0;
   }
 
   .cta-area button[kind="primary"] {
@@ -269,12 +152,8 @@ css_template = Template(
   }
 
   @media (max-width: 780px) {
-    .nav-anchor + div[data-testid="stHorizontalBlock"] {
-      gap: clamp(8px, 3vw, 16px);
-    }
-    
     .title {
-        white-space: normal;
+      white-space: normal;
     }
 
     .hero-anchor + div[data-testid="stHorizontalBlock"] {
@@ -291,84 +170,15 @@ css_template = Template(
     }
 
     .cta-area {
-      /* Centrar en móvil */
-      justify-content: center; 
-    }
-  }
-
-  @media (max-width: 520px) {
-    .block-container {
-      padding: calc(var(--navh) + 20px) clamp(14px, 5vw, 18px) clamp(40px, 12vw, 60px) !important;
-    }
-
-    .nav-anchor + div[data-testid="stHorizontalBlock"] {
-      flex-wrap: wrap;
       justify-content: center;
-      row-gap: 8px;
-      height: auto;
-      padding: clamp(10px, 4vw, 16px) clamp(16px, 6vw, 24px) !important;
-    }
-
-    .nav-anchor + div[data-testid="stHorizontalBlock"] > div:last-child {
-      margin-left: 0 !important;
-      width: 100% !important;
-      display: flex;
-      justify-content: center;
-    }
-
-    .nav-scope.logout {
-      justify-content: center;
-    }
-
-    .nav-scope.logout button {
-      width: min(220px, 100%);
-    }
-
-    .cta-area {
-      padding-top: clamp(18px, 4vw, 28px);
     }
   }
 </style>
 """
-)
 
-st.markdown(
-    css_template.substitute(max_w=MAX_W, nav_h=NAV_H),
-    unsafe_allow_html=True,
-)
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-# -------- NAVBAR (1 sola fila con columns) --------
-with st.container():
-    st.markdown('<div class="nav-anchor"></div>', unsafe_allow_html=True)
-
-    col_tarifas, col_usuarios, col_parametros, col_logout = st.columns(4, gap="small")
-
-    with col_tarifas:
-        st.markdown('<div class="nav-scope">', unsafe_allow_html=True)
-        st.page_link("pages/2_Administrar_tarifas.py", label="Tarifas")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with col_usuarios:
-        st.markdown('<div class="nav-scope">', unsafe_allow_html=True)
-        st.page_link("pages/4_Usuarios.py", label="Usuarios")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with col_parametros:
-        st.markdown('<div class="nav-scope">', unsafe_allow_html=True)
-        st.page_link("pages/5_Parametros.py", label="Parámetros")
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    with col_logout:
-        st.markdown('<div class="nav-scope logout">', unsafe_allow_html=True)
-        if st.button("Salir", key="logout_btn"):
-            for k in ("usuario", "rol", "excluded_set", "route", "show_detail"):
-                if k in st.session_state:
-                    del st.session_state[k]
-            try:
-                st.switch_page("app.py")
-            except Exception:
-                st.experimental_rerun()
-        st.markdown('</div>', unsafe_allow_html=True)
+render_nav(active_top="inicio", active_child=None)
 
 # -------- Resolver imagen --------
 APP_DIR = Path(__file__).resolve().parent
