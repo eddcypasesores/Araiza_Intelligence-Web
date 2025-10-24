@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import html
 from uuid import uuid4
 from types import SimpleNamespace
 import pandas as pd
@@ -36,8 +37,8 @@ inject_css("styles.css")
 st.markdown(
     """
     <style>
-      .section { padding: 0 !important; margin: 0 0 1.1rem 0 !important; border: none !important; }
-      .section-header { margin-bottom:.35rem; }
+      .section { padding: 0 !important; margin: 0 0 .2rem 0 !important; border: none !important; }
+      .section-header { margin-bottom:.2rem; }
       .section-header > div[data-testid="stHorizontalBlock"] { margin:0 !important; }
       .section-header > div[data-testid="stHorizontalBlock"] > div[data-testid="column"] { padding-top:0 !important; padding-bottom:0 !important; }
       .section-header > div[data-testid="stHorizontalBlock"] > div[data-testid="column"]:nth-child(2) { padding-left:0 !important; margin-left:-0.45rem; }
@@ -52,10 +53,14 @@ st.markdown(
       .total-banner { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:.9rem 1.2rem; border-radius:16px; background:linear-gradient(135deg,#bfdbfe,#dbeafe); color:#1e3a8a; border:1px solid rgba(59,130,246,.25); margin-bottom:1.2rem; }
       .total-banner-label { font-size:1.05rem; font-weight:700; text-transform:uppercase; letter-spacing:.12em; }
       .total-banner-value { font-size:1.45rem; font-weight:800; }
-      .section-body { margin-top:.6rem; padding:.75rem 1rem; border-radius:14px; border:1px solid rgba(148,163,184,.25); background:rgba(248,250,252,.65); }
+      .section-body { margin-top:.4rem; padding:.75rem 1rem; border-radius:14px; border:1px solid rgba(148,163,184,.25); background:rgba(248,250,252,.65); }
       .section-body p { margin-bottom:.4rem; }
       .section-body table { width:100%; border-collapse:collapse; }
       .section-body td { padding:.15rem 0; }
+      .breakdown-card { margin-top:.6rem; padding:.65rem .85rem; border-radius:12px; border:1px solid rgba(148,163,184,.3); background:#fff; box-shadow:0 8px 20px -12px rgba(15,23,42,.35); display:flex; flex-direction:column; gap:.35rem; }
+      .breakdown-card .breakdown-item { display:flex; justify-content:space-between; gap:.75rem; font-size:.95rem; }
+      .breakdown-card .breakdown-item .breakdown-label { font-weight:600; color:#1e293b; }
+      .breakdown-card .breakdown-item .breakdown-value { font-weight:600; color:#1d4ed8; text-align:right; }
       .top-form { display:flex; flex-wrap:wrap; gap:1.35rem; align-items:stretch; margin-bottom:.85rem; }
       .top-form > div[data-testid="column"] { display:flex; }
       .top-form > div[data-testid="column"] > div { flex:1; display:flex; }
@@ -219,6 +224,19 @@ def section(title: str, total_value: float | None, body_fn=None) -> SectionOutpu
         f"<div class='section-total-pill'>${computed_total:,.2f}</div>",
         unsafe_allow_html=True,
     )
+
+    if show_details and result.breakdown:
+        breakdown_container = st.container()
+        with breakdown_container:
+            st.markdown("<div class='breakdown-card'>", unsafe_allow_html=True)
+            for raw_label, raw_value in result.breakdown:
+                label = html.escape(str(raw_label))
+                value = html.escape(str(raw_value))
+                st.markdown(
+                    f"<div class='breakdown-item'><span class='breakdown-label'>{label}</span><span class='breakdown-value'>{value}</span></div>",
+                    unsafe_allow_html=True,
+                )
+            st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
 
