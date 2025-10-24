@@ -9,6 +9,7 @@ import streamlit as st
 from pathlib import Path
 
 # --- Utilidades / Proyecto
+from core.auth import ensure_session_from_token
 from core.utils import inject_css, is_excluded, set_excluded, normalize_name
 from core.db import get_conn, ensure_schema, get_active_version_id
 from core.config import GOOGLE_MAPS_API_KEY
@@ -31,6 +32,7 @@ HARDCODED_MAPS_API_KEY = "AIzaSyBqSuQGWucHtypH60GpAAIxJVap76CgRL8"
 # Configuración de página + CSS
 # ===============================
 st.set_page_config(page_title="Costos de traslado", layout="wide", initial_sidebar_state="expanded")
+ensure_session_from_token()
 inject_css("styles.css")
 
 # Estilos de refuerzo (sin cajas grises; solo línea azul + layout)

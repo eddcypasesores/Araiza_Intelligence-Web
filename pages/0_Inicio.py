@@ -3,10 +3,13 @@ from pathlib import Path
 import base64
 import streamlit as st
 
+from core.auth import ensure_session_from_token
 from core.db import get_conn, ensure_schema
 from core.navigation import render_nav
 
 st.set_page_config(page_title="Inicio | Costos de Rutas", layout="wide")
+
+ensure_session_from_token()
 
 # -------- Seguridad --------
 if "usuario" not in st.session_state or "rol" not in st.session_state:

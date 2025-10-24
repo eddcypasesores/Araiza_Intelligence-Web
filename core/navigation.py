@@ -8,6 +8,8 @@ from urllib.parse import urlencode
 
 import streamlit as st
 
+from core.auth import auth_query_params, forget_session
+
 
 NAV_CSS = """
 <style>
@@ -186,6 +188,11 @@ NAV_CSS = """
     transition: background .15s ease, border-color .15s ease;
   }
 
+  .nav-logout:visited,
+  .nav-logout:hover {
+    color: #fff;
+  }
+
   .nav-logout:hover {
     background: var(--brand-red-dark);
     border-color: var(--brand-red-dark);
@@ -243,9 +250,8 @@ def _handle_logout_query() -> None:
         logout_flag = logout_value or "0"
 
     if logout_flag == "1":
+        forget_session()
         for key in (
-            "usuario",
-            "rol",
             "excluded_set",
             "route",
             "show_detail",
@@ -270,7 +276,7 @@ def _handle_logout_query() -> None:
 def _page_href(page: str | None, extra: dict[str, str] | None = None) -> str:
     """Build a Streamlit multipage URL for the given page and query params."""
 
-    query: dict[str, str] = {}
+    query: dict[str, str] = dict(auth_query_params())
     if page:
         page_param = PAGE_PARAM_NAMES.get(page)
         if page_param is None:
@@ -398,7 +404,12 @@ def render_nav(
     )
 
     nav_html = "".join(nav_parts)
-    logout_html = '<div class="nav-scope logout"><a class="nav-logout" href="/?logout=1" target="_self">Salir</a></div>'
+    logout_href = _page_href(None, {"logout": "1"})
+    logout_html = (
+        f'<div class="nav-scope logout">'
+        f'<a class="nav-logout" href="{logout_href}" target="_self">Cerrar sesión</a>'
+        "</div>"
+    )
 
     markup = (
         '<div class="nav-anchor"></div>'

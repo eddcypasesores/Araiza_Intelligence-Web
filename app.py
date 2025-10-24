@@ -1,13 +1,22 @@
 # app.py  (Login | Calculadora de Ruta)
 import base64
 from pathlib import Path
+
 import streamlit as st
+
+from core.auth import ensure_session_from_token, persist_login
 from core.db import get_conn, ensure_schema, validar_usuario
+from core.navigation import PAGE_PARAM_NAMES
 
 # -------------------------------
 # Configuración de página (login)
 # -------------------------------
 st.set_page_config(page_title="Login | Calculadora de Ruta", layout="centered")
+
+# -------------------------------
+# Restaura sesión desde token si existe
+# -------------------------------
+ensure_session_from_token()
 
 # Oculta sidebar y ajusta estilo general
 st.markdown(
@@ -63,12 +72,32 @@ ensure_schema(conn)
 # -------------------------------
 # Si ya hay sesión iniciada -> manda a Inicio
 # -------------------------------
+PAGE_PARAM_TO_SCRIPT = {label: script for script, label in PAGE_PARAM_NAMES.items()}
+
+
+def _requested_page() -> str | None:
+    """Return the script path requested through the ``page`` query parameter."""
+
+    params = st.query_params
+    raw_page = params.get("page")
+    if isinstance(raw_page, list):
+        candidate = raw_page[-1] if raw_page else None
+    else:
+        candidate = raw_page
+    if not candidate:
+        return None
+    return PAGE_PARAM_TO_SCRIPT.get(candidate)
+
+
 if "usuario" in st.session_state and "rol" in st.session_state:
+    target_script = _requested_page() or "pages/0_Inicio.py"
     try:
-        st.switch_page("pages/0_Inicio.py")
+        st.switch_page(target_script)
     except Exception:
-        st.success(f"Ya has iniciado sesión como: {st.session_state['usuario']} ({st.session_state['rol']}).")
-        st.info("Ve a **Inicio** desde el menú lateral.")
+        st.success(
+            f"Ya has iniciado sesión como: {st.session_state['usuario']} ({st.session_state['rol']})."
+        )
+        st.info("Utiliza el menú de navegación para continuar.")
     st.stop()
 
 # -------------------------------
@@ -131,11 +160,11 @@ if submitted:
         st.stop()
 
     if rol:
-        st.session_state["usuario"] = username.strip()
-        st.session_state["rol"] = rol
+        persist_login(username.strip(), rol)
         st.success(f"Bienvenido, {st.session_state['usuario']} ({rol}).")
+        target_script = _requested_page() or "pages/0_Inicio.py"
         try:
-            st.switch_page("pages/0_Inicio.py")
+            st.switch_page(target_script)
         except Exception:
             st.info("Ve a **Inicio** desde el menú lateral.")
             st.experimental_rerun()

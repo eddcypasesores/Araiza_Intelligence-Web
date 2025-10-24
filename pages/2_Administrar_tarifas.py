@@ -1,11 +1,13 @@
 import pandas as pd
 import streamlit as st
 
+from core.auth import ensure_session_from_token
 from core.db import ensure_schema, get_conn, CLASES
 from core.navigation import render_nav
 
 
 st.set_page_config(page_title="Tarifas", layout="wide")
+ensure_session_from_token()
 
 # ---- Seguridad ----
 if "usuario" not in st.session_state or "rol" not in st.session_state:
