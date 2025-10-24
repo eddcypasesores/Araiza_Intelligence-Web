@@ -36,30 +36,36 @@ inject_css("styles.css")
 st.markdown(
     """
     <style>
-      .block-container { padding-top: 1.2rem; }
+      .block-container { padding-top: 0.85rem; }
       .section, .section * { background: transparent !important; box-shadow: none !important; }
       .section { padding: 0 !important; margin: 0 0 .25rem 0 !important; border: none !important; }
-      .section-head { display:flex; align-items:center; gap:1rem; font-weight:800; color:#1e293b; letter-spacing:.2px; margin:.25rem 0 .75rem 0; }
+      .section-head { display:flex; align-items:center; gap:1rem; font-weight:800; color:#1e293b; letter-spacing:.2px; margin:.1rem 0 .45rem 0; }
       .section-head .title { text-transform:uppercase; font-size:1.25rem; flex:1 1 auto; }
       .section-head .total-pill { margin:0; }
-      .section-head .section-icon { display:flex; align-items:center; justify-content:center; min-width:120px; }
-      .section-head .section-icon img { max-width:120px; height:auto; }
-      .section-head .section-icon .emoji { font-size:54px; line-height:1; }
       .total-pill { display:inline-block; padding:.35rem .6rem; border-radius:999px; border:1px solid rgba(37,99,235,.25); min-width:110px; text-align:center; }
       .section-divider { height:0; border:0; border-top:3px solid #2563eb; margin:8px 0 14px 0; opacity:1; }
+      .section-main { display:flex; flex-direction:column; gap:.55rem; height:100%; min-height:120px; }
+      .section-main > div:first-child { margin-bottom:.35rem; }
+      .section-main [data-testid="stExpander"] { flex:1 1 auto; }
+      .section-art { display:flex; align-items:center; justify-content:center; height:100%; min-height:120px; }
+      .section-art img { max-height:150px; width:auto; }
+      .section-art .emoji { font-size:54px; line-height:1; }
       [data-testid="stExpander"]{ border:1px solid rgba(15,23,42,.08); background:transparent; }
       [data-testid="stExpander"]>div{ background:transparent !important; }
       .section input[aria-label=""], .section textarea[aria-label=""]{ display:none !important; }
-      .top-form { display:flex; flex-wrap:wrap; gap:1.5rem; align-items:stretch; margin-bottom:1.1rem; }
+      .top-form { display:flex; flex-wrap:wrap; gap:1.35rem; align-items:stretch; margin-bottom:.85rem; }
       .top-form > div[data-testid="column"] { display:flex; }
       .top-form > div[data-testid="column"] > div { flex:1; display:flex; }
-      .top-form .add-stop-card { flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; }
+      .top-form .add-stop-card { flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; min-height:120px; }
       .top-form .add-stop-card .add-stop-button { width:100%; }
-      .top-form .add-stop-card .add-stop-button button { height:120px; font-size:3.25rem; line-height:1; border-radius:18px; }
-      .top-form .address-stack { width:100%; display:flex; flex-direction:column; gap:.55rem; }
+      .top-form .add-stop-card .add-stop-button button { height:120px; font-size:3.1rem; line-height:1; border-radius:18px; }
+      .top-form .address-stack { width:100%; display:flex; flex-direction:column; gap:.5rem; }
       .top-form .address-stack > div[data-testid="stVerticalBlock"] { margin-bottom:0 !important; }
       .top-form .address-stack > div[data-testid="stHorizontalBlock"] { margin-top:.4rem; }
-      .top-form .address-stack > div[data-testid="stVerticalBlock"]:last-child { margin-top:.6rem; }
+      .top-form .address-stack > div[data-testid="stVerticalBlock"]:last-child { margin-top:.35rem; }
+      .top-form .meta-row { display:flex; gap:1rem; }
+      .top-form .meta-row > div[data-testid="column"] { display:flex; }
+      .top-form .meta-row > div[data-testid="column"] > div { flex:1; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -192,21 +198,20 @@ def section(title: str, icon: str | None, total_value: float | None, body_fn=Non
     Layout por sección. Devuelve el total utilizado (float).
     """
     st.markdown("<div class='section'>", unsafe_allow_html=True)
-    header_placeholder = st.empty()
-    left, right = st.columns([0.68, 0.32], gap="large")
+    col_main, col_icon = st.columns([0.68, 0.32], gap="large")
 
     computed_total = total_value if total_value is not None else 0.0
 
-    with left:
+    with col_main:
+        st.markdown("<div class='section-main'>", unsafe_allow_html=True)
+        header_placeholder = st.empty()
         if body_fn:
             with st.expander("Desglose / cálculo", expanded=False):
                 # Si el body_fn devuelve un número, se toma como total de la sección
                 ret = body_fn()
                 if isinstance(ret, (int, float)):
                     computed_total = float(ret)
-
-    with right:
-        st.write("")
+        st.markdown("</div>", unsafe_allow_html=True)
 
     data_url = None
     if icon_img:
@@ -214,18 +219,18 @@ def section(title: str, icon: str | None, total_value: float | None, body_fn=Non
         if p:
             data_url = img_to_data_url(p)
 
-    if data_url:
-        icon_markup = f"<div class='section-icon'><img src='{data_url}' alt='icon'/></div>"
-    elif icon:
-        icon_markup = f"<div class='section-icon'><span class='emoji'>{icon}</span></div>"
-    else:
-        icon_markup = "<div class='section-icon'></div>"
+    with col_icon:
+        st.markdown("<div class='section-art'>", unsafe_allow_html=True)
+        if data_url:
+            st.markdown(f"<img src='{data_url}' alt='icon'/>", unsafe_allow_html=True)
+        elif icon:
+            st.markdown(f"<span class='emoji'>{icon}</span>", unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
 
     header_html = (
         "<div class='section-head'>"
         f"<span class='title'>{title}</span>"
         f"<span class='total-pill'>${computed_total:,.2f}</span>"
-        f"{icon_markup}"
         "</div>"
     )
     header_placeholder.markdown(header_html, unsafe_allow_html=True)
@@ -391,6 +396,17 @@ st.markdown("<div class='hero-title'>COSTOS DE TRASLADO</div>", unsafe_allow_htm
 clases = ["MOTO", "AUTOMOVIL", "B2", "B3", "B4", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9"]
 default_idx = clases.index("T5")
 
+trab_df = read_trabajadores(conn)
+trab_opc = ["(Sin conductor)"] + [f"{r['nombre_completo']} — {r['numero_economico']}" for _, r in trab_df.iterrows()]
+
+dias_manual_flag_key = "dias_input_manual"
+if dias_manual_flag_key not in st.session_state:
+    st.session_state[dias_manual_flag_key] = False
+
+
+def _mark_dias_manual():
+    st.session_state[dias_manual_flag_key] = True
+
 stop_state_key = "show_intermediate_stop"
 if stop_state_key not in st.session_state:
     st.session_state[stop_state_key] = False
@@ -447,9 +463,27 @@ with st.container():
                 key="viat_input_main",
             )
         with meta_cols[2]:
-            dias_placeholder = st.empty()
+            distancia_base = float(st.session_state.get("maps_distance_km") or 0.0)
+            dias_sugeridos = max(1.0, round(distancia_base / 600.0, 1))
+            dias_init = float(st.session_state.get("dias_estimados_input", dias_sugeridos))
+            dias_est = st.number_input(
+                "DÍAS ESTIMADOS",
+                min_value=1.0,
+                step=0.5,
+                value=dias_init,
+                format="%.2f",
+                key="dias_estimados_input",
+                on_change=_mark_dias_manual,
+            )
 
-        conductor_placeholder = st.empty()
+        current_conductor = st.session_state.get("conductor_select", trab_opc[0])
+        default_conductor_idx = trab_opc.index(current_conductor) if current_conductor in trab_opc else 0
+        trab_show = st.selectbox(
+            "SELECCIONAR CONDUCTOR",
+            trab_opc,
+            index=default_conductor_idx,
+            key="conductor_select",
+        )
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
@@ -684,16 +718,6 @@ rendimiento = float(diesel_params.get("rendimiento_km_l") or 0.0)
 precio_litro = float(diesel_params.get("precio_litro") or 0.0)
 
 distancia_km_val = float(st.session_state.get("maps_distance_km") or 0.0)
-st.number_input(
-    "DISTANCIA (KM)",
-    min_value=0.0,
-    value=distancia_km_val,
-    step=0.1,
-    format="%.2f",
-    key="distance_display_km",
-    disabled=True,
-)
-
 km_totales = float(distancia_km_val or 0.0)
 litros_estimados = (km_totales / rendimiento) if rendimiento > 0 else 0.0
 subtotal_combustible = float(litros_estimados) * precio_litro
@@ -709,25 +733,19 @@ section("DIESEL", None, subtotal_combustible, _diesel_body, icon_img="diesel_car
 # ===============================
 # 3) MANO DE OBRA (método Edwin)
 # ===============================
-trab_df = read_trabajadores(conn)
-trab_opc = ["(Sin conductor)"] + [f"{r['nombre_completo']} — {r['numero_economico']}" for _, r in trab_df.iterrows()]
-with conductor_placeholder:
-    trab_show = st.selectbox(
-        "SELECCIONAR CONDUCTOR",
-        trab_opc,
-        index=0,
-        key="conductor_select",
-    )
+trab_show = st.session_state.get("conductor_select", trab_opc[0])
 
 dias_sugeridos = max(1.0, round((km_totales or 0.0) / 600.0, 1))
-dias_est = dias_placeholder.number_input(
-    "DÍAS ESTIMADOS",
-    min_value=1.0,
-    step=0.5,
-    value=dias_sugeridos,
-    format="%.2f",
-    key="dias_estimados_input",
-)
+if not st.session_state.get(dias_manual_flag_key) and (
+    float(st.session_state.get("dias_estimados_input", dias_sugeridos)) != float(dias_sugeridos)
+):
+    st.session_state["dias_estimados_input"] = dias_sugeridos
+elif st.session_state.get(dias_manual_flag_key) and (
+    float(st.session_state.get("dias_estimados_input", dias_sugeridos)) == float(dias_sugeridos)
+):
+    st.session_state[dias_manual_flag_key] = False
+
+dias_est = float(st.session_state.get("dias_estimados_input", dias_sugeridos))
 
 trabajador_sel = None
 if trab_show != "(Sin conductor)":
@@ -775,7 +793,7 @@ def _llantas_body():
     st.write(f"KM: {km_totales:,.2f}")
     st.write(f"Total: ${sub_llantas:,.2f}")
 
-section("LLANTAS", None, sub_llantas, _mo_body, icon_img="llanta_card.png")
+section("LLANTAS", None, sub_llantas, _llantas_body, icon_img="llanta_card.png")
 
 
 # ===============================
@@ -786,7 +804,7 @@ def _mantto_body():
     st.write(f"Costo por km: ${PARAMS['costos_km']['costo_mantto_km']}/km")
     st.write(f"KM: {km_totales:,.2f}")
     st.write(f"Total: ${sub_mantto:,.2f}")
-section("MANTENIMIENTO", None, sub_mantto, _mo_body, icon_img="mantenimiento_card.png")
+section("MANTENIMIENTO", None, sub_mantto, _mantto_body, icon_img="mantenimiento_card.png")
 
 # ===============================
 # 7) DEPRECIACIÓN
@@ -801,7 +819,7 @@ def _dep_body():
     st.write(f"Vida: {int(dep['vida_anios'])} años · KM/año: {int(dep['km_anuales'])}")
     st.write(f"Depreciación por km: ${dep_km:,.4f}")
     st.write(f"Total: ${sub_dep:,.2f}")
-section("DEPRECIACIÓN", None, sub_dep, _mo_body, icon_img="depreciacion_card.png")
+section("DEPRECIACIÓN", None, sub_dep, _dep_body, icon_img="depreciacion_card.png")
 
 # ===============================
 # 8) SEGUROS
@@ -813,7 +831,7 @@ def _seg_body():
     st.write(f"Prima anual: ${float(seg['prima_anual']):,.2f} · KM/año: {int(seg['km_anuales'])}")
     st.write(f"Seguro por km: ${seg_km:,.4f}")
     st.write(f"Total: ${sub_seg:,.2f}")
-section("SEGUROS", None, sub_seg, _mo_body, icon_img="seguros_card.png")
+section("SEGUROS", None, sub_seg, _seg_body, icon_img="seguros_card.png")
 
 
 # ===============================
@@ -821,7 +839,7 @@ section("SEGUROS", None, sub_seg, _mo_body, icon_img="seguros_card.png")
 # ===============================
 def _viat_body():
     st.write(f"Monto fijo ingresado: ${viaticos_mxn:,.2f}")
-section("Viaticos", None, viaticos_mxn, _mo_body, icon_img="viaticos_card.png")
+section("VIÁTICOS", None, viaticos_mxn, _viat_body, icon_img="viaticos_card.png")
 
 # ===============================
 # 10) CUSTODIA
@@ -831,7 +849,7 @@ def _cust_body():
     st.write(f"Costo por km: ${PARAMS['otros']['custodia_km']}/km")
     st.write(f"KM: {km_totales:,.2f}")
     st.write(f"Total: ${sub_custodia:,.2f}")
-section("CUSTODIA", None, sub_custodia, _mo_body, icon_img="custodia_card.png")
+section("CUSTODIA", None, sub_custodia, _cust_body, icon_img="custodia_card.png")
 
 # ===============================
 # 11) PERMISOS
@@ -839,7 +857,7 @@ section("CUSTODIA", None, sub_custodia, _mo_body, icon_img="custodia_card.png")
 sub_permiso = float(PARAMS["otros"]["permiso_viaje"] or 0.0)
 def _perm_body():
     st.write(f"Permiso por viaje: ${sub_permiso:,.2f}")
-section("PERMISOS", None, sub_permiso, _mo_body, icon_img="permiso_card.png")
+section("PERMISOS", None, sub_permiso, _perm_body, icon_img="permiso_card.png")
 
 # ===============================
 # 12) DEF
@@ -852,7 +870,7 @@ def _def_body():
     st.write(f"% DEF vs diésel: {pct_def*100:.2f}%")
     st.write(f"Litros DEF: {litros_def:,.2f} · Precio DEF/L: ${precio_def:,.2f}")
     st.write(f"Total: ${sub_def:,.2f}")
-section("DEF", None, sub_def, _mo_body, icon_img="def_card.png")
+section("DEF", None, sub_def, _def_body, icon_img="def_card.png")
 
 # ===============================
 # 13) COMISIÓN TAG
@@ -863,7 +881,7 @@ def _tag_body():
     st.write(f"Comisión TAG %: {pct_tag*100:.2f}%")
     st.write(f"Base peajes: ${peajes_ajustados:,.2f}")
     st.write(f"Total: ${sub_tag:,.2f}")
-section("COMISIÓN TAG", None, sub_tag, _mo_body, icon_img="tag_card.png")
+section("COMISIÓN TAG", None, sub_tag, _tag_body, icon_img="tag_card.png")
 
 # ===============================
 # Base para (14) Financiamiento, (15) Overhead, (16) Utilidad
@@ -894,7 +912,7 @@ def _fin_body():
     st.write(f"Tasa anual: {tasa*100:.2f}% · Días de cobro: {dias_cobro}")
     st.write(f"Base: ${base_val:,.2f}")
     st.write(f"Total: ${sub_fin:,.2f}")
-section("FINANCIAMIENTO", None, sub_fin, _mo_body, icon_img="financiamiento_card.png")
+section("FINANCIAMIENTO", None, sub_fin, _fin_body, icon_img="financiamiento_card.png")
 
 # ===============================
 # 15) OVERHEAD
@@ -905,7 +923,7 @@ def _ov_body():
     st.write(f"Overhead %: {pct_ov*100:.2f}%")
     st.write(f"Base: ${base_val:,.2f}")
     st.write(f"Total: ${sub_ov:,.2f}")
-section("OVERHEAD", None, sub_ov, _mo_body, icon_img="overhead_card.png")
+section("OVERHEAD", None, sub_ov, _ov_body, icon_img="overhead_card.png")
 
 # ===============================
 # 16) UTILIDAD
@@ -916,7 +934,7 @@ def _ut_body():
     st.write(f"Utilidad %: {pct_ut*100:.2f}%")
     st.write(f"Base + Overhead: ${(base_val+sub_ov):,.2f}")
     st.write(f"Total: ${sub_ut:,.2f}")
-section("UTILIDAD", None, sub_ut, _mo_body, icon_img="utilidad_card.png")
+section("UTILIDAD", None, sub_ut, _ut_body, icon_img="utilidad_card.png")
 
 # ===============================
 # TOTAL GENERAL + PDF
