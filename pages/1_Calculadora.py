@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import importlib.util
 import html
 from uuid import uuid4
 from types import SimpleNamespace
@@ -9,8 +10,9 @@ import pandas as pd
 import streamlit as st
 
 # --- Utilidades / Proyecto
+from core.auth import ensure_session_from_token, persist_login
 from core.utils import inject_css, is_excluded, set_excluded, normalize_name
-from core.db import get_conn, ensure_schema, get_active_version_id
+from core.db import get_conn, ensure_schema, get_active_version_id, validar_usuario
 from core.config import GOOGLE_MAPS_API_KEY
 from core.rutas import (
     load_routes,
@@ -19,13 +21,14 @@ from core.rutas import (
     match_plazas_for_route,
 )
 from core.tarifas import tarifa_por_plaza
-from core.pdf import build_pdf_costeo
 from core.driver_costs import read_trabajadores, costo_diario_trabajador_auto
 from core.params import read_params
 from core.maps import GoogleMapsClient, GoogleMapsError
 from core.navigation import render_nav
 
 HARDCODED_MAPS_API_KEY = "AIzaSyBqSuQGWucHtypH60GpAAIxJVap76CgRL8"
+
+ALLOWED_ROLES: set[str] = {"admin", "operador"}
 
 # ===============================
 # Configuración de página + CSS
@@ -80,24 +83,97 @@ st.markdown(
 )
 
 # ===============================
-# Seguridad / sesión
+# Sesión y permisos
 # ===============================
-if "usuario" not in st.session_state or "rol" not in st.session_state:
-    st.warning("⚠️ Debes iniciar sesión primero.")
-    try:
-        st.switch_page("app.py")
-    except Exception:
-        st.stop()
-    st.stop()
+ensure_session_from_token()
 
-# Barra de navegación compartida
-render_nav(active_top=None, active_child=None)
+render_nav(active_top="calculadora", active_child=None)
 
-# ===============================
-# Conexión y datos base
-# ===============================
 conn = get_conn()
 ensure_schema(conn)
+
+
+def _render_login() -> None:
+    """Muestra el formulario de acceso para la calculadora."""
+
+    st.title("Calculadora de Traslados")
+    st.subheader("Inicia sesión para continuar")
+    st.write(
+        "Los perfiles autorizados son **Administradores** y **Calculadores**. "
+        "Si necesitas acceso solicita ayuda al área de sistemas."
+    )
+
+    raw_next = st.query_params.get("next")
+    redirect_target: str | None
+    if isinstance(raw_next, list):
+        redirect_target = raw_next[-1] if raw_next else None
+    elif isinstance(raw_next, str):
+        redirect_target = raw_next or None
+    else:
+        redirect_target = None
+
+    current_role = st.session_state.get("rol")
+    if current_role and current_role not in ALLOWED_ROLES:
+        st.error(
+            "Tu usuario existe, pero no cuenta con permisos para utilizar la calculadora. "
+            "Cierra sesión e intenta con otra cuenta o contacta al administrador."
+        )
+
+    with st.form("calculadora_login", clear_on_submit=False):
+        username = st.text_input("Usuario", placeholder="ej. admin")
+        password = st.text_input("Contraseña", type="password", placeholder="••••••••")
+        submitted = st.form_submit_button("Iniciar sesión", use_container_width=True)
+
+    if not submitted:
+        return
+
+    username = username.strip()
+
+    try:
+        rol = validar_usuario(conn, username, password)
+    except Exception as exc:  # pragma: no cover - feedback en UI
+        st.error(
+            "No fue posible validar las credenciales. Verifica la conexión a la base de datos."
+        )
+        st.caption(f"Detalle técnico: {exc}")
+        return
+
+    if not rol:
+        st.error("Usuario o contraseña incorrectos.")
+        return
+
+    if rol not in ALLOWED_ROLES:
+        st.error(
+            "Tu perfil se autentica correctamente, pero no tiene permiso para acceder a la calculadora."
+        )
+        return
+
+    persist_login(username, rol)
+    welcome = f"Bienvenido, {username} ({'Administrador' if rol == 'admin' else 'Calculador'})."
+    st.session_state["login_flash"] = welcome
+
+    if redirect_target:
+        remaining = {k: v for k, v in st.query_params.items() if k != "next"}
+        try:
+            st.experimental_set_query_params(**remaining)
+        except Exception:
+            pass
+        try:
+            st.switch_page(redirect_target)
+        except Exception:
+            st.experimental_rerun()
+        return
+
+    st.experimental_rerun()
+
+
+if st.session_state.get("rol") not in ALLOWED_ROLES:
+    _render_login()
+    st.stop()
+
+flash_message = st.session_state.pop("login_flash", None)
+if flash_message:
+    st.success(flash_message)
 ROUTES = load_routes()
 PLAZAS = plazas_catalog(ROUTES)
 
@@ -147,6 +223,27 @@ for bucket in ("autocomplete", "place_details", "directions", "plaza_lookup", "p
     maps_cache.setdefault(bucket, {})
 
 session_token = st.session_state.setdefault("gmaps_session_token", str(uuid4()))
+
+
+_PDF_BUILDER = None
+
+
+def get_pdf_builder():
+    global _PDF_BUILDER
+    if _PDF_BUILDER is not None:
+        return _PDF_BUILDER
+
+    if importlib.util.find_spec("reportlab") is None:
+        st.error(
+            "La librería opcional 'reportlab' es necesaria para generar el PDF. "
+            "Ejecuta `pip install -r requirements.txt` o `pip install reportlab` e intenta de nuevo."
+        )
+        st.stop()
+
+    from core.pdf import build_pdf_costeo  # noqa: WPS433 (import dentro de la función)
+
+    _PDF_BUILDER = build_pdf_costeo
+    return _PDF_BUILDER
 
 
 @dataclass
@@ -1113,6 +1210,8 @@ with total_banner:
 pdf_sections = [(sec.title, sec.total, sec.breakdown) for sec in section_outputs]
 
 # PDF
+pdf_builder = get_pdf_builder()
+
 try:
     df_pdf = df.copy()
     df_pdf["excluir"] = df_pdf["idx"].apply(lambda i: is_excluded(int(i)))
@@ -1139,7 +1238,7 @@ try:
     # Usa el MISMO total que muestras en la pantalla
     total_pdf = float(total_general or 0.0)
 
-    pdf_bytes = build_pdf_costeo(
+    pdf_bytes = pdf_builder(
         ruta_nombre=ruta_nombre,
         origen=origin_label,
         destino=destination_label,
@@ -1166,7 +1265,7 @@ try:
         data=pdf_bytes,
         file_name=f"costeo_{normalize_name(origin_label)}_{normalize_name(destination_label)}.pdf",
         mime="application/pdf",
-        use_container_width=True
+        use_container_width=True,
     )
 except Exception as e:
     st.warning(f"No se pudo generar PDF: {e}")
