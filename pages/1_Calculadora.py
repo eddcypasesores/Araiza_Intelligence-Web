@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import importlib.util
 import html
 from uuid import uuid4
 from types import SimpleNamespace
@@ -19,7 +20,6 @@ from core.rutas import (
     match_plazas_for_route,
 )
 from core.tarifas import tarifa_por_plaza
-from core.pdf import build_pdf_costeo
 from core.driver_costs import read_trabajadores, costo_diario_trabajador_auto
 from core.params import read_params
 from core.maps import GoogleMapsClient, GoogleMapsError
@@ -147,6 +147,27 @@ for bucket in ("autocomplete", "place_details", "directions", "plaza_lookup", "p
     maps_cache.setdefault(bucket, {})
 
 session_token = st.session_state.setdefault("gmaps_session_token", str(uuid4()))
+
+
+_PDF_BUILDER = None
+
+
+def get_pdf_builder():
+    global _PDF_BUILDER
+    if _PDF_BUILDER is not None:
+        return _PDF_BUILDER
+
+    if importlib.util.find_spec("reportlab") is None:
+        st.error(
+            "La librería opcional 'reportlab' es necesaria para generar el PDF. "
+            "Ejecuta `pip install -r requirements.txt` o `pip install reportlab` e intenta de nuevo."
+        )
+        st.stop()
+
+    from core.pdf import build_pdf_costeo  # noqa: WPS433 (import dentro de la función)
+
+    _PDF_BUILDER = build_pdf_costeo
+    return _PDF_BUILDER
 
 
 @dataclass
@@ -1113,6 +1134,8 @@ with total_banner:
 pdf_sections = [(sec.title, sec.total, sec.breakdown) for sec in section_outputs]
 
 # PDF
+pdf_builder = get_pdf_builder()
+
 try:
     df_pdf = df.copy()
     df_pdf["excluir"] = df_pdf["idx"].apply(lambda i: is_excluded(int(i)))
@@ -1139,7 +1162,7 @@ try:
     # Usa el MISMO total que muestras en la pantalla
     total_pdf = float(total_general or 0.0)
 
-    pdf_bytes = build_pdf_costeo(
+    pdf_bytes = pdf_builder(
         ruta_nombre=ruta_nombre,
         origen=origin_label,
         destino=destination_label,
@@ -1166,7 +1189,7 @@ try:
         data=pdf_bytes,
         file_name=f"costeo_{normalize_name(origin_label)}_{normalize_name(destination_label)}.pdf",
         mime="application/pdf",
-        use_container_width=True
+        use_container_width=True,
     )
 except Exception as e:
     st.warning(f"No se pudo generar PDF: {e}")
