@@ -283,7 +283,7 @@ def _handle_logout_query() -> None:
     try:
         st.switch_page("pages/0_Inicio.py")
     except Exception:
-        st.experimental_rerun()
+        st.rerun()
     st.stop()
 
 

@@ -192,10 +192,10 @@ def to_data_url(p: Path):
         return None
 
 img_path = (
-    resolve_asset("assets/logo.jpg")
-    or resolve_asset("logo.jpg")
-    or resolve_asset("assets/logo.jpg")
-    or resolve_asset("logo.jpg")
+    resolve_asset("assets/Inicio_card.png")
+    or resolve_asset("Inicio_card.png")
+    or resolve_asset("assets/inicio_card.png")
+    or resolve_asset("inicio_card.png")
 )
 img_data = to_data_url(img_path) if img_path else None
 
@@ -255,3 +255,4 @@ with st.container():
             unsafe_allow_html=True,
         )
         st.markdown('</div></div></div>', unsafe_allow_html=True)
+

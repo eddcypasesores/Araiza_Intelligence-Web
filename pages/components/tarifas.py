@@ -86,7 +86,7 @@ def render_agregar(conn, plaza_id: int) -> None:
         )
         conn.commit()
         st.success(f"Tarifa para {clase} guardada correctamente.")
-        st.experimental_rerun()
+        st.rerun()
 
 
 def _to_float(value) -> float:
@@ -138,7 +138,7 @@ def render_modificar(conn, plaza_id: int) -> None:
             )
         conn.commit()
         st.success("Tarifas actualizadas ✅")
-        st.experimental_rerun()
+        st.rerun()
 
 
 def render_eliminar(conn, plaza_id: int) -> None:
@@ -161,4 +161,4 @@ def render_eliminar(conn, plaza_id: int) -> None:
         )
         conn.commit()
         st.success("Tarifas eliminadas.")
-        st.experimental_rerun()
+        st.rerun()

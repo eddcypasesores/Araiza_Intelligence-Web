@@ -25,6 +25,7 @@ from core.driver_costs import read_trabajadores, costo_diario_trabajador_auto
 from core.params import read_params
 from core.maps import GoogleMapsClient, GoogleMapsError
 from core.navigation import render_nav
+from core.streamlit_compat import rerun, set_query_params
 
 HARDCODED_MAPS_API_KEY = "AIzaSyBqSuQGWucHtypH60GpAAIxJVap76CgRL8"
 
@@ -87,7 +88,8 @@ st.markdown(
 # ===============================
 ensure_session_from_token()
 
-render_nav(active_top="calculadora", active_child=None)
+is_logged_in = bool(st.session_state.get("usuario"))
+render_nav(active_top="calculadora", active_child=None, show_cta=is_logged_in)
 
 conn = get_conn()
 ensure_schema(conn)
@@ -98,10 +100,6 @@ def _render_login() -> None:
 
     st.title("Calculadora de Traslados")
     st.subheader("Inicia sesión para continuar")
-    st.write(
-        "Los perfiles autorizados son **Administradores** y **Calculadores**. "
-        "Si necesitas acceso solicita ayuda al área de sistemas."
-    )
 
     raw_next = st.query_params.get("next")
     redirect_target: str | None
@@ -155,16 +153,16 @@ def _render_login() -> None:
     if redirect_target:
         remaining = {k: v for k, v in st.query_params.items() if k != "next"}
         try:
-            st.experimental_set_query_params(**remaining)
+            set_query_params(remaining)
         except Exception:
             pass
         try:
             st.switch_page(redirect_target)
         except Exception:
-            st.experimental_rerun()
+            rerun()
         return
 
-    st.experimental_rerun()
+    rerun()
 
 
 if st.session_state.get("rol") not in ALLOWED_ROLES:
