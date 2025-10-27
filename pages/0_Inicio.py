@@ -19,146 +19,78 @@ CUSTOM_CSS = """
     --brand-red-dark: #b91c1c;
   }
 
-  .hero-anchor + div[data-testid="stHorizontalBlock"] {
-    display: flex !important;
+  .module-hero {
+    display: flex;
     flex-wrap: wrap;
     gap: clamp(28px, 5vw, 48px);
-    margin: 0 !important;
-    padding: 0 !important;
     align-items: center;
+    margin-top: clamp(12px, 3vw, 24px);
   }
 
-  .hero-anchor + div[data-testid="stHorizontalBlock"] > div {
-    flex: 1 1 360px !important;
-    padding: 0 !important;
-    margin: 0 !important;
+  .module-hero > div {
+    flex: 1 1 360px;
     min-width: 0;
     display: flex;
-    align-items: center;
-    height: 100%;
-  }
-
-  .hero-anchor + div[data-testid="stHorizontalBlock"] > div > div:first-child {
-    height: 100%;
-    width: 100%;
-    display: flex;
     flex-direction: column;
-    justify-content: center;
+    gap: clamp(16px, 2vw, 24px);
   }
 
-  .hero-img-wrap,
-  .hero-text-wrap {
-    height: 100%;
-    width: 100%;
-    display: flex;
-    flex-direction: column;
-  }
-
-  .hero-img-wrap > div,
-  .hero-img-wrap > div > div,
-  .hero-img-wrap > div > div > div {
-    flex: 1 1 0%;
-    height: 100%;
-    min-height: 0;
-  }
-
-  .hero-img-wrap {
-    overflow: hidden;
-    border-radius: 18px;
-    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
-  }
-
-  .hero-img-wrap > div > div > div > img {
-    height: 100%;
-    width: 100%;
-    object-fit: cover;
-  }
-
-  .hero-text-wrap {
-    padding: clamp(4px, 1vw, 12px) clamp(4px, 1vw, 12px);
-  }
-
-  .text-box {
-    width: 100%;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: clamp(18px, 2.6vw, 28px);
-  }
-
-  .headline-stack {
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-  }
-
-  .headline-stack .copy {
-    margin-top: 0;
-    display: flex;
-    flex-direction: column;
-    gap: clamp(8px, 1.5vw, 12px);
-  }
-
-  .headline-stack .copy .lead {
-    margin: 0;
-  }
-
-  .features {
-    display: flex;
-    flex-direction: column;
-    gap: clamp(8px, 1.6vw, 14px);
-  }
-
-  .features .features-title {
-    font-weight: 700;
-    margin: 0;
-  }
-
-  .title {
-    font-size: clamp(24px, 2.8vw, 36px);
+  .module-copy h1 {
+    font-size: clamp(28px, 3.4vw, 40px);
     font-weight: 800;
+    color: #0f172a;
     margin: 0;
-    letter-spacing: 0.3px;
-    white-space: nowrap;
   }
 
-  .lead {
-    font-size: clamp(15px, 1.55vw, 18px);
+  .module-copy p {
+    font-size: clamp(15px, 1.6vw, 18px);
+    line-height: 1.55;
     color: #334155;
     margin: 0;
-    line-height: 1.5;
-    text-align: justify;
   }
 
-  .bullets {
-    margin: 2px 0 0 clamp(18px, 2vw, 24px);
+  .module-copy ul {
+    margin: 0 0 0 clamp(18px, 2vw, 24px);
     color: #0f172a;
-    font-size: clamp(14px, 1.4vw, 17px);
+    font-size: clamp(14px, 1.5vw, 17px);
   }
 
-  .bullets li {
-    margin-bottom: clamp(2px, 0.8vw, 4px);
-    line-height: 1.3;
+  .module-copy ul li {
+    margin-bottom: clamp(2px, 1vw, 6px);
+    line-height: 1.35;
   }
 
-  @media (max-width: 780px) {
-    .title {
-      white-space: normal;
-    }
+  .module-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: clamp(18px, 3vw, 28px);
+  }
 
-    .hero-anchor + div[data-testid="stHorizontalBlock"] {
-      flex-direction: column;
-      align-items: stretch;
-    }
+  .module-actions button[kind="primary"] {
+    min-width: 220px;
+  }
 
-    .hero-img-wrap {
-      min-height: 260px;
-    }
+  .module-cover {
+    align-items: stretch;
+  }
 
-    .hero-text-wrap {
-      padding: clamp(12px, 4vw, 20px) 0;
-    }
+  .module-features {
+    margin-top: clamp(16px, 3vw, 28px);
+  }
 
+  .module-features-title {
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0;
+  }
+
+  .module-cover img {
+    width: 100%;
+    border-radius: 18px;
+    box-shadow: 0 20px 36px rgba(15, 23, 42, 0.18);
+    object-fit: cover;
+    max-height: 420px;
   }
 </style>
 """
@@ -191,68 +123,57 @@ def to_data_url(p: Path):
     except Exception:
         return None
 
+# Use the project logo on the general home
 img_path = (
-    resolve_asset("assets/Inicio_card.png")
-    or resolve_asset("Inicio_card.png")
-    or resolve_asset("assets/inicio_card.png")
-    or resolve_asset("inicio_card.png")
+    resolve_asset("assets/logo.jpg")
+    or resolve_asset("logo.jpg")
 )
 img_data = to_data_url(img_path) if img_path else None
 
-# -------- HERO (imagen izquierda | texto derecha, MISMA altura) --------
+# -------- HERO unificado --------
 with st.container():
-    st.markdown('<div class="hero-anchor"></div>', unsafe_allow_html=True)
-    col_img, col_txt = st.columns(2, gap="large")
+    st.markdown('<div class="module-hero">', unsafe_allow_html=True)
 
-    with col_img:
-        st.markdown('<div class="hero-img-wrap">', unsafe_allow_html=True)
-        if img_data:
-            # Aquí inyectamos la imagen con la clase hero-image
-            st.markdown(
-                f"<img src='{img_data}' class='hero-image' alt='Transporte y rutas' />",
-                unsafe_allow_html=True,
-            )
-        else:
-            st.info("Falta la imagen en assets/Inicio_card.png")
-        st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('<div class="module-copy">', unsafe_allow_html=True)
+    st.markdown('<h1>Araiza Intelligence</h1>', unsafe_allow_html=True)
+    st.markdown(
+        """
+        <p>
+          Somos la unidad de anal&iacute;tica y automatizaci&oacute;n del Grupo Araiza. Transformamos datos operativos en decisiones estrat&eacute;gicas mediante herramientas inteligentes que integran geolocalizaci&oacute;n, modelos de costos y tableros ejecutivos.
+        </p>
+        <p>
+          Con la Calculadora de Traslados estima en segundos el costo real de cada ruta y alinea a tus equipos de log&iacute;stica con tarifas transparentes y actualizadas.
+        </p>
+        <p>
+          Complementa la operaci&oacute;n con m&oacute;dulos especializados de riesgo fiscal y paneles administrativos pensados para equipos directivos.
+        </p>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        """
+        <div class="module-features">
+          <p class="module-features-title">&iquest;Qu&eacute; hacemos?</p>
+          <ul>
+            <li>Modelamos escenarios log&iacute;sticos con datos en tiempo real.</li>
+            <li>Automatizamos c&aacute;lculos de costos y presupuestos de traslados.</li>
+            <li>Monitoreamos alertas de riesgo fiscal y cumplimiento.</li>
+            <li>Conectamos a tus equipos con indicadores accionables.</li>
+            <li>Dise&ntilde;amos experiencias digitales centradas en la operaci&oacute;n.</li>
+          </ul>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    with col_txt:
-        # El texto define la altura. La imagen se estira para igualarla.
+    st.markdown('<div class="module-cover">', unsafe_allow_html=True)
+    if img_data:
         st.markdown(
-            '<div class="hero-text-wrap"><div class="text-box"><div class="headline-stack">',
+            f"<img src='{img_data}' alt='Araiza Intelligence' />",
             unsafe_allow_html=True,
         )
-        st.markdown('<div class="title">Araiza Intelligence</div>', unsafe_allow_html=True)
-        st.markdown('<div class="copy">', unsafe_allow_html=True)
-        st.markdown(
-            """
-          <p class="lead">
-          Somos la unidad de analítica y automatización del Grupo Araiza. Transformamos datos operativos en decisiones estratégicas mediante herramientas inteligentes que integran geolocalización, modelos de costos y tableros ejecutivos.
-          </p>
-          <p class="lead">
-          Con la Calculadora de Traslados estima en segundos el costo real de cada ruta y alinea a tus equipos de logística con tarifas transparentes y actualizadas.
-          </p>
-          <p class="lead">
-          Complementa la operación con módulos especializados de riesgo fiscal y paneles administrativos pensados para equipos directivos.
-          </p>
-        """,
-            unsafe_allow_html=True,
-        )
-        st.markdown('</div></div>', unsafe_allow_html=True)
-        st.markdown(
-            """
-          <div class="features">
-            <p class="lead features-title">¿Qué hacemos?</p>
-            <ul class="bullets">
-              <li>Modelamos escenarios logísticos con datos en tiempo real.</li>
-              <li>Automatizamos cálculos de costos y presupuestos de traslados.</li>
-              <li>Monitoreamos alertas de riesgo fiscal y cumplimiento.</li>
-              <li>Conectamos a tus equipos con indicadores accionables.</li>
-              <li>Diseñamos experiencias digitales centradas en la operación.</li>
-            </ul>
-          </div>
-        """,
-            unsafe_allow_html=True,
-        )
-        st.markdown('</div></div></div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
 

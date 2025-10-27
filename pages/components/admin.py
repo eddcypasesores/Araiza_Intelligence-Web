@@ -14,7 +14,7 @@ from core.db import ensure_schema, get_conn
 from core.navigation import render_nav
 
 
-def _redirect_to_login(target_page: str | None = None) -> None:
+def _redirect_to_login(target_page: str | None = None, switch_to_page: str = "pages/1_Calculadora.py") -> None:
     """Redirige al login en caso de que la sesión no sea válida."""
 
     st.warning("⚠️ Debes iniciar sesión primero.")
@@ -26,7 +26,7 @@ def _redirect_to_login(target_page: str | None = None) -> None:
     except Exception:
         pass
     try:
-        st.switch_page("pages/1_Calculadora.py")
+        st.switch_page(switch_to_page)
     except Exception:
         st.stop()
     st.stop()
@@ -86,7 +86,13 @@ def init_admin_section(
         except ValueError:
             redirect_target = Path(caller_file).name
 
-    _ensure_admin_session(redirect_target)
+    # Riesgo Fiscal no requiere rol de administrador; solo sesion valida
+    if active_top == "riesgo":
+        ensure_session_from_token()
+        if "usuario" not in st.session_state or "rol" not in st.session_state:
+            _redirect_to_login(redirect_target, switch_to_page="pages/14_Riesgo_fiscal.py")
+    else:
+        _ensure_admin_session(redirect_target)
 
     conn = get_conn()
     ensure_schema(conn)

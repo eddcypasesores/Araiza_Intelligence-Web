@@ -89,7 +89,12 @@ st.markdown(
 ensure_session_from_token()
 
 is_logged_in = bool(st.session_state.get("usuario"))
-render_nav(active_top="calculadora", active_child=None, show_cta=is_logged_in)
+render_nav(
+    active_top="calculadora",
+    active_child=None,
+    show_cta=is_logged_in,
+    show_inicio=not bool(st.session_state.get("calc_show_landing", False)),
+)
 
 conn = get_conn()
 ensure_schema(conn)
@@ -147,6 +152,7 @@ def _render_login() -> None:
         return
 
     persist_login(username, rol)
+    st.session_state["calc_show_landing"] = True
     welcome = f"Bienvenido, {username} ({'Administrador' if rol == 'admin' else 'Calculador'})."
     st.session_state["login_flash"] = welcome
 
@@ -170,8 +176,75 @@ if st.session_state.get("rol") not in ALLOWED_ROLES:
     st.stop()
 
 flash_message = st.session_state.pop("login_flash", None)
-if flash_message:
+# No banners on landing screens; show only when not landing
+_pending_landing = bool(st.session_state.get("calc_show_landing", True))
+if (flash_message and not _pending_landing):
     st.success(flash_message)
+
+# Module landing after login: brief intro + start button
+if bool(st.session_state.get("calc_show_landing", True)):
+    st.markdown(
+        """
+        <style>
+          .module-hero { display:flex; flex-wrap:wrap; gap:clamp(28px,5vw,48px); align-items:center; margin-top:clamp(12px,3vw,24px); }
+          .module-hero > div { flex:1 1 360px; min-width:0; display:flex; flex-direction:column; gap:clamp(16px,2vw,24px); }
+          .module-copy h1 { font-size:clamp(28px,3.4vw,40px); margin:0; font-weight:800; color:#0f172a; }
+          .module-copy p { font-size:clamp(15px,1.6vw,18px); line-height:1.55; color:#334155; margin:0; }
+          .module-copy ul { margin:0 0 0 clamp(18px,2vw,24px); color:#0f172a; font-size:clamp(14px,1.5vw,17px); }
+          .module-copy ul li { margin-bottom:clamp(2px,1vw,6px); line-height:1.35; }
+          .module-actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:clamp(18px,3vw,28px); }
+          .module-actions button[kind="primary"] { min-width:220px; }
+          .module-cover { align-items:stretch; }
+          .module-cover img { width:100%; border-radius:18px; box-shadow:0 20px 36px rgba(15,23,42,0.18); object-fit:cover; max-height:420px; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown('<div class="module-hero">', unsafe_allow_html=True)
+    st.markdown('<div class="module-copy">', unsafe_allow_html=True)
+    st.markdown('<h1>Precisi&oacute;n en movimiento</h1>', unsafe_allow_html=True)
+    st.markdown(
+        """
+        <p>
+          Nuestra plataforma calcula con exactitud los costos reales de cada flete, integrando tecnolog&iacute;a avanzada, APIs de Google Maps y bases de datos inteligentes para ofrecer resultados precisos y actualizados en tiempo real.
+        </p>
+        <p>
+          Obt&eacute;n en segundos el costo total de una ruta &mdash; peajes, combustible, mantenimiento y dem&aacute;s gastos operativos &mdash; con una interfaz &aacute;gil, intuitiva y confiable.
+        </p>
+        <p>
+          Adem&aacute;s, administra f&aacute;cilmente usuarios y trabajadores, garantizando control, trazabilidad y eficiencia en cada viaje.
+        </p>
+        <p><strong>Caracter&iacute;sticas principales:</strong></p>
+        <ul>
+          <li>C&aacute;lculo autom&aacute;tico de rutas, distancias y casetas.</li>
+          <li>Estimaci&oacute;n real de combustible y costos operativos.</li>
+          <li>Gesti&oacute;n integrada de usuarios y trabajadores.</li>
+          <li>Reportes claros y listos para la toma de decisiones.</li>
+          <li>Transparencia y precisi&oacute;n en cada operaci&oacute;n.</li>
+        </ul>
+        """,
+        unsafe_allow_html=True,
+    )
+    st.markdown('<div class="module-actions">', unsafe_allow_html=True)
+    if st.button("Calcular ruta", type="primary", key="btn_calc_start"):
+        st.session_state["calc_show_landing"] = False
+        try:
+            st.rerun()
+        except Exception:
+            pass
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="module-cover">', unsafe_allow_html=True)
+    try:
+        st.image("assets/Inicio_card.png", use_container_width=True)
+    except Exception:
+        pass
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    st.markdown('</div>', unsafe_allow_html=True)
+    st.stop()
 ROUTES = load_routes()
 PLAZAS = plazas_catalog(ROUTES)
 

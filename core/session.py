@@ -16,6 +16,7 @@ _LOGOUT_SESSION_KEYS: tuple[str, ...] = (
     "tarifas_view",
     "usuarios_view",
     "parametros_view",
+    "calc_show_landing",
 )
 
 

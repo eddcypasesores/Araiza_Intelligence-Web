@@ -467,7 +467,65 @@ def render_nav(
             )
         )
 
+    # Ajustes de mena por contexto solicitado
+    try:
+        if active_top == "calculadora":
+            # Cambiar "Inicio" para que lleve a la portada/login de calculadora
+            if show_inicio and nav_parts:
+                nav_parts[0] = _root_link_html(
+                    label="Inicio",
+                    target_page="pages/1_Calculadora.py",
+                    top_key="inicio",
+                    active_top=active_top,
+                )
+            # Remover enlaces no relacionados (Riesgo Fiscal, Acerca de Nosotros)
+            if str(rol).lower() == "admin":
+                nav_parts = [
+                    p for p in nav_parts if ("Tarifas" in p) or ("Usuarios" in p) or ("Inicio" in p)
+                ]
+            else:
+                nav_parts = [
+                    p for p in nav_parts if ("Traslados" in p) or ("Inicio" in p)
+                ]
+                # Renombrar el enlace para mayor claridad
+                nav_parts = [p.replace(">Traslados<", ">Calcular ruta<") for p in nav_parts]
+        elif active_top == "riesgo":
+            # "Inicio" debe llevar al inicio de Riesgo Fiscal; ocultar otros menas
+            if show_inicio and nav_parts:
+                nav_parts[0] = _root_link_html(
+                    label="Inicio",
+                    target_page="pages/14_Riesgo_fiscal.py",
+                    top_key="inicio",
+                    active_top=active_top,
+                )
+                nav_parts = [nav_parts[0]]
+            else:
+                nav_parts = []
+    except Exception:
+        # Si algo falla en el filtrado, continuar con el mena original
+        pass
+
+    # If landing pages requested hiding the Inicio link, replace it with a title label
+    if not show_inicio:
+        try:
+            if active_top == "calculadora" and st.session_state.get("calc_show_landing"):
+                nav_parts.insert(
+                    0,
+                    '<div class="nav-scope root-link active"><div class="nav-label">Calcular Traslado</div></div>',
+                )
+            elif active_top == "riesgo" and st.session_state.get("riesgo_show_landing"):
+                nav_parts.insert(
+                    0,
+                    '<div class="nav-scope root-link active"><div class="nav-label">Riesgo Fiscal</div></div>',
+                )
+        except Exception:
+            pass
+
     nav_html = "".join(nav_parts)
+
+    # En Riesgo Fiscal (no autenticado) ocultar CTA para mantener exclusividad
+    if active_top == "riesgo" and not st.session_state.get("usuario"):
+        show_cta = False
 
     if show_cta:
         if st.session_state.get("usuario"):
