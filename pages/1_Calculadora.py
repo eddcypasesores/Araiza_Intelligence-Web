@@ -87,7 +87,8 @@ st.markdown(
 # ===============================
 ensure_session_from_token()
 
-render_nav(active_top="calculadora", active_child=None)
+is_logged_in = bool(st.session_state.get("usuario"))
+render_nav(active_top="calculadora", active_child=None, show_cta=is_logged_in)
 
 conn = get_conn()
 ensure_schema(conn)
@@ -98,10 +99,6 @@ def _render_login() -> None:
 
     st.title("Calculadora de Traslados")
     st.subheader("Inicia sesión para continuar")
-    st.write(
-        "Los perfiles autorizados son **Administradores** y **Calculadores**. "
-        "Si necesitas acceso solicita ayuda al área de sistemas."
-    )
 
     raw_next = st.query_params.get("next")
     redirect_target: str | None
@@ -161,10 +158,10 @@ def _render_login() -> None:
         try:
             st.switch_page(redirect_target)
         except Exception:
-            st.experimental_rerun()
+            st.rerun()
         return
 
-    st.experimental_rerun()
+    st.rerun()
 
 
 if st.session_state.get("rol") not in ALLOWED_ROLES:

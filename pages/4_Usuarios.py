@@ -448,7 +448,7 @@ def render_eliminar():
                 cur.execute("DELETE FROM usuarios WHERE username=?", (u,))
             conn.commit()
             st.success(f"Usuarios eliminados: {', '.join(seleccion)} ✅")
-            st.experimental_rerun()
+            st.rerun()
         except Exception as e:
             conn.rollback()
             st.error(f"No se pudieron eliminar: {e}")
