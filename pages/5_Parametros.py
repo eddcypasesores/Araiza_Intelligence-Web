@@ -13,6 +13,7 @@ from core.db import (
 )
 from core.params import read_params
 from core.navigation import render_nav
+from core.streamlit_compat import rerun, set_query_params
 
 
 st.set_page_config(page_title="Parámetros de Costeo", layout="wide")
@@ -24,7 +25,7 @@ if "usuario" not in st.session_state or "rol" not in st.session_state:
     params = {k: v for k, v in st.query_params.items() if k not in {"logout", "next"}}
     params["next"] = "pages/5_Parametros.py"
     try:
-        st.experimental_set_query_params(**params)
+        set_query_params(params)
     except Exception:
         pass
     try:
@@ -130,7 +131,7 @@ def render_agregar():
         try:
             vid_new = clone_version(conn, base_vid, new_name)
             st.success(f"Versión clonada como {new_name} (id {vid_new}).")
-            st.rerun()
+            rerun()
         except sqlite3.IntegrityError as e:
             st.error(f"No se pudo clonar: {e}")
         except Exception as e:
@@ -153,7 +154,7 @@ def render_modificar():
     if st.button("Publicar como vigente", type="secondary"):
         publish_version(conn, current_vid)
         st.success("Versión publicada como vigente.")
-        st.rerun()
+        rerun()
 
     params = read_params(conn, current_vid)
 
@@ -451,7 +452,7 @@ def render_eliminar():
             cur.execute("DELETE FROM param_costeo_version WHERE id=?", (target_vid,))
             conn.commit()
             st.success("Versión eliminada.")
-            st.rerun()
+            rerun()
         except Exception as e:
             conn.rollback()
             st.error(f"No se pudo eliminar la versión: {e}")

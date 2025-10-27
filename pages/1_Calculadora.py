@@ -25,6 +25,7 @@ from core.driver_costs import read_trabajadores, costo_diario_trabajador_auto
 from core.params import read_params
 from core.maps import GoogleMapsClient, GoogleMapsError
 from core.navigation import render_nav
+from core.streamlit_compat import rerun, set_query_params
 
 HARDCODED_MAPS_API_KEY = "AIzaSyBqSuQGWucHtypH60GpAAIxJVap76CgRL8"
 
@@ -152,16 +153,16 @@ def _render_login() -> None:
     if redirect_target:
         remaining = {k: v for k, v in st.query_params.items() if k != "next"}
         try:
-            st.experimental_set_query_params(**remaining)
+            set_query_params(remaining)
         except Exception:
             pass
         try:
             st.switch_page(redirect_target)
         except Exception:
-            st.rerun()
+            rerun()
         return
 
-    st.rerun()
+    rerun()
 
 
 if st.session_state.get("rol") not in ALLOWED_ROLES:

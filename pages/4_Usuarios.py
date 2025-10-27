@@ -10,6 +10,7 @@ from core.db import (
     get_usuario,
 )
 from core.navigation import render_nav
+from core.streamlit_compat import rerun, set_query_params
 
 
 def _cols_trabajadores(conn):
@@ -34,7 +35,7 @@ if "usuario" not in st.session_state or "rol" not in st.session_state:
     params = {k: v for k, v in st.query_params.items() if k not in {"logout", "next"}}
     params["next"] = "pages/4_Usuarios.py"
     try:
-        st.experimental_set_query_params(**params)
+        set_query_params(params)
     except Exception:
         pass
     try:
@@ -448,7 +449,7 @@ def render_eliminar():
                 cur.execute("DELETE FROM usuarios WHERE username=?", (u,))
             conn.commit()
             st.success(f"Usuarios eliminados: {', '.join(seleccion)} ✅")
-            st.rerun()
+            rerun()
         except Exception as e:
             conn.rollback()
             st.error(f"No se pudieron eliminar: {e}")

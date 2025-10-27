@@ -10,6 +10,7 @@ import streamlit as st
 
 from .auth import auth_query_params
 from .session import process_logout_flag
+from .streamlit_compat import rerun
 
 
 NAV_CSS = """
@@ -283,7 +284,7 @@ def _handle_logout_query() -> None:
     try:
         st.switch_page("pages/0_Inicio.py")
     except Exception:
-        st.rerun()
+        rerun()
     st.stop()
 
 

@@ -9,6 +9,7 @@ import pandas as pd
 import streamlit as st
 
 from core.db import get_usuario, set_usuario_trabajador
+from core.streamlit_compat import rerun
 
 
 def _cols_trabajadores(conn) -> set[str]:
@@ -385,7 +386,7 @@ def render_eliminar(conn) -> None:
                 cur.execute("DELETE FROM usuarios WHERE username=?", (u,))
             conn.commit()
             st.success(f"Usuarios eliminados: {', '.join(seleccion)} ✅")
-            st.rerun()
+            rerun()
         except Exception as e:
             conn.rollback()
             st.error(f"No se pudieron eliminar: {e}")

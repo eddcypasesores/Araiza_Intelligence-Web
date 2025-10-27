@@ -12,6 +12,7 @@ import streamlit as st
 from core.auth import ensure_session_from_token
 from core.db import ensure_schema, get_conn
 from core.navigation import render_nav
+from core.streamlit_compat import set_query_params
 
 
 def _redirect_to_login(target_page: str | None = None) -> None:
@@ -22,7 +23,7 @@ def _redirect_to_login(target_page: str | None = None) -> None:
     if target_page:
         params["next"] = target_page
     try:
-        st.experimental_set_query_params(**params)
+        set_query_params(params)
     except Exception:
         pass
     try:

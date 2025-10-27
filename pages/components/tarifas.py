@@ -8,6 +8,7 @@ import pandas as pd
 import streamlit as st
 
 from core.db import CLASES
+from core.streamlit_compat import rerun
 
 
 ViaSelection = Tuple[int, str, int, str]
@@ -86,7 +87,7 @@ def render_agregar(conn, plaza_id: int) -> None:
         )
         conn.commit()
         st.success(f"Tarifa para {clase} guardada correctamente.")
-        st.rerun()
+        rerun()
 
 
 def _to_float(value) -> float:
@@ -138,7 +139,7 @@ def render_modificar(conn, plaza_id: int) -> None:
             )
         conn.commit()
         st.success("Tarifas actualizadas ✅")
-        st.rerun()
+        rerun()
 
 
 def render_eliminar(conn, plaza_id: int) -> None:
@@ -161,4 +162,4 @@ def render_eliminar(conn, plaza_id: int) -> None:
         )
         conn.commit()
         st.success("Tarifas eliminadas.")
-        st.rerun()
+        rerun()

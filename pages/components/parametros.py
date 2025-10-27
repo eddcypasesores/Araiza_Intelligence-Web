@@ -10,6 +10,7 @@ import streamlit as st
 
 from core.db import clone_version, get_active_version_id, publish_version
 from core.params import read_params
+from core.streamlit_compat import rerun
 
 
 def load_versions(conn) -> pd.DataFrame:
@@ -72,7 +73,7 @@ def render_agregar(conn) -> None:
         try:
             vid_new = clone_version(conn, base_vid, new_name)
             st.success(f"Versión clonada como {new_name} (id {vid_new}).")
-            st.rerun()
+            rerun()
         except sqlite3.IntegrityError as e:
             st.error(f"No se pudo clonar: {e}")
         except Exception as e:
@@ -95,7 +96,7 @@ def render_modificar(conn) -> None:
     if st.button("Publicar como vigente", type="secondary"):
         publish_version(conn, current_vid)
         st.success("Versión publicada como vigente.")
-        st.rerun()
+        rerun()
 
     params = read_params(conn, current_vid)
 
@@ -393,7 +394,7 @@ def render_eliminar(conn) -> None:
             cur.execute("DELETE FROM param_costeo_version WHERE id=?", (target_vid,))
             conn.commit()
             st.success("Versión eliminada.")
-            st.rerun()
+            rerun()
         except Exception as e:
             conn.rollback()
             st.error(f"No se pudo eliminar la versión: {e}")
