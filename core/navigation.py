@@ -257,6 +257,7 @@ PAGE_PARAM_NAMES: dict[str, str] = {
     "pages/11_Parametros_agregar.py": "Parámetros — Agregar",
     "pages/12_Parametros_modificar.py": "Parámetros — Modificar",
     "pages/13_Parametros_eliminar.py": "Parámetros — Eliminar",
+    "pages/14_Lista_negra_SAT.py": "Lista negra SAT — Cruce de RFC",
 }
 
 
@@ -337,6 +338,26 @@ def _dropdown_html(
     )
 
 
+def _root_link_html(
+    *,
+    label: str,
+    target_page: str,
+    top_key: str,
+    active_top: str | None,
+) -> str:
+    """Return the HTML for a root-level navigation link without dropdown."""
+
+    root_class = "nav-scope root-link"
+    if active_top == top_key:
+        root_class += " active"
+
+    return (
+        f'<div class="{root_class}">' \
+        f'<a class="nav-link" href="{_page_href(target_page)}" target="_self">{label}</a>' \
+        "</div>"
+    )
+
+
 def render_nav(
     active_top: str | None = None,
     active_child: str | None = None,
@@ -359,13 +380,13 @@ def render_nav(
 
     nav_parts: list[str] = []
     if show_inicio:
-        root_class = "nav-scope root-link"
-        if active_top == "inicio":
-            root_class += " active"
         nav_parts.append(
-            f'<div class="{root_class}">' \
-            f'<a class="nav-link" href="{_page_href("pages/0_Inicio.py")}" target="_self">Inicio</a>' \
-            "</div>"
+            _root_link_html(
+                label="Inicio",
+                target_page="pages/0_Inicio.py",
+                top_key="inicio",
+                active_top=active_top,
+            )
         )
 
     nav_parts.append(
@@ -410,6 +431,15 @@ def render_nav(
             active_top=active_top,
             active_child=active_child,
             top_key="parametros",
+        )
+    )
+
+    nav_parts.append(
+        _root_link_html(
+            label="Lista negra SAT",
+            target_page="pages/14_Lista_negra_SAT.py",
+            top_key="lista_negra_sat",
+            active_top=active_top,
         )
     )
 
