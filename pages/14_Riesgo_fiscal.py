@@ -141,6 +141,27 @@ CUSTOM_CSS = """
     line-height: 1.3;
   }
 
+  .cta-area {
+    margin-top: auto;
+    padding-top: 0px;
+    display: flex;
+    justify-content: flex-end;
+    padding-bottom: 0;
+  }
+
+  .cta-area button[kind="primary"] {
+    font-size: clamp(16px, 1.8vw, 20px) !important;
+    padding: clamp(10px, 1.6vw, 16px) clamp(22px, 4vw, 36px) !important;
+    border-radius: 999px !important;
+    background: var(--brand-red) !important;
+    border-color: var(--brand-red) !important;
+  }
+
+  .cta-area button[kind="primary"]:hover {
+    background: var(--brand-red-dark) !important;
+    border-color: var(--brand-red-dark) !important;
+  }
+
   @media (max-width: 780px) {
     .title {
       white-space: normal;
@@ -159,13 +180,16 @@ CUSTOM_CSS = """
       padding: clamp(12px, 4vw, 20px) 0;
     }
 
+    .cta-area {
+      justify-content: center;
+    }
   }
 </style>
 """
 
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
-render_nav(active_top="inicio", active_child=None, show_inicio=False, show_cta=False)
+render_nav(active_top="inicio", active_child=None, show_inicio=False)
 
 # -------- Resolver imagen --------
 APP_DIR = Path(__file__).resolve().parent
@@ -191,12 +215,7 @@ def to_data_url(p: Path):
     except Exception:
         return None
 
-img_path = (
-    resolve_asset("assets/logo.jpg")
-    or resolve_asset("logo.jpg")
-    or resolve_asset("assets/logo.jpg")
-    or resolve_asset("logo.jpg")
-)
+img_path = resolve_asset("assets/inicio_card.png") or resolve_asset("inicio_card.png")
 img_data = to_data_url(img_path) if img_path else None
 
 # -------- HERO (imagen izquierda | texto derecha, MISMA altura) --------
@@ -213,7 +232,7 @@ with st.container():
                 unsafe_allow_html=True,
             )
         else:
-            st.info("Falta la imagen en assets/Inicio_card.png")
+            st.info("Falta la imagen en assets/inicio_card.png")
         st.markdown('</div>', unsafe_allow_html=True)
 
     with col_txt:
@@ -254,4 +273,12 @@ with st.container():
         """,
             unsafe_allow_html=True,
         )
+        st.markdown('<div class="cta-area">', unsafe_allow_html=True)
+        col_cta, col_secondary = st.columns([0.6, 0.4])
+        with col_cta:
+            if st.button("Ir a la calculadora de traslados", key="cta_calc", type="primary"):
+                st.switch_page("pages/1_Calculadora.py")
+        with col_secondary:
+            if st.button("Explorar riesgo fiscal", key="cta_riesgo"):
+                st.switch_page("pages/14_Riesgo_fiscal.py")
         st.markdown('</div></div></div>', unsafe_allow_html=True)

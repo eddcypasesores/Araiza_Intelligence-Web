@@ -31,8 +31,14 @@ ensure_session_from_token()
 # ---- Seguridad ----
 if "usuario" not in st.session_state or "rol" not in st.session_state:
     st.warning("⚠️ Debes iniciar sesión primero.")
+    params = {k: v for k, v in st.query_params.items() if k not in {"logout", "next"}}
+    params["next"] = "pages/4_Usuarios.py"
     try:
-        st.switch_page("app.py")
+        st.experimental_set_query_params(**params)
+    except Exception:
+        pass
+    try:
+        st.switch_page("pages/1_Calculadora.py")
     except Exception:
         st.stop()
     st.stop()

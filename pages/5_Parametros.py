@@ -21,6 +21,16 @@ ensure_session_from_token()
 # Seguridad
 if "usuario" not in st.session_state or "rol" not in st.session_state:
     st.warning("Debes iniciar sesión.")
+    params = {k: v for k, v in st.query_params.items() if k not in {"logout", "next"}}
+    params["next"] = "pages/5_Parametros.py"
+    try:
+        st.experimental_set_query_params(**params)
+    except Exception:
+        pass
+    try:
+        st.switch_page("pages/1_Calculadora.py")
+    except Exception:
+        st.stop()
     st.stop()
 if st.session_state["rol"] != "admin":
     st.error("Solo administradores.")
