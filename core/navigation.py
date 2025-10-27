@@ -367,6 +367,7 @@ def render_nav(
     active_child: str | None = None,
     *,
     show_inicio: bool = True,
+    show_cta: bool = True,
 ) -> None:
     """Inject shared CSS and render the sticky navigation bar.
 
@@ -377,6 +378,9 @@ def render_nav(
     show_inicio
         If ``True`` the "Inicio" link is shown; disable it on the landing page to
         avoid duplicating the current location.
+    show_cta
+        Controls whether the trailing call-to-action (login / logout) button is
+        rendered.  The home page keeps the navigation minimalist by hiding it.
     """
 
     _handle_logout_query()
@@ -465,13 +469,19 @@ def render_nav(
 
     nav_html = "".join(nav_parts)
 
-    if st.session_state.get("usuario"):
-        cta_href = "/?logout=1"
-        cta_label = "Salir"
+    if show_cta:
+        if st.session_state.get("usuario"):
+            cta_href = "/?logout=1"
+            cta_label = "Salir"
+        else:
+            cta_href = _page_href("pages/1_Calculadora.py")
+            cta_label = "Iniciar sesión"
+        logout_html = (
+            f'<div class="nav-scope logout"><a class="nav-logout" href="{cta_href}" '
+            f'target="_self">{cta_label}</a></div>'
+        )
     else:
-        cta_href = _page_href("pages/1_Calculadora.py")
-        cta_label = "Iniciar sesión"
-    logout_html = f'<div class="nav-scope logout"><a class="nav-logout" href="{cta_href}" target="_self">{cta_label}</a></div>'
+        logout_html = ""
 
     markup = (
         '<div class="nav-anchor"></div>'
