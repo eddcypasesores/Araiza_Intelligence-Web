@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import inspect
 import sqlite3
+from pathlib import Path
 from typing import Optional
 
 import streamlit as st
@@ -12,24 +14,31 @@ from core.db import ensure_schema, get_conn
 from core.navigation import render_nav
 
 
-def _redirect_to_login() -> None:
+def _redirect_to_login(target_page: str | None = None) -> None:
     """Redirige al login en caso de que la sesión no sea válida."""
 
     st.warning("⚠️ Debes iniciar sesión primero.")
+    params = {k: v for k, v in st.query_params.items() if k not in {"logout", "next"}}
+    if target_page:
+        params["next"] = target_page
     try:
-        st.switch_page("app.py")
+        st.experimental_set_query_params(**params)
+    except Exception:
+        pass
+    try:
+        st.switch_page("pages/1_Calculadora.py")
     except Exception:
         st.stop()
     st.stop()
 
 
-def _ensure_admin_session() -> None:
+def _ensure_admin_session(redirect_to: str | None = None) -> None:
     """Valida que exista una sesión activa con privilegios de administrador."""
 
     ensure_session_from_token()
 
     if "usuario" not in st.session_state or "rol" not in st.session_state:
-        _redirect_to_login()
+        _redirect_to_login(redirect_to)
 
     if str(st.session_state.get("rol", "")).lower() != "admin":
         st.error("🚫 No tienes permiso para acceder a esta página.")
@@ -68,7 +77,16 @@ def init_admin_section(
     """
 
     _configure_page(page_title, layout)
-    _ensure_admin_session()
+
+    redirect_target = None
+    caller_file = inspect.stack()[1].frame.f_globals.get("__file__")
+    if caller_file:
+        try:
+            redirect_target = str(Path(caller_file).resolve().relative_to(Path.cwd()))
+        except ValueError:
+            redirect_target = Path(caller_file).name
+
+    _ensure_admin_session(redirect_target)
 
     conn = get_conn()
     ensure_schema(conn)

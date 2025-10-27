@@ -10,8 +10,9 @@ import pandas as pd
 import streamlit as st
 
 # --- Utilidades / Proyecto
+from core.auth import ensure_session_from_token, persist_login
 from core.utils import inject_css, is_excluded, set_excluded, normalize_name
-from core.db import get_conn, ensure_schema, get_active_version_id
+from core.db import get_conn, ensure_schema, get_active_version_id, validar_usuario
 from core.config import GOOGLE_MAPS_API_KEY
 from core.rutas import (
     load_routes,
@@ -26,6 +27,8 @@ from core.maps import GoogleMapsClient, GoogleMapsError
 from core.navigation import render_nav
 
 HARDCODED_MAPS_API_KEY = "AIzaSyBqSuQGWucHtypH60GpAAIxJVap76CgRL8"
+
+ALLOWED_ROLES: set[str] = {"admin", "operador"}
 
 # ===============================
 # Configuración de página + CSS
@@ -80,24 +83,97 @@ st.markdown(
 )
 
 # ===============================
-# Seguridad / sesión
+# Sesión y permisos
 # ===============================
-if "usuario" not in st.session_state or "rol" not in st.session_state:
-    st.warning("⚠️ Debes iniciar sesión primero.")
-    try:
-        st.switch_page("app.py")
-    except Exception:
-        st.stop()
-    st.stop()
+ensure_session_from_token()
 
-# Barra de navegación compartida
-render_nav(active_top=None, active_child=None)
+render_nav(active_top="calculadora", active_child=None)
 
-# ===============================
-# Conexión y datos base
-# ===============================
 conn = get_conn()
 ensure_schema(conn)
+
+
+def _render_login() -> None:
+    """Muestra el formulario de acceso para la calculadora."""
+
+    st.title("Calculadora de Traslados")
+    st.subheader("Inicia sesión para continuar")
+    st.write(
+        "Los perfiles autorizados son **Administradores** y **Calculadores**. "
+        "Si necesitas acceso solicita ayuda al área de sistemas."
+    )
+
+    raw_next = st.query_params.get("next")
+    redirect_target: str | None
+    if isinstance(raw_next, list):
+        redirect_target = raw_next[-1] if raw_next else None
+    elif isinstance(raw_next, str):
+        redirect_target = raw_next or None
+    else:
+        redirect_target = None
+
+    current_role = st.session_state.get("rol")
+    if current_role and current_role not in ALLOWED_ROLES:
+        st.error(
+            "Tu usuario existe, pero no cuenta con permisos para utilizar la calculadora. "
+            "Cierra sesión e intenta con otra cuenta o contacta al administrador."
+        )
+
+    with st.form("calculadora_login", clear_on_submit=False):
+        username = st.text_input("Usuario", placeholder="ej. admin")
+        password = st.text_input("Contraseña", type="password", placeholder="••••••••")
+        submitted = st.form_submit_button("Iniciar sesión", use_container_width=True)
+
+    if not submitted:
+        return
+
+    username = username.strip()
+
+    try:
+        rol = validar_usuario(conn, username, password)
+    except Exception as exc:  # pragma: no cover - feedback en UI
+        st.error(
+            "No fue posible validar las credenciales. Verifica la conexión a la base de datos."
+        )
+        st.caption(f"Detalle técnico: {exc}")
+        return
+
+    if not rol:
+        st.error("Usuario o contraseña incorrectos.")
+        return
+
+    if rol not in ALLOWED_ROLES:
+        st.error(
+            "Tu perfil se autentica correctamente, pero no tiene permiso para acceder a la calculadora."
+        )
+        return
+
+    persist_login(username, rol)
+    welcome = f"Bienvenido, {username} ({'Administrador' if rol == 'admin' else 'Calculador'})."
+    st.session_state["login_flash"] = welcome
+
+    if redirect_target:
+        remaining = {k: v for k, v in st.query_params.items() if k != "next"}
+        try:
+            st.experimental_set_query_params(**remaining)
+        except Exception:
+            pass
+        try:
+            st.switch_page(redirect_target)
+        except Exception:
+            st.experimental_rerun()
+        return
+
+    st.experimental_rerun()
+
+
+if st.session_state.get("rol") not in ALLOWED_ROLES:
+    _render_login()
+    st.stop()
+
+flash_message = st.session_state.pop("login_flash", None)
+if flash_message:
+    st.success(flash_message)
 ROUTES = load_routes()
 PLAZAS = plazas_catalog(ROUTES)
 

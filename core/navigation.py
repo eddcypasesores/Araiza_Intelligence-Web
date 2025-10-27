@@ -8,6 +8,7 @@ from urllib.parse import urlencode
 
 import streamlit as st
 
+from .auth import auth_query_params
 from .session import process_logout_flag
 
 
@@ -257,7 +258,9 @@ PAGE_PARAM_NAMES: dict[str, str] = {
     "pages/11_Parametros_agregar.py": "Parámetros — Agregar",
     "pages/12_Parametros_modificar.py": "Parámetros — Modificar",
     "pages/13_Parametros_eliminar.py": "Parámetros — Eliminar",
-    "pages/14_Lista_negra_SAT.py": "Lista negra SAT — Cruce de RFC",
+    "pages/14_Riesgo_fiscal.py": "Riesgo fiscal",
+    "pages/15_Lista_negra_SAT.py": "Lista negra SAT — Cruce de RFC",
+    "pages/16_Acerca_de_nosotros.py": "Acerca de Nosotros",
 }
 
 
@@ -278,7 +281,7 @@ def _handle_logout_query() -> None:
         return
 
     try:
-        st.switch_page("app.py")
+        st.switch_page("pages/0_Inicio.py")
     except Exception:
         st.experimental_rerun()
     st.stop()
@@ -301,6 +304,7 @@ def _page_href(page: str | None, extra: dict[str, str] | None = None) -> str:
         query["page"] = page_param
     if extra:
         query.update(extra)
+    query.update(auth_query_params())
     if not query:
         return "/"
     return "/?" + urlencode(query, doseq=False)
@@ -389,62 +393,85 @@ def render_nav(
             )
         )
 
-    nav_parts.append(
-        _dropdown_html(
-            label="Tarifas",
-            actions=[
-                DropdownAction("Consultar", "consultar", "pages/2_Tarifas_consultar.py"),
-                DropdownAction("Agregar", "agregar", "pages/3_Tarifas_agregar.py"),
-                DropdownAction("Modificar", "modificar", "pages/4_Tarifas_modificar.py"),
-                DropdownAction("Eliminar", "eliminar", "pages/5_Tarifas_eliminar.py"),
-            ],
-            active_top=active_top,
-            active_child=active_child,
-            top_key="tarifas",
-        )
+    nav_parts.extend(
+        [
+            _root_link_html(
+                label="Traslados",
+                target_page="pages/1_Calculadora.py",
+                top_key="calculadora",
+                active_top=active_top,
+            ),
+            _root_link_html(
+                label="Riesgo Fiscal",
+                target_page="pages/14_Riesgo_fiscal.py",
+                top_key="riesgo",
+                active_top=active_top,
+            ),
+            _root_link_html(
+                label="Acerca de Nosotros",
+                target_page="pages/16_Acerca_de_nosotros.py",
+                top_key="acerca",
+                active_top=active_top,
+            ),
+        ]
     )
 
-    nav_parts.append(
-        _dropdown_html(
-            label="Usuarios",
-            actions=[
-                DropdownAction("Consultar", "consultar", "pages/6_Usuarios_consultar.py"),
-                DropdownAction("Agregar", "agregar", "pages/7_Usuarios_agregar.py"),
-                DropdownAction("Modificar", "modificar", "pages/8_Usuarios_modificar.py"),
-                DropdownAction("Eliminar", "eliminar", "pages/9_Usuarios_eliminar.py"),
-            ],
-            active_top=active_top,
-            active_child=active_child,
-            top_key="usuarios",
+    rol = st.session_state.get("rol")
+    if rol == "admin":
+        nav_parts.append(
+            _dropdown_html(
+                label="Tarifas",
+                actions=[
+                    DropdownAction("Consultar", "consultar", "pages/2_Tarifas_consultar.py"),
+                    DropdownAction("Agregar", "agregar", "pages/3_Tarifas_agregar.py"),
+                    DropdownAction("Modificar", "modificar", "pages/4_Tarifas_modificar.py"),
+                    DropdownAction("Eliminar", "eliminar", "pages/5_Tarifas_eliminar.py"),
+                ],
+                active_top=active_top,
+                active_child=active_child,
+                top_key="tarifas",
+            )
         )
-    )
 
-    nav_parts.append(
-        _dropdown_html(
-            label="Parámetros",
-            actions=[
-                DropdownAction("Consultar", "consultar", "pages/10_Parametros_consultar.py"),
-                DropdownAction("Agregar", "agregar", "pages/11_Parametros_agregar.py"),
-                DropdownAction("Modificar", "modificar", "pages/12_Parametros_modificar.py"),
-                DropdownAction("Eliminar", "eliminar", "pages/13_Parametros_eliminar.py"),
-            ],
-            active_top=active_top,
-            active_child=active_child,
-            top_key="parametros",
+        nav_parts.append(
+            _dropdown_html(
+                label="Usuarios",
+                actions=[
+                    DropdownAction("Consultar", "consultar", "pages/6_Usuarios_consultar.py"),
+                    DropdownAction("Agregar", "agregar", "pages/7_Usuarios_agregar.py"),
+                    DropdownAction("Modificar", "modificar", "pages/8_Usuarios_modificar.py"),
+                    DropdownAction("Eliminar", "eliminar", "pages/9_Usuarios_eliminar.py"),
+                ],
+                active_top=active_top,
+                active_child=active_child,
+                top_key="usuarios",
+            )
         )
-    )
 
-    nav_parts.append(
-        _root_link_html(
-            label="Lista negra SAT",
-            target_page="pages/14_Lista_negra_SAT.py",
-            top_key="lista_negra_sat",
-            active_top=active_top,
+        nav_parts.append(
+            _dropdown_html(
+                label="Parámetros",
+                actions=[
+                    DropdownAction("Consultar", "consultar", "pages/10_Parametros_consultar.py"),
+                    DropdownAction("Agregar", "agregar", "pages/11_Parametros_agregar.py"),
+                    DropdownAction("Modificar", "modificar", "pages/12_Parametros_modificar.py"),
+                    DropdownAction("Eliminar", "eliminar", "pages/13_Parametros_eliminar.py"),
+                ],
+                active_top=active_top,
+                active_child=active_child,
+                top_key="parametros",
+            )
         )
-    )
 
     nav_html = "".join(nav_parts)
-    logout_html = '<div class="nav-scope logout"><a class="nav-logout" href="/?logout=1" target="_self">Salir</a></div>'
+
+    if st.session_state.get("usuario"):
+        cta_href = "/?logout=1"
+        cta_label = "Salir"
+    else:
+        cta_href = _page_href("pages/1_Calculadora.py")
+        cta_label = "Iniciar sesión"
+    logout_html = f'<div class="nav-scope logout"><a class="nav-logout" href="{cta_href}" target="_self">{cta_label}</a></div>'
 
     markup = (
         '<div class="nav-anchor"></div>'

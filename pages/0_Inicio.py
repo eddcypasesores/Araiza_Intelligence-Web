@@ -1,27 +1,15 @@
-# pages/0_Inicio.py — Inicio con héroe centrado y navegación compartida
+"""Portada pública de Araiza Intelligence."""
+
 from pathlib import Path
 import base64
 import streamlit as st
 
 from core.auth import ensure_session_from_token
-from core.db import get_conn, ensure_schema
 from core.navigation import render_nav
 
-st.set_page_config(page_title="Inicio | Costos de Rutas", layout="wide")
+st.set_page_config(page_title="Araiza Intelligence", layout="wide")
 
 ensure_session_from_token()
-
-# -------- Seguridad --------
-if "usuario" not in st.session_state or "rol" not in st.session_state:
-    st.warning("⚠️ Debes iniciar sesión primero.")
-    try:
-        st.switch_page("app.py")
-    except Exception:
-        st.stop()
-    st.stop()
-
-# -------- DB --------
-conn = get_conn(); ensure_schema(conn)
 
 # -------- CSS específico de la portada --------
 CUSTOM_CSS = """
@@ -253,18 +241,18 @@ with st.container():
             '<div class="hero-text-wrap"><div class="text-box"><div class="headline-stack">',
             unsafe_allow_html=True,
         )
-        st.markdown('<div class="title">Precisión en movimiento</div>', unsafe_allow_html=True)
+        st.markdown('<div class="title">Araiza Intelligence</div>', unsafe_allow_html=True)
         st.markdown('<div class="copy">', unsafe_allow_html=True)
         st.markdown(
             """
           <p class="lead">
-          Nuestra plataforma calcula con exactitud los costos reales de cada flete, integrando tecnología avanzada, APIs de Google Maps y bases de datos inteligentes para ofrecer resultados precisos y actualizados en tiempo real.
+          Somos la unidad de analítica y automatización del Grupo Araiza. Transformamos datos operativos en decisiones estratégicas mediante herramientas inteligentes que integran geolocalización, modelos de costos y tableros ejecutivos.
           </p>
           <p class="lead">
-          Obtén en segundos el costo total de una ruta — peajes, combustible, mantenimiento y demás gastos operativos — con una interfaz ágil, intuitiva y confiable.
+          Con la Calculadora de Traslados estima en segundos el costo real de cada ruta y alinea a tus equipos de logística con tarifas transparentes y actualizadas.
           </p>
           <p class="lead">
-          Además, administra fácilmente usuarios y trabajadores, garantizando control, trazabilidad y eficiencia en cada viaje.
+          Complementa la operación con módulos especializados de riesgo fiscal y paneles administrativos pensados para equipos directivos.
           </p>
         """,
             unsafe_allow_html=True,
@@ -273,19 +261,24 @@ with st.container():
         st.markdown(
             """
           <div class="features">
-            <p class="lead features-title">Características principales:</p>
+            <p class="lead features-title">¿Qué hacemos?</p>
             <ul class="bullets">
-              <li>Cálculo automático de rutas, distancias y casetas.</li>
-              <li>Estimación real de combustible y costos operativos.</li>
-              <li>Gestión integrada de usuarios y trabajadores.</li>
-              <li>Reportes claros y listos para la toma de decisiones.</li>
-              <li>Transparencia y precisión en cada operación.</li>
+              <li>Modelamos escenarios logísticos con datos en tiempo real.</li>
+              <li>Automatizamos cálculos de costos y presupuestos de traslados.</li>
+              <li>Monitoreamos alertas de riesgo fiscal y cumplimiento.</li>
+              <li>Conectamos a tus equipos con indicadores accionables.</li>
+              <li>Diseñamos experiencias digitales centradas en la operación.</li>
             </ul>
           </div>
         """,
             unsafe_allow_html=True,
         )
         st.markdown('<div class="cta-area">', unsafe_allow_html=True)
-        if st.button("Calcular ruta", key="cta_calc", type="primary"):
-            st.switch_page("pages/1_Calculadora.py")
+        col_cta, col_secondary = st.columns([0.6, 0.4])
+        with col_cta:
+            if st.button("Ir a la calculadora de traslados", key="cta_calc", type="primary"):
+                st.switch_page("pages/1_Calculadora.py")
+        with col_secondary:
+            if st.button("Explorar riesgo fiscal", key="cta_riesgo"):
+                st.switch_page("pages/14_Riesgo_fiscal.py")
         st.markdown('</div></div></div>', unsafe_allow_html=True)

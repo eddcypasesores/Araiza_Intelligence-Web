@@ -25,7 +25,7 @@ from pages.components.admin import init_admin_section
 # inmediato porque esta vista solo trabaja con archivos en memoria).
 conn = init_admin_section(
     page_title="Lista negra SAT — Cruce de RFC",
-    active_top="lista_negra_sat",
+    active_top="riesgo",
     layout="wide",
 )
 conn.close()
