@@ -80,29 +80,29 @@ st.markdown(
 
       .landing-section img {
         width: 100%;
-        height: auto;
+        aspect-ratio: 4 / 3;
         border-radius: 20px;
         box-shadow: 0 22px 40px rgba(15, 23, 42, 0.16);
         object-fit: cover;
       }
 
       .landing-section .stButton button {
-        background-color: #dc2626;
+        background-color: #2563eb;
         color: #ffffff;
         border: none;
         border-radius: 8px;
         padding: 12px 26px;
         font-size: clamp(15px, 1.6vw, 17px);
         font-weight: 700;
-        box-shadow: 0 12px 20px rgba(220, 38, 38, 0.25);
+        box-shadow: 0 12px 20px rgba(37, 99, 235, 0.25);
         transition: transform 0.15s ease, box-shadow 0.15s ease,
                     background-color 0.15s ease;
       }
 
       .landing-section .stButton button:hover {
         transform: translateY(-1px);
-        box-shadow: 0 16px 26px rgba(220, 38, 38, 0.35);
-        background-color: #b91c1c;
+        box-shadow: 0 16px 26px rgba(37, 99, 235, 0.35);
+        background-color: #1d4ed8;
       }
 
       .landing-footer {
@@ -132,24 +132,18 @@ RISK_IMAGE_CANDIDATES = (
 )
 
 CALC_IMAGE_CANDIDATES = (
+    Path("assets/inicio_card.png"),
+    Path(__file__).resolve().parent / "assets" / "inicio_card.png",
     Path("assets/calculadora_cover.png"),
     Path("assets/calculadora_cover.jpg"),
     Path(__file__).resolve().parent / "assets" / "calculadora_cover.png",
     Path(__file__).resolve().parent / "assets" / "calculadora_cover.jpg",
-    Path("assets/logo.jpg"),
 )
 
 risk_image_src = first_image_base64(RISK_IMAGE_CANDIDATES)
 calc_image_src = first_image_base64(CALC_IMAGE_CANDIDATES)
 
 st.markdown('<h1 class="landing-hero">Bienvenido a Araiza Intelligence</h1>', unsafe_allow_html=True)
-st.markdown(
-    '<p class="landing-intro">'
-    "Digitalizamos los calculos de traslado y el control de riesgo fiscal para que tus equipos "
-    "tomen decisiones informadas en segundos."
-    "</p>",
-    unsafe_allow_html=True,
-)
 
 st.markdown('<div class="landing-wrapper">', unsafe_allow_html=True)
 
@@ -178,7 +172,7 @@ with st.container():
             """,
             unsafe_allow_html=True,
         )
-        if st.button("Consultar lista negra", key="home_riesgo_btn"):
+        if st.button("Consultar Lista", key="home_riesgo_btn"):
             st.switch_page("pages/14_Riesgo_fiscal.py")
     with image_col:
         if risk_image_src:
@@ -222,7 +216,7 @@ with st.container():
             """,
             unsafe_allow_html=True,
         )
-        if st.button("Calcular traslados", key="home_calculadora_btn"):
+        if st.button("Calcular Traslados", key="home_calculadora_btn"):
             st.switch_page("pages/1_Calculadora.py")
 
 st.markdown("</div>", unsafe_allow_html=True)

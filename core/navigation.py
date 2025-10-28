@@ -85,10 +85,6 @@ NAV_CSS = """
     white-space: nowrap;
   }
 
-  .nav-brand:hover {
-    color: var(--nav-text-hover);
-  }
-
   .nav-brand img {
     height: 34px;
     width: auto;
@@ -267,9 +263,13 @@ NAV_CSS = """
 """
 
 _LOGO_CANDIDATES: tuple[Path, ...] = (
+    Path("assets/Araiza Intelligence logo-04.jpg"),
+    Path("assets/Araiza Intelligence logo-04.png"),
     Path("assets/logo_nav.png"),
     Path("assets/logo.png"),
     Path("assets/logo.jpg"),
+    Path(__file__).resolve().parent.parent / "assets" / "Araiza Intelligence logo-04.jpg",
+    Path(__file__).resolve().parent.parent / "assets" / "Araiza Intelligence logo-04.png",
     Path(__file__).resolve().parent.parent / "assets" / "logo_nav.png",
     Path(__file__).resolve().parent.parent / "assets" / "logo.png",
     Path(__file__).resolve().parent.parent / "assets" / "logo.jpg",
@@ -366,8 +366,8 @@ def _brand_html() -> str:
     else:
         img_html = ""
     return (
-        f'<a class="nav-brand" href="{_page_href("pages/0_Inicio.py")}">'
-        f"{img_html}<span class=\"nav-brand-text\">Araiza Intelligence</span></a>"
+        '<div class="nav-brand">'
+        f"{img_html}<span class=\"nav-brand-text\">Araiza Intelligence</span></div>"
     )
 
 

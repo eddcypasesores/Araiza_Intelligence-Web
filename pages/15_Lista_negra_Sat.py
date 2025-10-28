@@ -266,30 +266,6 @@ def load_firmes_from_disk() -> pd.DataFrame:
     return df
 
 
-def persist_firmes_to_disk(uploaded_file) -> None:
-    """Guarda el Firmes que subio el usuario en disco, y escribe manifest.json.
-
-    - Guardamos el archivo binario exacto que el usuario subio.
-    - Creamos/manipulamos manifest.json con info basica:
-      {
-        "filename": "...nombre original...",
-        "stored_as": "...nombre interno en disco..."
-      }
-    """
-    original_name = uploaded_file.name
-    # Nombre interno estable: firmes_original.ext
-    stored_as = f"firmes_{original_name}"
-
-    # Guardar archivo tal cual
-    dest_path = FIRMES_DIR / stored_as
-    with dest_path.open("wb") as out:
-        out.write(uploaded_file.getbuffer())
-
-    manifest = {
-        "filename": original_name,
-        "stored_as": stored_as,
-    }
-    MANIFEST_PATH.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -300,12 +276,20 @@ if "parsed_df" not in st.session_state:
         columns=["Archivo XML", "RFC Emisor", "Nombre Emisor"]
     )
 
+autoload_message = None
+
 if "archivos_xml_nombres" not in st.session_state:
     st.session_state.archivos_xml_nombres = []
 
 if "blacklist_df" not in st.session_state:
-    # Intento inicial de cargar Firmes automaticamente desde disco
-    st.session_state.blacklist_df = load_firmes_from_disk()
+    disk_df = load_firmes_from_disk()
+    if disk_df.empty:
+        st.session_state.blacklist_df = pd.DataFrame()
+    else:
+        st.session_state.blacklist_df = disk_df
+        manifest = read_manifest() or {}
+        nombre = manifest.get("filename", manifest.get("stored_as", "Firmes"))
+        autoload_message = f"Archivo Firmes cargado automaticamente: {nombre}."
 
 if "mostrar_lista_xml" not in st.session_state:
     st.session_state.mostrar_lista_xml = False
@@ -314,6 +298,9 @@ if "status_msg" not in st.session_state:
     st.session_state.status_msg = ""
     st.session_state.status_is_error = False
 
+if autoload_message and not st.session_state.status_msg:
+    st.session_state.status_msg = autoload_message
+    st.session_state.status_is_error = False
 
 # ---------------------------------------------------------------------------
 # Titulo
