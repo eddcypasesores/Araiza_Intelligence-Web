@@ -392,3 +392,4 @@ def render_eliminar(conn) -> None:
     st.caption(
         "El trabajador permanece en el catálogo. Si deseas borrarlo, hazlo desde la BD o añade un módulo de eliminación de trabajadores.",
     )
+    
