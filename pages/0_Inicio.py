@@ -22,61 +22,77 @@ CUSTOM_CSS = """
   .module-hero {
     display: flex;
     flex-wrap: wrap;
-    gap: clamp(28px, 5vw, 48px);
+    gap: clamp(22px, 4vw, 36px);
     align-items: center;
     margin-top: clamp(12px, 3vw, 24px);
   }
 
   .module-hero > div {
-    flex: 1 1 360px;
+    flex: 1 1 320px;
     min-width: 0;
     display: flex;
+  }
+
+  .module-column {
+    display: flex;
     flex-direction: column;
-    gap: clamp(16px, 2vw, 24px);
+    justify-content: space-between;
+    gap: clamp(14px, 2vw, 22px);
+    width: 100%;
+  }
+
+  .module-copy {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    gap: clamp(10px, 1.6vw, 18px);
   }
 
   .module-copy h1 {
-    font-size: clamp(28px, 3.4vw, 40px);
+    font-size: clamp(26px, 3vw, 34px);
     font-weight: 800;
     color: #0f172a;
     margin: 0;
   }
 
   .module-copy p {
-    font-size: clamp(15px, 1.6vw, 18px);
-    line-height: 1.55;
+    font-size: clamp(14px, 1.4vw, 16px);
+    line-height: 1.45;
     color: #334155;
     margin: 0;
   }
 
-  .module-copy ul {
-    margin: 0 0 0 clamp(18px, 2vw, 24px);
+  .module-list {
+    margin: 0 0 0 clamp(16px, 2vw, 22px);
+    padding: 0;
+    list-style-position: inside;
     color: #0f172a;
-    font-size: clamp(14px, 1.5vw, 17px);
+    font-size: clamp(13px, 1.35vw, 15px);
+    line-height: 1.4;
   }
 
-  .module-copy ul li {
-    margin-bottom: clamp(2px, 1vw, 6px);
-    line-height: 1.35;
+  .module-list li {
+    margin-bottom: clamp(4px, 1vw, 6px);
+  }
+
+  .module-list.two-columns {
+    column-count: 2;
+    column-gap: clamp(16px, 3vw, 28px);
   }
 
   .module-actions {
     display: flex;
     flex-wrap: wrap;
     gap: 12px;
-    margin-top: clamp(18px, 3vw, 28px);
+    margin-top: clamp(12px, 2.5vw, 18px);
   }
 
   .module-actions button[kind="primary"] {
-    min-width: 220px;
-  }
-
-  .module-cover {
-    align-items: stretch;
+    min-width: 200px;
   }
 
   .module-features {
-    margin-top: clamp(16px, 3vw, 28px);
+    margin-top: clamp(12px, 2.5vw, 20px);
   }
 
   .module-features-title {
@@ -85,12 +101,19 @@ CUSTOM_CSS = """
     margin: 0;
   }
 
+  .module-cover {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
   .module-cover img {
-    width: 100%;
+    width: clamp(220px, 38vw, 420px);
+    height: auto;
+    max-height: 300px;
     border-radius: 18px;
-    box-shadow: 0 20px 36px rgba(15, 23, 42, 0.18);
+    box-shadow: 0 18px 32px rgba(15, 23, 42, 0.16);
     object-fit: cover;
-    max-height: 420px;
   }
 </style>
 """
@@ -133,7 +156,7 @@ img_data = to_data_url(img_path) if img_path else None
 # -------- HERO unificado --------
 with st.container():
     st.markdown('<div class="module-hero">', unsafe_allow_html=True)
-
+    st.markdown('<div class="module-column">', unsafe_allow_html=True)
     st.markdown('<div class="module-copy">', unsafe_allow_html=True)
     st.markdown('<h1>Araiza Intelligence</h1>', unsafe_allow_html=True)
     st.markdown(
@@ -147,14 +170,9 @@ with st.container():
         <p>
           Complementa la operaci&oacute;n con m&oacute;dulos especializados de riesgo fiscal y paneles administrativos pensados para equipos directivos.
         </p>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.markdown(
-        """
         <div class="module-features">
           <p class="module-features-title">&iquest;Qu&eacute; hacemos?</p>
-          <ul>
+          <ul class="module-list two-columns">
             <li>Modelamos escenarios log&iacute;sticos con datos en tiempo real.</li>
             <li>Automatizamos c&aacute;lculos de costos y presupuestos de traslados.</li>
             <li>Monitoreamos alertas de riesgo fiscal y cumplimiento.</li>
@@ -165,6 +183,7 @@ with st.container():
         """,
         unsafe_allow_html=True,
     )
+    st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="module-cover">', unsafe_allow_html=True)

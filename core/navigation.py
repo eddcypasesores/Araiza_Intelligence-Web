@@ -10,6 +10,7 @@ import streamlit as st
 
 from .auth import auth_query_params
 from .session import process_logout_flag
+from .streamlit_compat import set_query_params
 
 
 NAV_CSS = """
@@ -385,6 +386,16 @@ def render_nav(
 
     _handle_logout_query()
     st.markdown(NAV_CSS, unsafe_allow_html=True)
+
+    token = st.session_state.get("auth_token")
+    if token:
+        try:
+            params = {k: v for k, v in st.query_params.items()}
+            if params.get("auth") != token:
+                params["auth"] = token
+                set_query_params(params)
+        except Exception:
+            pass
 
     nav_parts: list[str] = []
     if show_inicio:

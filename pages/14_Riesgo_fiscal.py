@@ -7,6 +7,7 @@ import streamlit as st
 from core.auth import ensure_session_from_token
 from core.db import get_conn, ensure_schema, validar_usuario
 from core.auth import persist_login
+from core.streamlit_compat import set_query_params
 from core.navigation import render_nav
 
 st.set_page_config(page_title="Riesgo Fiscal | Araiza Intelligence", layout="wide")
@@ -36,7 +37,13 @@ def _render_login() -> None:
     if not rol or rol not in ALLOWED_ROLES:
         st.error("Usuario o contrasena incorrectos, o sin permiso para Riesgo Fiscal.")
         st.stop()
-    persist_login(username.strip(), rol)
+    token = persist_login(username.strip(), rol)
+    try:
+        current_qs = {k: v for k, v in st.query_params.items() if k != "auth"}
+        current_qs["auth"] = token
+        set_query_params(current_qs)
+    except Exception:
+        pass
     try:
         st.rerun()
     except Exception:
@@ -76,56 +83,72 @@ st.markdown(
       .module-hero {
         display: flex;
         flex-wrap: wrap;
-        gap: clamp(28px, 5vw, 48px);
+        gap: clamp(22px, 4vw, 36px);
         align-items: center;
         margin-top: clamp(12px, 3vw, 24px);
       }
       .module-hero > div {
-        flex: 1 1 360px;
+        flex: 1 1 320px;
         min-width: 0;
         display: flex;
+      }
+      .module-column {
+        display: flex;
         flex-direction: column;
-        gap: clamp(16px, 2vw, 24px);
+        justify-content: space-between;
+        gap: clamp(14px, 2vw, 22px);
+        width: 100%;
+      }
+      .module-copy {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        gap: clamp(10px, 1.6vw, 18px);
       }
       .module-copy h1 {
-        font-size: clamp(28px, 3.4vw, 40px);
+        font-size: clamp(26px, 3vw, 34px);
         font-weight: 800;
         color: #0f172a;
         margin: 0;
       }
       .module-copy p {
-        font-size: clamp(15px, 1.6vw, 18px);
-        line-height: 1.55;
+        font-size: clamp(14px, 1.4vw, 16px);
+        line-height: 1.45;
         color: #334155;
         margin: 0;
       }
-      .module-copy ul {
-        margin: 0 0 0 clamp(18px, 2vw, 24px);
+      .module-list {
+        margin: 0 0 0 clamp(16px, 2vw, 22px);
+        padding: 0;
+        list-style-position: inside;
         color: #0f172a;
-        font-size: clamp(14px, 1.5vw, 17px);
+        font-size: clamp(13px, 1.35vw, 15px);
+        line-height: 1.4;
       }
-      .module-copy ul li {
-        margin-bottom: clamp(2px, 1vw, 6px);
-        line-height: 1.35;
+      .module-list li {
+        margin-bottom: clamp(4px, 1vw, 6px);
       }
       .module-actions {
         display: flex;
         flex-wrap: wrap;
         gap: 12px;
-        margin-top: clamp(18px, 3vw, 28px);
+        margin-top: clamp(12px, 2.5vw, 18px);
       }
       .module-actions button[kind="primary"] {
-        min-width: 220px;
+        min-width: 200px;
       }
       .module-cover {
-        align-items: stretch;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
       .module-cover img {
-        width: 100%;
+        width: clamp(220px, 38vw, 420px);
+        height: auto;
+        max-height: 300px;
         border-radius: 18px;
-        box-shadow: 0 20px 36px rgba(15, 23, 42, 0.18);
+        box-shadow: 0 18px 32px rgba(15, 23, 42, 0.16);
         object-fit: cover;
-        max-height: 420px;
       }
     </style>
     """,
@@ -133,28 +156,29 @@ st.markdown(
 )
 
 st.markdown('<div class="module-hero">', unsafe_allow_html=True)
-
+st.markdown('<div class="module-column">', unsafe_allow_html=True)
 st.markdown('<div class="module-copy">', unsafe_allow_html=True)
-st.markdown('<h1>Verificación fiscal inteligente</h1>', unsafe_allow_html=True)
+st.markdown('<h1>Verificaci&oacute;n fiscal inteligente</h1>', unsafe_allow_html=True)
 st.markdown(
     """
     <p>
-      Nuestra aplicación analiza archivos XML de CFDI para extraer los RFC de los emisores y compararlos con la lista negra del SAT, garantizando control y cumplimiento fiscal.
+      Nuestra aplicaci&oacute;n analiza archivos XML de CFDI para extraer los RFC de los emisores y compararlos con la lista negra del SAT, garantizando control y cumplimiento fiscal.
     </p>
     <p>
-      Con una interfaz clara e intuitiva, podrás revisar tus comprobantes, visualizar los RFC detectados y generar un Excel con las coincidencias en segundos.
+      Con una interfaz clara e intuitiva, podr&aacute;s revisar tus comprobantes, visualizar los RFC detectados y generar un Excel con las coincidencias en segundos.
     </p>
-    <p><strong>Características principales:</strong></p>
-    <ul>
-      <li>Carga masiva de XML y extracción automática de RFC.</li>
-      <li>Comparación directa con la lista negra SAT (Firmes.csv).</li>
+    <p><strong>Caracter&iacute;sticas principales:</strong></p>
+    <ul class="module-list">
+      <li>Carga masiva de XML y extracci&oacute;n autom&aacute;tica de RFC.</li>
+      <li>Comparaci&oacute;n directa con la lista negra SAT (Firmes.csv).</li>
       <li>Vista previa compacta y ordenada.</li>
-      <li>Generación rápida de reportes en Excel.</li>
-      <li>Interfaz moderna y fácil de usar.</li>
+      <li>Generaci&oacute;n r&aacute;pida de reportes en Excel.</li>
+      <li>Interfaz moderna y f&aacute;cil de usar.</li>
     </ul>
     """,
     unsafe_allow_html=True,
 )
+st.markdown('</div>', unsafe_allow_html=True)
 
 st.markdown('<div class="module-actions">', unsafe_allow_html=True)
 if st.button("Consultar lista negra", type="primary", key="btn_consultar_riesgo"):

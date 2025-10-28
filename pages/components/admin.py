@@ -60,6 +60,7 @@ def init_admin_section(
     active_child: Optional[str] = None,
     layout: str = "wide",
     show_inicio: bool = True,
+    enable_foreign_keys: bool = True,
 ) -> sqlite3.Connection:
     """Inicializa el entorno de una página administrativa y devuelve la conexión.
 
@@ -74,7 +75,11 @@ def init_admin_section(
         Layout de la página para ``st.set_page_config`` (por defecto ``wide``).
     show_inicio:
         Indica si el enlace a Inicio debe mostrarse en la barra de navegación.
+    enable_foreign_keys:
+        Si es ``True`` activa ``PRAGMA foreign_keys = ON`` en la conexión devuelta.
     """
+
+    ensure_session_from_token()
 
     _configure_page(page_title, layout)
 
@@ -86,20 +91,21 @@ def init_admin_section(
         except ValueError:
             redirect_target = Path(caller_file).name
 
-    # Riesgo Fiscal no requiere rol de administrador; solo sesion valida
+    require_auth = active_top not in {"tarifas", "usuarios"}
+    # Riesgo Fiscal no requiere rol de administrador; solo sesión válida
     if active_top == "riesgo":
-        ensure_session_from_token()
         if "usuario" not in st.session_state or "rol" not in st.session_state:
             _redirect_to_login(redirect_target, switch_to_page="pages/14_Riesgo_fiscal.py")
-    else:
+    elif require_auth:
         _ensure_admin_session(redirect_target)
 
     conn = get_conn()
     ensure_schema(conn)
-    try:
-        conn.execute("PRAGMA foreign_keys = ON")
-    except Exception:
-        pass
+    if enable_foreign_keys:
+        try:
+            conn.execute("PRAGMA foreign_keys = ON")
+        except Exception:
+            pass
 
     render_nav(active_top=active_top, active_child=active_child, show_inicio=show_inicio)
     return conn

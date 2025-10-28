@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 import importlib.util
 import html
 from uuid import uuid4
@@ -151,13 +152,14 @@ def _render_login() -> None:
         )
         return
 
-    persist_login(username, rol)
+    token = persist_login(username, rol)
     st.session_state["calc_show_landing"] = True
     welcome = f"Bienvenido, {username} ({'Administrador' if rol == 'admin' else 'Calculador'})."
     st.session_state["login_flash"] = welcome
 
     if redirect_target:
         remaining = {k: v for k, v in st.query_params.items() if k != "next"}
+        remaining["auth"] = token
         try:
             set_query_params(remaining)
         except Exception:
@@ -167,6 +169,13 @@ def _render_login() -> None:
         except Exception:
             rerun()
         return
+
+    try:
+        current_qs = {k: v for k, v in st.query_params.items() if k != "auth"}
+        current_qs["auth"] = token
+        set_query_params(current_qs)
+    except Exception:
+        pass
 
     rerun()
 
@@ -186,22 +195,83 @@ if bool(st.session_state.get("calc_show_landing", True)):
     st.markdown(
         """
         <style>
-          .module-hero { display:flex; flex-wrap:wrap; gap:clamp(28px,5vw,48px); align-items:center; margin-top:clamp(12px,3vw,24px); }
-          .module-hero > div { flex:1 1 360px; min-width:0; display:flex; flex-direction:column; gap:clamp(16px,2vw,24px); }
-          .module-copy h1 { font-size:clamp(28px,3.4vw,40px); margin:0; font-weight:800; color:#0f172a; }
-          .module-copy p { font-size:clamp(15px,1.6vw,18px); line-height:1.55; color:#334155; margin:0; }
-          .module-copy ul { margin:0 0 0 clamp(18px,2vw,24px); color:#0f172a; font-size:clamp(14px,1.5vw,17px); }
-          .module-copy ul li { margin-bottom:clamp(2px,1vw,6px); line-height:1.35; }
-          .module-actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:clamp(18px,3vw,28px); }
-          .module-actions button[kind="primary"] { min-width:220px; }
-          .module-cover { align-items:stretch; }
-          .module-cover img { width:100%; border-radius:18px; box-shadow:0 20px 36px rgba(15,23,42,0.18); object-fit:cover; max-height:420px; }
+          .module-hero {
+            display: flex;
+            flex-wrap: wrap;
+            gap: clamp(22px, 4vw, 36px);
+            align-items: center;
+            margin-top: clamp(12px, 3vw, 24px);
+          }
+          .module-hero > div {
+            flex: 1 1 320px;
+            min-width: 0;
+            display: flex;
+          }
+          .module-column {
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            gap: clamp(14px, 2vw, 22px);
+            width: 100%;
+          }
+          .module-copy {
+            flex: 1 1 auto;
+            display: flex;
+            flex-direction: column;
+            gap: clamp(10px, 1.6vw, 18px);
+          }
+          .module-copy h1 {
+            font-size: clamp(26px, 3vw, 34px);
+            margin: 0;
+            font-weight: 800;
+            color: #0f172a;
+          }
+          .module-copy p {
+            font-size: clamp(14px, 1.4vw, 16px);
+            line-height: 1.45;
+            color: #334155;
+            margin: 0;
+          }
+          .module-list {
+            margin: 0 0 0 clamp(16px, 2vw, 22px);
+            padding: 0;
+            list-style-position: inside;
+            color: #0f172a;
+            font-size: clamp(13px, 1.35vw, 15px);
+            line-height: 1.4;
+          }
+          .module-list li {
+            margin-bottom: clamp(4px, 1vw, 6px);
+          }
+          .module-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: clamp(12px, 2.5vw, 18px);
+          }
+          .module-actions button[kind="primary"] {
+            min-width: 200px;
+          }
+          .module-cover {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          .module-cover img {
+            width: clamp(220px, 38vw, 420px);
+            height: auto;
+            max-height: 300px;
+            border-radius: 18px;
+            box-shadow: 0 18px 32px rgba(15, 23, 42, 0.16);
+            object-fit: cover;
+          }
         </style>
         """,
         unsafe_allow_html=True,
     )
 
     st.markdown('<div class="module-hero">', unsafe_allow_html=True)
+    st.markdown('<div class="module-column">', unsafe_allow_html=True)
     st.markdown('<div class="module-copy">', unsafe_allow_html=True)
     st.markdown('<h1>Precisi&oacute;n en movimiento</h1>', unsafe_allow_html=True)
     st.markdown(
@@ -216,7 +286,7 @@ if bool(st.session_state.get("calc_show_landing", True)):
           Adem&aacute;s, administra f&aacute;cilmente usuarios y trabajadores, garantizando control, trazabilidad y eficiencia en cada viaje.
         </p>
         <p><strong>Caracter&iacute;sticas principales:</strong></p>
-        <ul>
+        <ul class="module-list">
           <li>C&aacute;lculo autom&aacute;tico de rutas, distancias y casetas.</li>
           <li>Estimaci&oacute;n real de combustible y costos operativos.</li>
           <li>Gesti&oacute;n integrada de usuarios y trabajadores.</li>
@@ -226,6 +296,7 @@ if bool(st.session_state.get("calc_show_landing", True)):
         """,
         unsafe_allow_html=True,
     )
+    st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('<div class="module-actions">', unsafe_allow_html=True)
     if st.button("Calcular ruta", type="primary", key="btn_calc_start"):
         st.session_state["calc_show_landing"] = False
@@ -235,10 +306,11 @@ if bool(st.session_state.get("calc_show_landing", True)):
             pass
     st.markdown('</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="module-cover">', unsafe_allow_html=True)
     try:
-        st.image("assets/Inicio_card.png", use_container_width=True)
+        st.image("assets/Inicio_card.png", width=420)
     except Exception:
         pass
     st.markdown('</div>', unsafe_allow_html=True)
@@ -305,6 +377,18 @@ def get_pdf_builder():
         return _PDF_BUILDER
 
     if importlib.util.find_spec("reportlab") is None:
+        st.info(
+            "La librería opcional 'reportlab' es necesaria para generar el PDF. Ejecuta `pip install -r requirements.txt` o `pip install reportlab` e intenta de nuevo.",
+            icon='ℹ️',
+        )
+        return None
+
+    from core.pdf import build_pdf_costeo  # noqa: WPS433 (import dentro de la función)
+
+    _PDF_BUILDER = build_pdf_costeo
+    return _PDF_BUILDER
+
+    if importlib.util.find_spec("reportlab") is None:
         st.error(
             "La librería opcional 'reportlab' es necesaria para generar el PDF. "
             "Ejecuta `pip install -r requirements.txt` o `pip install reportlab` e intenta de nuevo."
@@ -331,47 +415,26 @@ class SectionOutput:
 
 
 def section(title: str, total_value: float | None, body_fn=None) -> SectionOutput:
-    """Renderiza una sección con encabezado compacto y devuelve su información."""
+    """Renderiza una sección en formato compacto."""
 
     toggle_key = f"section_toggle_{normalize_name(title)}"
     show_details = bool(st.session_state.get(toggle_key, False))
-    icon_char = "▾" if show_details else "▸"
+    icon_char = "▼" if show_details else "▶"
 
-    st.markdown("<div class='section'>", unsafe_allow_html=True)
-    header_container = st.container()
-    with header_container:
-        st.markdown("<div class='section-header'>", unsafe_allow_html=True)
-        header_cols = st.columns([0.72, 0.08, 0.2], gap="small")
-        with header_cols[0]:
-            st.markdown(
-                f"<div class='section-title-row'><span class='section-title'>{title}</span></div>",
-                unsafe_allow_html=True,
-            )
-        with header_cols[1]:
-            st.markdown("<div class='section-toggle'>", unsafe_allow_html=True)
-            if st.button(
-                icon_char,
-                key=f"{toggle_key}_btn",
-                help="Mostrar u ocultar desglose",
-            ):
-                st.session_state[toggle_key] = not show_details
-                show_details = not show_details
-                icon_char = "▾" if show_details else "▸"
-            st.markdown("</div>", unsafe_allow_html=True)
-        total_placeholder = header_cols[2].empty()
-        st.markdown("</div>", unsafe_allow_html=True)
+    header_cols = st.columns([0.75, 0.1, 0.15], gap="small")
+    with header_cols[0]:
+        st.markdown(f"**{title}**")
+    with header_cols[1]:
+        if st.button(icon_char, key=f"{toggle_key}_btn", help="Mostrar u ocultar desglose"):
+            st.session_state[toggle_key] = not show_details
+            show_details = not show_details
+    total_placeholder = header_cols[2].empty()
 
     computed_total = float(total_value) if total_value is not None else 0.0
     result = SectionBodyResult()
 
     if body_fn:
-        body_container = st.container()
-        with body_container:
-            if show_details:
-                st.markdown("<div class='section-body'>", unsafe_allow_html=True)
-            raw_result = body_fn(show_details)
-            if show_details:
-                st.markdown("</div>", unsafe_allow_html=True)
+        raw_result = body_fn(show_details)
         if isinstance(raw_result, SectionBodyResult):
             result = raw_result
         elif isinstance(raw_result, tuple) and len(raw_result) == 2:
@@ -388,25 +451,11 @@ def section(title: str, total_value: float | None, body_fn=None) -> SectionOutpu
         if result.total is not None:
             computed_total = float(result.total)
 
-    total_placeholder.markdown(
-        f"<div class='section-total-pill'>${computed_total:,.2f}</div>",
-        unsafe_allow_html=True,
-    )
+    total_placeholder.markdown(f"${computed_total:,.2f}")
 
     if show_details and result.breakdown:
-        breakdown_container = st.container()
-        with breakdown_container:
-            st.markdown("<div class='breakdown-card'>", unsafe_allow_html=True)
-            for raw_label, raw_value in result.breakdown:
-                label = html.escape(str(raw_label))
-                value = html.escape(str(raw_value))
-                st.markdown(
-                    f"<div class='breakdown-item'><span class='breakdown-label'>{label}</span><span class='breakdown-value'>{value}</span></div>",
-                    unsafe_allow_html=True,
-                )
-            st.markdown("</div>", unsafe_allow_html=True)
-
-    st.markdown("</div>", unsafe_allow_html=True)
+        for raw_label, raw_value in result.breakdown:
+            st.markdown(f"- **{html.escape(str(raw_label))}**: {html.escape(str(raw_value))}")
 
     return SectionOutput(title=title, total=computed_total, breakdown=result.breakdown)
 
@@ -585,6 +634,29 @@ if stop_state_key not in st.session_state:
 if MANUAL_MODE and st.session_state.get(stop_state_key):
     st.session_state[stop_state_key] = False
 
+def _swap_point_data(role_a: str, role_b: str) -> None:
+    """Intercambia datos de origen/destino/parada en session_state."""
+
+    role_prefix = {
+        "origin": "top_origen",
+        "destination": "top_destino",
+        "stop": "top_parada",
+    }
+    suffixes = ("_data", "_query", "_options", "_selection")
+
+    prefix_a = role_prefix.get(role_a)
+    prefix_b = role_prefix.get(role_b)
+    if not prefix_a or not prefix_b:
+        return
+
+    for suffix in suffixes:
+        key_a = f"{prefix_a}{suffix}"
+        key_b = f"{prefix_b}{suffix}"
+        st.session_state[key_a], st.session_state[key_b] = st.session_state.get(key_b), st.session_state.get(key_a)
+
+    if role_a == "stop" or role_b == "stop":
+        st.session_state[stop_state_key] = bool(st.session_state.get("top_parada_data"))
+
 with st.container():
     st.markdown("<div class='top-form'>", unsafe_allow_html=True)
     col_plus, col_addresses = st.columns([0.2, 1.0], gap="large")
@@ -610,17 +682,71 @@ with st.container():
 
     with col_addresses:
         st.markdown("<div class='address-stack'>", unsafe_allow_html=True)
-        origen = autocomplete_input("ORIGEN", "top_origen")
-        destino = autocomplete_input("DESTINO", "top_destino")
+
         show_stop = bool(st.session_state.get(stop_state_key)) and not MANUAL_MODE
+        route_roles = st.session_state.get("route_roles", ["origin", "destination"])
+        allowed_roles = ["origin", "destination", "stop"]
+        route_roles = [r for r in route_roles if r in allowed_roles]
+
         if show_stop:
-            parada = autocomplete_input("PARADA (OPCIONAL)", "top_parada")
+            if "stop" not in route_roles:
+                route_roles.append("stop")
+            base = [r for r in route_roles if r in ("origin", "destination")]
+            if "origin" not in base:
+                base.insert(0, "origin")
+            if "destination" not in base:
+                base.append("destination")
+            route_roles = base + ["stop"]
         else:
+            route_roles = [r for r in route_roles if r in ("origin", "destination")]
             st.session_state.pop("top_parada_query", None)
             st.session_state.pop("top_parada_options", None)
             st.session_state.pop("top_parada_selection", None)
             st.session_state.pop("top_parada_data", None)
-            parada = None
+            st.session_state.pop("top_parada_query", None)
+            st.session_state.pop("top_parada_options", None)
+            st.session_state.pop("top_parada_selection", None)
+            st.session_state.pop("top_parada_data", None)
+
+        st.session_state["route_roles"] = route_roles
+
+        role_labels = {
+            "origin": "ORIGEN",
+            "destination": "DESTINO",
+            "stop": "PARADA (OPCIONAL)",
+        }
+        role_prefix = {
+            "origin": "top_origen",
+            "destination": "top_destino",
+            "stop": "top_parada",
+        }
+
+        for idx, role in enumerate(route_roles):
+            prefix = role_prefix[role]
+            label = role_labels[role]
+            cols_field = st.columns([0.86, 0.14])
+            with cols_field[0]:
+                autocomplete_input(label, prefix)
+            with cols_field[1]:
+                if not MANUAL_MODE:
+                    up_available = idx > 0
+                    down_available = idx < len(route_roles) - 1
+                    if up_available:
+                        if st.button("↑", key=f"{prefix}_up"):
+                            upper_role = route_roles[idx - 1]
+                            _swap_point_data(role, upper_role)
+                            route_roles[idx - 1], route_roles[idx] = route_roles[idx], route_roles[idx - 1]
+                            st.session_state["route_roles"] = route_roles
+                            rerun()
+                            st.stop()
+                    if down_available:
+                        if st.button("↓", key=f"{prefix}_down"):
+                            lower_role = route_roles[idx + 1]
+                            _swap_point_data(role, lower_role)
+                            route_roles[idx + 1], route_roles[idx] = route_roles[idx], route_roles[idx + 1]
+                            st.session_state["route_roles"] = route_roles
+                            rerun()
+                            st.stop()
 
         meta_cols = st.columns(3, gap="medium")
         with meta_cols[0]:
@@ -637,6 +763,14 @@ with st.container():
         with meta_cols[2]:
             distancia_base = float(st.session_state.get("maps_distance_km") or 0.0)
             dias_sugeridos = max(1.0, round(distancia_base / 600.0, 1))
+            if not st.session_state.get(dias_manual_flag_key, False):
+                stored_dias = st.session_state.get("dias_estimados_input")
+                try:
+                    stored_val = float(stored_dias) if stored_dias is not None else None
+                except (TypeError, ValueError):
+                    stored_val = None
+                if stored_val is None or stored_val != float(dias_sugeridos):
+                    st.session_state["dias_estimados_input"] = float(dias_sugeridos)
             dias_init = float(st.session_state.get("dias_estimados_input", dias_sugeridos))
             dias_est = st.number_input(
                 "DÍAS ESTIMADOS",
@@ -648,6 +782,10 @@ with st.container():
                 on_change=_mark_dias_manual,
             )
 
+        origen = st.session_state.get("top_origen_data")
+        destino = st.session_state.get("top_destino_data")
+        parada = st.session_state.get("top_parada_data") if show_stop else None
+
         current_conductor = st.session_state.get("conductor_select", trab_opc[0])
         default_conductor_idx = trab_opc.index(current_conductor) if current_conductor in trab_opc else 0
         trab_show = st.selectbox(
@@ -656,10 +794,10 @@ with st.container():
             index=default_conductor_idx,
             key="conductor_select",
         )
+
         st.markdown("</div>", unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)
-
 total_banner = st.container()
 
 usar_parada = bool(st.session_state.get(stop_state_key)) and not MANUAL_MODE
@@ -940,16 +1078,9 @@ section_outputs.append(diesel_section)
 trab_show = st.session_state.get("conductor_select", trab_opc[0])
 
 dias_sugeridos = max(1.0, round((km_totales or 0.0) / 600.0, 1))
-if not st.session_state.get(dias_manual_flag_key) and (
-    float(st.session_state.get("dias_estimados_input", dias_sugeridos)) != float(dias_sugeridos)
-):
-    st.session_state["dias_estimados_input"] = dias_sugeridos
-elif st.session_state.get(dias_manual_flag_key) and (
-    float(st.session_state.get("dias_estimados_input", dias_sugeridos)) == float(dias_sugeridos)
-):
-    st.session_state[dias_manual_flag_key] = False
-
 dias_est = float(st.session_state.get("dias_estimados_input", dias_sugeridos))
+if st.session_state.get(dias_manual_flag_key, False) and abs(dias_est - float(dias_sugeridos)) < 1e-9:
+    st.session_state[dias_manual_flag_key] = False
 
 trabajador_sel = None
 if trab_show != "(Sin conductor)":
@@ -1283,60 +1414,61 @@ pdf_sections = [(sec.title, sec.total, sec.breakdown) for sec in section_outputs
 # PDF
 pdf_builder = get_pdf_builder()
 
-try:
-    df_pdf = df.copy()
-    df_pdf["excluir"] = df_pdf["idx"].apply(lambda i: is_excluded(int(i)))
+if pdf_builder:
+    try:
+        df_pdf = df.copy()
+        df_pdf["excluir"] = df_pdf["idx"].apply(lambda i: is_excluded(int(i)))
 
-    trabajador_sel_row = trabajador_sel  # dict o None
-    costo_diario_pdf = 0.0
-    anios_pdf = 1
-    if trabajador_sel_row:
-        _, _, costo_diario_pdf, anios_pdf = costo_diario_trabajador_auto(trabajador_sel_row)
+        trabajador_sel_row = trabajador_sel  # dict o None
+        costo_diario_pdf = 0.0
+        anios_pdf = 1
+        if trabajador_sel_row:
+            _, _, costo_diario_pdf, anios_pdf = costo_diario_trabajador_auto(trabajador_sel_row)
 
-    dias_est_pdf = float(dias_est or 1.0)
-    km_totales_pdf = float(km_totales or 0.0)
-    rendimiento_pdf = float(rendimiento or 1.0)
-    precio_litro_pdf = float(precio_litro or 0.0)
-    litros_estimados_pdf = float(litros_estimados if rendimiento_pdf > 0 else 0.0)
+        dias_est_pdf = float(dias_est or 1.0)
+        km_totales_pdf = float(km_totales or 0.0)
+        rendimiento_pdf = float(rendimiento or 1.0)
+        precio_litro_pdf = float(precio_litro or 0.0)
+        litros_estimados_pdf = float(litros_estimados if rendimiento_pdf > 0 else 0.0)
 
-    subtotal_peajes_pdf = float(subtotal_peajes or 0.0)
-    subtotal_combustible_pdf = float(subtotal_combustible or 0.0)
-    subtotal_conductor_pdf = float(dias_est_pdf * costo_diario_pdf) if trabajador_sel_row else 0.0
-    viaticos_mxn_pdf = float(viaticos_mxn or 0.0)
+        subtotal_peajes_pdf = float(subtotal_peajes or 0.0)
+        subtotal_combustible_pdf = float(subtotal_combustible or 0.0)
+        subtotal_conductor_pdf = float(dias_est_pdf * costo_diario_pdf) if trabajador_sel_row else 0.0
+        viaticos_mxn_pdf = float(viaticos_mxn or 0.0)
 
-    horas_totales = dias_est_pdf * 9.0
+        horas_totales = dias_est_pdf * 9.0
 
-    # Usa el MISMO total que muestras en la pantalla
-    total_pdf = float(total_general or 0.0)
+        # Usa el MISMO total que muestras en la pantalla
+        total_pdf = float(total_general or 0.0)
 
-    pdf_bytes = pdf_builder(
-        ruta_nombre=ruta_nombre,
-        origen=origin_label,
-        destino=destination_label,
-        clase=clase,
-        df_peajes=df_pdf[["plaza", "tarifa", "excluir"]],
-        total_original=float(df["tarifa"].sum()),
-        total_ajustado=subtotal_peajes_pdf,
-        km_totales=km_totales_pdf, rendimiento=rendimiento_pdf, precio_litro=precio_litro_pdf,
-        litros=litros_estimados_pdf, costo_combustible=subtotal_combustible_pdf,
-        total_general=total_pdf,
-        trabajador_sel=trabajador_sel_row,
-        esquema_conductor="Por día (método Edwin)" if trabajador_sel_row else "Sin conductor",
-        horas_estimadas=horas_totales,
-        costo_conductor=subtotal_conductor_pdf,
-        tarifa_dia=float(costo_diario_pdf) if trabajador_sel_row else None,
-        horas_por_dia=None,
-        tarifa_hora=None, tarifa_km=None,
-        viaticos_mxn=viaticos_mxn_pdf,
-        section_breakdowns=pdf_sections,
-    )
+        pdf_bytes = pdf_builder(
+            ruta_nombre=ruta_nombre,
+            origen=origin_label,
+            destino=destination_label,
+            clase=clase,
+            df_peajes=df_pdf[["plaza", "tarifa", "excluir"]],
+            total_original=float(df["tarifa"].sum()),
+            total_ajustado=subtotal_peajes_pdf,
+            km_totales=km_totales_pdf, rendimiento=rendimiento_pdf, precio_litro=precio_litro_pdf,
+            litros=litros_estimados_pdf, costo_combustible=subtotal_combustible_pdf,
+            total_general=total_pdf,
+            trabajador_sel=trabajador_sel_row,
+            esquema_conductor="Por día (método Edwin)" if trabajador_sel_row else "Sin conductor",
+            horas_estimadas=horas_totales,
+            costo_conductor=subtotal_conductor_pdf,
+            tarifa_dia=float(costo_diario_pdf) if trabajador_sel_row else None,
+            horas_por_dia=None,
+            tarifa_hora=None, tarifa_km=None,
+            viaticos_mxn=viaticos_mxn_pdf,
+            section_breakdowns=pdf_sections,
+        )
 
-    st.download_button(
-        "📄 DESCARGAR COSTEO (PDF)",
-        data=pdf_bytes,
-        file_name=f"costeo_{normalize_name(origin_label)}_{normalize_name(destination_label)}.pdf",
-        mime="application/pdf",
-        use_container_width=True,
-    )
-except Exception as e:
-    st.warning(f"No se pudo generar PDF: {e}")
+        st.download_button(
+            "⬇️ DESCARGAR COSTEO (PDF)",
+            data=pdf_bytes,
+            file_name=f"costeo_{normalize_name(origin_label)}_{normalize_name(destination_label)}.pdf",
+            mime="application/pdf",
+            use_container_width=True,
+        )
+    except Exception as e:
+        st.warning(f"No se pudo generar PDF: {e}")
