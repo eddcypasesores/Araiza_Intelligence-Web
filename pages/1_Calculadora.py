@@ -7,6 +7,7 @@ import importlib.util
 import html
 from uuid import uuid4
 from types import SimpleNamespace
+from pathlib import Path
 import pandas as pd
 import streamlit as st
 
@@ -27,6 +28,7 @@ from core.params import read_params
 from core.maps import GoogleMapsClient, GoogleMapsError
 from core.navigation import render_nav
 from core.streamlit_compat import rerun, set_query_params
+from pages.components.hero import first_image_base64, inject_hero_css
 
 HARDCODED_MAPS_API_KEY = "AIzaSyBqSuQGWucHtypH60GpAAIxJVap76CgRL8"
 
@@ -101,11 +103,11 @@ conn = get_conn()
 ensure_schema(conn)
 
 
+
 def _render_login() -> None:
     """Muestra el formulario de acceso para la calculadora."""
 
-    st.title("Calculadora de Traslados")
-    st.subheader("Inicia sesión para continuar")
+    inject_hero_css()
 
     raw_next = st.query_params.get("next")
     redirect_target: str | None
@@ -117,16 +119,65 @@ def _render_login() -> None:
         redirect_target = None
 
     current_role = st.session_state.get("rol")
-    if current_role and current_role not in ALLOWED_ROLES:
-        st.error(
-            "Tu usuario existe, pero no cuenta con permisos para utilizar la calculadora. "
-            "Cierra sesión e intenta con otra cuenta o contacta al administrador."
-        )
 
-    with st.form("calculadora_login", clear_on_submit=False):
-        username = st.text_input("Usuario", placeholder="ej. admin")
-        password = st.text_input("Contraseña", type="password", placeholder="••••••••")
-        submitted = st.form_submit_button("Iniciar sesión", use_container_width=True)
+    image_candidates = [
+        Path("assets/calculadora_cover.png"),
+        Path(__file__).resolve().parent / "assets" / "calculadora_cover.png",
+        Path("assets/logo.jpg"),
+        Path(__file__).resolve().parent / "assets" / "logo.jpg",
+    ]
+    img_base64 = first_image_base64(image_candidates)
+
+    col_img, col_content = st.columns([5, 5])
+    with col_img:
+        st.markdown('<div style="padding-top: 20px;">', unsafe_allow_html=True)
+        if img_base64:
+            st.markdown(
+                f'<img class="hero-image" src="{img_base64}" alt="Araiza Intelligence Logo" />',
+                unsafe_allow_html=True,
+            )
+        else:
+            st.warning(
+                "No se pudo cargar la ilustracion de la calculadora. Verifica la carpeta 'assets'."
+            )
+        st.markdown("</div>", unsafe_allow_html=True)
+
+    with col_content:
+        st.markdown('<div style="padding-top: 20px;">', unsafe_allow_html=True)
+        st.markdown(
+            '<h1 class="hero-title">Calculadora de Traslados</h1>',
+            unsafe_allow_html=True,
+        )
+        st.markdown(
+            """
+            <p class="hero-subtitle">
+                Inicia sesi&oacute;n para acceder a las herramientas de c&aacute;lculo de costos y rutas.
+            </p>
+            <p class="hero-subtitle">
+                Tu cuenta debe contar con el perfil de administrador u operador para continuar.
+            </p>
+            <ul class="hero-list">
+                <li>Calcula costos completos de traslado en segundos.</li>
+                <li>Administra tarifas vigentes y vi&aacute;ticos desde un mismo panel.</li>
+                <li>Coordina operadores, conductores y paradas intermedias sin planillas manuales.</li>
+            </ul>
+            """,
+            unsafe_allow_html=True,
+        )
+        if current_role and current_role not in ALLOWED_ROLES:
+            st.error(
+                "Tu usuario existe, pero no cuenta con permisos para utilizar la calculadora. "
+                "Cierra sesion e intenta con otra cuenta o contacta al administrador."
+            )
+
+        st.markdown('<div class="hero-actions">', unsafe_allow_html=True)
+        with st.form("calculadora_login", clear_on_submit=False):
+            username = st.text_input("Usuario", placeholder="ej. admin")
+            password = st.text_input("Contrasena", type="password", placeholder="********")
+            submitted = st.form_submit_button("Iniciar sesion", use_container_width=True)
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        st.markdown("</div>", unsafe_allow_html=True)
 
     if not submitted:
         return
@@ -763,20 +814,21 @@ with st.container():
         with meta_cols[2]:
             distancia_base = float(st.session_state.get("maps_distance_km") or 0.0)
             dias_sugeridos = max(1.0, round(distancia_base / 600.0, 1))
-            if not st.session_state.get(dias_manual_flag_key, False):
-                stored_dias = st.session_state.get("dias_estimados_input")
-                try:
-                    stored_val = float(stored_dias) if stored_dias is not None else None
-                except (TypeError, ValueError):
-                    stored_val = None
-                if stored_val is None or stored_val != float(dias_sugeridos):
-                    st.session_state["dias_estimados_input"] = float(dias_sugeridos)
-            dias_init = float(st.session_state.get("dias_estimados_input", dias_sugeridos))
+            target_dias = float(dias_sugeridos)
+            stored_raw = st.session_state.get("dias_estimados_input")
+            try:
+                stored_val = float(stored_raw) if stored_raw is not None else None
+            except (TypeError, ValueError):
+                stored_val = None
+
+            if stored_val is None or (
+                not st.session_state.get(dias_manual_flag_key, False) and stored_val != target_dias
+            ):
+                st.session_state["dias_estimados_input"] = target_dias
             dias_est = st.number_input(
                 "DÍAS ESTIMADOS",
                 min_value=1.0,
                 step=0.5,
-                value=dias_init,
                 format="%.2f",
                 key="dias_estimados_input",
                 on_change=_mark_dias_manual,

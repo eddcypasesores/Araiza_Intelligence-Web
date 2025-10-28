@@ -1,198 +1,149 @@
-"""Portada pública de Araiza Intelligence."""
+"""Portada pública de Araiza Intelligence, con diseño de dos columnas."""
 
 from pathlib import Path
 import base64
 import streamlit as st
 
+# Importaciones necesarias (mantener si existen en tu proyecto)
 from core.auth import ensure_session_from_token
 from core.navigation import render_nav
 
-st.set_page_config(page_title="Araiza Intelligence", layout="wide")
+# --- 1. Configuración de la página ---
+st.set_page_config(
+    page_title="Inicio - Araiza Intelligence",
+    page_icon="🧊",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 
+# --- Autenticación (para garantizar que se carga la sesión) ---
 ensure_session_from_token()
 
-# -------- CSS específico de la portada --------
-CUSTOM_CSS = """
-<style>
-  :root {
-    --brand-red: #dc2626;
-    --brand-red-dark: #b91c1c;
-  }
-
-  .module-hero {
-    display: flex;
-    flex-wrap: wrap;
-    gap: clamp(22px, 4vw, 36px);
-    align-items: center;
-    margin-top: clamp(12px, 3vw, 24px);
-  }
-
-  .module-hero > div {
-    flex: 1 1 320px;
-    min-width: 0;
-    display: flex;
-  }
-
-  .module-column {
-    display: flex;
-    flex-direction: column;
-    justify-content: space-between;
-    gap: clamp(14px, 2vw, 22px);
-    width: 100%;
-  }
-
-  .module-copy {
-    flex: 1 1 auto;
-    display: flex;
-    flex-direction: column;
-    gap: clamp(10px, 1.6vw, 18px);
-  }
-
-  .module-copy h1 {
-    font-size: clamp(26px, 3vw, 34px);
-    font-weight: 800;
-    color: #0f172a;
-    margin: 0;
-  }
-
-  .module-copy p {
-    font-size: clamp(14px, 1.4vw, 16px);
-    line-height: 1.45;
-    color: #334155;
-    margin: 0;
-  }
-
-  .module-list {
-    margin: 0 0 0 clamp(16px, 2vw, 22px);
-    padding: 0;
-    list-style-position: inside;
-    color: #0f172a;
-    font-size: clamp(13px, 1.35vw, 15px);
-    line-height: 1.4;
-  }
-
-  .module-list li {
-    margin-bottom: clamp(4px, 1vw, 6px);
-  }
-
-  .module-list.two-columns {
-    column-count: 2;
-    column-gap: clamp(16px, 3vw, 28px);
-  }
-
-  .module-actions {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 12px;
-    margin-top: clamp(12px, 2.5vw, 18px);
-  }
-
-  .module-actions button[kind="primary"] {
-    min-width: 200px;
-  }
-
-  .module-features {
-    margin-top: clamp(12px, 2.5vw, 20px);
-  }
-
-  .module-features-title {
-    font-weight: 700;
-    color: #0f172a;
-    margin: 0;
-  }
-
-  .module-cover {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .module-cover img {
-    width: clamp(220px, 38vw, 420px);
-    height: auto;
-    max-height: 300px;
-    border-radius: 18px;
-    box-shadow: 0 18px 32px rgba(15, 23, 42, 0.16);
-    object-fit: cover;
-  }
-</style>
-"""
-
-st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
-
-render_nav(active_top="inicio", active_child=None, show_inicio=False, show_cta=False)
-
-# -------- Resolver imagen --------
-APP_DIR = Path(__file__).resolve().parent
-ASSET_DIRS = [
-    APP_DIR / "assets",
-    APP_DIR.parent / "assets",
-    APP_DIR.parent / "static",
-    Path.cwd() / "assets",
-    Path.cwd() / "static",
-    Path.cwd() / "COSTOS TRASLADOS APP" / "assets",
-]
-def resolve_asset(name: str):
-    p = Path(name)
-    if p.exists(): return p
-    for d in ASSET_DIRS:
-        q = d / Path(name).name
-        if q.exists(): return q
-    return None
-def to_data_url(p: Path):
+# --- 2. Carga de la imagen (logo.jpg) en Base64 ---
+# RUTA: Costos Traslados App\assets\logo.jpg
+def image_to_base64(image_path):
+    """Convierte una imagen local a Base64."""
     try:
-        mime = "image/png" if p.suffix.lower()==".png" else "image/jpeg"
-        return f"data:{mime};base64," + base64.b64encode(p.read_bytes()).decode()
-    except Exception:
+        path_obj = Path(image_path)
+        with path_obj.open("rb") as img_file:
+            return base64.b64encode(img_file.read()).decode()
+    except FileNotFoundError:
+        st.error(f"Error: No se encontró el archivo de imagen en la ruta: {image_path}. Por favor, verifica la ruta relativa.")
         return None
 
-# Use the project logo on the general home
-img_path = (
-    resolve_asset("assets/logo.jpg")
-    or resolve_asset("logo.jpg")
-)
-img_data = to_data_url(img_path) if img_path else None
+IMAGE_PATH = "assets/logo.jpg" 
+img_base64 = image_to_base64(IMAGE_PATH)
 
-# -------- HERO unificado --------
-with st.container():
-    st.markdown('<div class="module-hero">', unsafe_allow_html=True)
-    st.markdown('<div class="module-column">', unsafe_allow_html=True)
-    st.markdown('<div class="module-copy">', unsafe_allow_html=True)
-    st.markdown('<h1>Araiza Intelligence</h1>', unsafe_allow_html=True)
-    st.markdown(
-        """
-        <p>
-          Somos la unidad de anal&iacute;tica y automatizaci&oacute;n del Grupo Araiza. Transformamos datos operativos en decisiones estrat&eacute;gicas mediante herramientas inteligentes que integran geolocalizaci&oacute;n, modelos de costos y tableros ejecutivos.
+# --- 3. CSS personalizado (Estilos) ---
+st.markdown("""
+    <style>
+    /* VARIABLES DE MARCA */
+    :root {
+        --brand-red: #dc2626;
+        --brand-red-dark: #b91c1c;
+        --text-color: #333;
+        --background-color: #f9f9f9;
+        --dark-gray: #666;
+    }
+
+    /* Oculta el encabezado por defecto de Streamlit */
+    .stApp > header {
+        display: none;
+    }
+    
+    /* Estilos de tipografía y listas */
+    .hero-title {
+        font-size: 2.8em;
+        font-weight: 700;
+        margin-bottom: 20px;
+        color: var(--brand-red);
+    }
+    .hero-subtitle {
+        font-size: 1.1em;
+        line-height: 1.6;
+        margin-bottom: 25px;
+        color: var(--dark-gray);
+    }
+    .hero-features ul {
+        list-style: none;
+        padding-left: 0;
+        margin-top: 20px;
+    }
+    .hero-features li {
+        margin-bottom: 10px;
+        font-size: 1em;
+        color: var(--text-color);
+        display: flex;
+        align-items: center;
+    }
+    .hero-features li::before {
+        content: '✓';
+        color: var(--brand-red);
+        font-weight: bold;
+        margin-right: 10px;
+        font-size: 1.2em;
+    }
+
+    /* Asegurar que la imagen dentro de la columna ocupe el espacio */
+    .hero-image {
+        max-width: 100%;
+        height: auto;
+        border-radius: 8px;
+        object-fit: cover;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- 4. Renderizar navegación ---
+render_nav()
+
+# --- 5. Contenido de la página de inicio (SIN contenedor principal) ---
+
+# Crea las dos columnas de Streamlit.
+col_img, col_content = st.columns([5, 5]) 
+
+# ----------------- Columna de la Imagen -----------------
+with col_img:
+    if img_base64:
+        st.markdown(
+            f'<img class="hero-image" src="data:image/jpeg;base64,{img_base64}" alt="Araiza Intelligence Logo" />', 
+            unsafe_allow_html=True
+        )
+    else:
+        st.warning("No se pudo cargar la imagen. Verifique la ruta 'assets/logo.jpg'.")
+
+
+# ----------------- Columna del Contenido (Texto y Características) -----------------
+with col_content:
+    st.markdown('<h1 class="hero-title">Araiza Intelligence: Precisión en movimiento.</h1>', unsafe_allow_html=True)
+
+    st.markdown("""
+        <p class="hero-subtitle">
+            Con la Calculadora de Traslados, estima en segundos el costo real de cada ruta,
+            alineando a tus equipos de logística con tarifas transparentes y actualizadas.
         </p>
-        <p>
-          Con la Calculadora de Traslados estima en segundos el costo real de cada ruta y alinea a tus equipos de log&iacute;stica con tarifas transparentes y actualizadas.
+        <p class="hero-subtitle">
+            Complementa la operación con módulos especializados de riesgo fiscal y paneles administrativos,
+            pensados para equipos directivos y operativos.
         </p>
-        <p>
-          Complementa la operaci&oacute;n con m&oacute;dulos especializados de riesgo fiscal y paneles administrativos pensados para equipos directivos.
-        </p>
-        <div class="module-features">
-          <p class="module-features-title">&iquest;Qu&eacute; hacemos?</p>
-          <ul class="module-list two-columns">
-            <li>Modelamos escenarios log&iacute;sticos con datos en tiempo real.</li>
-            <li>Automatizamos c&aacute;lculos de costos y presupuestos de traslados.</li>
+        
+        <h3 class="hero-features">¿Qué hacemos?</h3>
+        <ul>
+            <li>Modelamos escenarios logísticos con datos en tiempo real.</li>
+            <li>Automatizamos cálculos de costos y presupuestos de traslados.</li>
             <li>Monitoreamos alertas de riesgo fiscal y cumplimiento.</li>
             <li>Conectamos a tus equipos con indicadores accionables.</li>
-            <li>Dise&ntilde;amos experiencias digitales centradas en la operaci&oacute;n.</li>
-          </ul>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
+        </ul>
+    """, unsafe_allow_html=True)
 
-    st.markdown('<div class="module-cover">', unsafe_allow_html=True)
-    if img_data:
-        st.markdown(
-            f"<img src='{img_data}' alt='Araiza Intelligence' />",
-            unsafe_allow_html=True,
-        )
-    st.markdown('</div>', unsafe_allow_html=True)
+    # *** BOTÓN DE INICIAR SESIÓN / EXPLORAR MÓDULOS ELIMINADO ***
 
-    st.markdown('</div>', unsafe_allow_html=True)
 
+# --- Sección de pie de página opcional ---
+st.markdown("---") 
+
+st.markdown("""
+    <div style="text-align: center; padding: 20px;">
+        <p style="color: var(--dark-gray); font-size: 0.9em;">&copy; 2023 Araiza Intelligence. Todos los derechos reservados.</p>
+    </div>
+""", unsafe_allow_html=True)

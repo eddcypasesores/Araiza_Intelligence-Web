@@ -260,7 +260,7 @@ PAGE_PARAM_NAMES: dict[str, str] = {
     "pages/12_Parametros_modificar.py": "Parámetros — Modificar",
     "pages/13_Parametros_eliminar.py": "Parámetros — Eliminar",
     "pages/14_Riesgo_fiscal.py": "Riesgo fiscal",
-    "pages/15_Lista_negra_SAT.py": "Lista negra SAT — Cruce de RFC",
+    "pages/15_Lista_negra_Sat.py": "Lista negra SAT — Cruce de RFC",
     "pages/16_Acerca_de_nosotros.py": "Acerca de Nosotros",
 }
 
@@ -500,6 +500,18 @@ def render_nav(
                 ]
                 # Renombrar el enlace para mayor claridad
                 nav_parts = [p.replace(">Traslados<", ">Calcular ruta<") for p in nav_parts]
+        elif active_top in {"tarifas", "usuarios"}:
+            if show_inicio and nav_parts:
+                nav_parts[0] = _root_link_html(
+                    label="Inicio",
+                    target_page="pages/1_Calculadora.py",
+                    top_key="inicio",
+                    active_top=active_top,
+                )
+            if str(rol).lower() == "admin":
+                nav_parts = [
+                    p for p in nav_parts if ("Tarifas" in p) or ("Usuarios" in p) or ("Inicio" in p)
+                ]
         elif active_top == "riesgo":
             # "Inicio" debe llevar al inicio de Riesgo Fiscal; ocultar otros menas
             if show_inicio and nav_parts:
