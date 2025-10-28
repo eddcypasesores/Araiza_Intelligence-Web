@@ -1,4 +1,4 @@
-"""Utilidades compartidas para secciones de administración."""
+"""Utilidades compartidas para secciones de administracion."""
 
 from __future__ import annotations
 
@@ -15,9 +15,9 @@ from core.navigation import render_nav
 
 
 def _redirect_to_login(target_page: str | None = None, switch_to_page: str = "pages/1_Calculadora.py") -> None:
-    """Redirige al login en caso de que la sesión no sea válida."""
+    """Redirige al login en caso de que la sesion no sea valida."""
 
-    st.warning("⚠️ Debes iniciar sesión primero.")
+    st.warning(" Debes iniciar sesion primero.")
     params = {k: v for k, v in st.query_params.items() if k not in {"logout", "next"}}
     if target_page:
         params["next"] = target_page
@@ -33,7 +33,7 @@ def _redirect_to_login(target_page: str | None = None, switch_to_page: str = "pa
 
 
 def _ensure_admin_session(redirect_to: str | None = None) -> None:
-    """Valida que exista una sesión activa con privilegios de administrador."""
+    """Valida que exista una sesion activa con privilegios de administrador."""
 
     ensure_session_from_token()
 
@@ -41,12 +41,12 @@ def _ensure_admin_session(redirect_to: str | None = None) -> None:
         _redirect_to_login(redirect_to)
 
     if str(st.session_state.get("rol", "")).lower() != "admin":
-        st.error("🚫 No tienes permiso para acceder a esta página.")
+        st.error(" No tienes permiso para acceder a esta pagina.")
         st.stop()
 
 
 def _configure_page(page_title: str, layout: str) -> None:
-    """Configura la página solo una vez por ejecución."""
+    """Configura la pagina solo una vez por ejecucion."""
 
     if not st.session_state.get("_admin_page_configured"):
         st.set_page_config(page_title=page_title, layout=layout)
@@ -59,24 +59,24 @@ def init_admin_section(
     active_top: Optional[str] = None,
     active_child: Optional[str] = None,
     layout: str = "wide",
-    show_inicio: bool = True,
+    show_inicio: bool = False,
     enable_foreign_keys: bool = True,
 ) -> sqlite3.Connection:
-    """Inicializa el entorno de una página administrativa y devuelve la conexión.
+    """Inicializa el entorno de una pagina administrativa y devuelve la conexion.
 
-    Parámetros
+    Parametros
     ----------
     page_title:
-        Título a mostrar en la pestaña del navegador.
+        Titulo a mostrar en la pestana del navegador.
     active_top, active_child:
-        Identificadores usados para resaltar la opción activa en la barra de
-        navegación.
+        Identificadores usados para resaltar la opcion activa en la barra de
+        navegacion.
     layout:
-        Layout de la página para ``st.set_page_config`` (por defecto ``wide``).
+        Layout de la pagina para ``st.set_page_config`` (por defecto ``wide``).
     show_inicio:
-        Indica si el enlace a Inicio debe mostrarse en la barra de navegación.
+        Indica si el enlace a Inicio debe mostrarse en la barra de navegacion.
     enable_foreign_keys:
-        Si es ``True`` activa ``PRAGMA foreign_keys = ON`` en la conexión devuelta.
+        Si es ``True`` activa ``PRAGMA foreign_keys = ON`` en la conexion devuelta.
     """
 
     ensure_session_from_token()
@@ -92,8 +92,8 @@ def init_admin_section(
             redirect_target = Path(caller_file).name
 
     require_auth = active_top not in {"tarifas", "usuarios"}
-    # Riesgo Fiscal no requiere rol de administrador; solo sesión válida
-    if active_top == "riesgo":
+    # Riesgo Fiscal no requiere rol de administrador; solo sesion valida
+    if active_top in {"riesgo", "riesgo_firmes"}:
         if "usuario" not in st.session_state or "rol" not in st.session_state:
             _redirect_to_login(redirect_target, switch_to_page="pages/14_Riesgo_fiscal.py")
     elif require_auth:
@@ -107,5 +107,5 @@ def init_admin_section(
         except Exception:
             pass
 
-    render_nav(active_top=active_top, active_child=active_child, show_inicio=show_inicio)
+    render_nav(active_top=active_top, active_child=active_child, show_inicio=show_inicio, show_cta=True)
     return conn

@@ -1,16 +1,18 @@
-"""Consulta de RFC contra la lista negra SAT.
+"""Cruce de RFC contra Lista Negra SAT.
 
-Esta página permite cargar múltiples CFDI en formato XML para extraer
-los RFC de los emisores y cruzarlos contra la lista oficial de
-contribuyentes incumplidos (Firmes.csv o Excel). El usuario puede
-generar un Excel con los RFC coincidentes.
+Proceso guiado en espanol con:
+- Carga de CFDI en XML y parseo inmediato.
+- Uso del archivo Firmes administrado desde la opcion dedicada del menu.
+- Un unico boton "Generar y descargar Excel" para obtener coincidencias.
+- Sin mensajes adicionales ni descargas redundantes.
 """
 
 from __future__ import annotations
 
 import io
+import json
+from pathlib import Path
 import xml.etree.ElementTree as ET
-
 import pandas as pd
 import streamlit as st
 
@@ -18,170 +20,130 @@ from pages.components.admin import init_admin_section
 
 
 # ---------------------------------------------------------------------------
-# Inicialización y navegación
+# Configuracion de rutas para Firmes persistente
 # ---------------------------------------------------------------------------
-# Se reutiliza la utilería administrativa para validar sesión, preparar la
-# navegación compartida y ofrecer una conexión SQLite (que cerramos de
-# inmediato porque esta vista solo trabaja con archivos en memoria).
+FIRMES_DIR = Path("data/firmes")
+MANIFEST_PATH = FIRMES_DIR / "manifest.json"
+FIRMES_DIR.mkdir(parents=True, exist_ok=True)  # aseguramos carpeta
+
+
+# ---------------------------------------------------------------------------
+# Inicializacion de sesion / navegacion
+# ---------------------------------------------------------------------------
 conn = init_admin_section(
-    page_title="Lista negra SAT — Cruce de RFC",
+    page_title="Lista negra SAT  Cruce de RFC",
     active_top="riesgo",
     layout="wide",
+    show_inicio=False,
 )
 conn.close()
 
 
 # ---------------------------------------------------------------------------
-# CSS personalizado
+# CSS
 # ---------------------------------------------------------------------------
 st.markdown(
     """
     <style>
-    /* Contenedor principal más ancho y con menos padding arriba */
     .main .block-container {
-        padding-top: 1.5rem;
+        padding-top: 2rem;
         padding-bottom: 2rem;
-        max-width: 1400px;
+        max-width: 800px;
     }
 
-    /* Título centrado */
     h1.titulo-sat {
         text-align: center;
         font-family: Arial, sans-serif;
-        font-size: 2.2rem;
+        font-size: 2rem;
         font-weight: 700;
         line-height: 1.2;
         margin-bottom: 2rem;
     }
 
-    /***************
-     * Uploader #1 (XML CFDI)
-     ***************/
-    .file-upload-wrapper [data-testid="stFileUploader"] {
+    .card-box {
         border: 1px solid #d1d5db;
-        background-color: #f5f7fa;
+        background-color: #f9fafb;
         border-radius: 8px;
         padding: 1rem 1rem;
         margin-bottom: 1rem;
     }
 
-    .file-upload-wrapper [data-testid="stFileUploader"] section {
-        padding: 0.5rem 0.75rem;
-    }
-
-    /* Ocultar la lista de archivos subidos del uploader #1 */
-    .file-upload-wrapper [data-testid="uploadedFile"],
-    .file-upload-wrapper [data-testid="stFileUploaderFileList"],
-    .file-upload-wrapper [data-testid="stFileUploader"] section + div,
-    .file-upload-wrapper [data-testid="stFileUploader"] ul,
-    .file-upload-wrapper [data-testid="stFileUploader"] li,
-    .file-upload-wrapper [data-testid="stFileUploader"] small {
+    /* Ocultar el listado nativo de archivos del uploader */
+    [data-testid="stFileUploader"] section + div,
+    [data-testid="stFileUploader"] ul,
+    [data-testid="stFileUploader"] li,
+    [data-testid="stFileUploader"] small {
         display: none !important;
     }
 
-    /* Cambiar el texto del botón "Browse files" a "XML" SOLO en el uploader #1 */
-    .file-upload-wrapper [data-testid="stFileUploader"] button {
-        position: relative;
-    }
-
-    /* ocultamos el texto interno original */
-    .file-upload-wrapper [data-testid="stFileUploader"] button * {
-        color: transparent !important;
-    }
-
-    /* insertamos "XML" visualmente */
-    .file-upload-wrapper [data-testid="stFileUploader"] button:after {
-        content: "XML";
-        position: absolute;
-        left: 0;
-        right: 0;
-        top: 0;
-        bottom: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #1e1e1e;
-        font-size: 1rem;
-        font-weight: 500;
-    }
-
-    /***************
-     * Uploader #2 (Firmes.csv / XLS / XLSX)
-     * Se muestra debajo de la tabla
-     ***************/
-    .lista-wrapper [data-testid="stFileUploader"] {
-        border: 1px solid #d1d5db;
-        background-color: #f5f7fa;
-        border-radius: 8px;
-        padding: 1rem 1rem;
-        margin-top: 1rem;
-        margin-bottom: 1rem;
-    }
-
-    .lista-wrapper [data-testid="stFileUploader"] section {
-        padding: 0.5rem 0.75rem;
-    }
-
-    /* Ocultar la lista de archivos subidos del uploader #2,
-       pero aquí SÍ dejamos el texto del botón como "Browse files"
-       (no lo sobreescribimos con CSS extra)
-    */
-    .lista-wrapper [data-testid="uploadedFile"],
-    .lista-wrapper [data-testid="stFileUploaderFileList"],
-    .lista-wrapper [data-testid="stFileUploader"] section + div,
-    .lista-wrapper [data-testid="stFileUploader"] ul,
-    .lista-wrapper [data-testid="stFileUploader"] li,
-    .lista-wrapper [data-testid="stFileUploader"] small {
-        display: none !important;
-    }
-
-    /* Título de la vista previa */
-    .preview-title {
+    .accion-titulo {
         font-family: Arial, sans-serif;
-        font-size: 1.1rem;
+        font-size: 1rem;
         font-weight: 600;
-        margin-top: 2rem;
         margin-bottom: 0.5rem;
     }
 
-    /* Contenedor de la vista previa ~70% ancho */
-    .preview-wrapper {
-        max-width: 70%;
+    .toggle-box {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+        align-items: flex-start;
+        margin-bottom: 0.5rem;
     }
 
-    /* Tabla compacta */
-    .stDataFrame {
-        font-size: 0.7rem;
-        line-height: 1.1rem;
+    .lista-archivos-box {
+        font-family: Arial, sans-serif;
+        font-size: 0.9rem;
+        background-color: #ffffff;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        padding: 0.75rem 1rem;
+        max-height: 200px;
+        overflow-y: auto;
+        margin-bottom: 1rem;
     }
 
-    .stDataFrame table tbody tr td,
-    .stDataFrame table thead tr th {
-        padding-top: 2px;
-        padding-bottom: 2px;
-        padding-left: 6px;
-        padding-right: 6px;
+    .info-texto,
+    .error-texto {
+        font-family: Arial, sans-serif;
+        font-size: 0.9rem;
+        font-weight: 500;
+        border-radius: 6px;
+        padding: 0.75rem 1rem;
+        margin-bottom: 1rem;
     }
 
-    /* Contenedor del botón GENERAR EXCEL debajo */
-    .excel-button-box {
-        width: 250px;
-        margin-top: 0.75rem;
+    .info-texto {
+        background-color: #eef2ff;
+        color: #1e1e1e;
+        border: 1px solid #c7d2fe;
     }
 
-    .excel-button-box div.stButton > button {
+    .error-texto {
+        background-color: #fee2e2;
+        color: #7f1d1d;
+        border: 1px solid #ef4444;
+    }
+
+    .descargar-excel-box {
         width: 100%;
-        height: 60px;
+        max-width: 320px;
+        margin-bottom: 1rem;
+    }
+
+    .descargar-excel-box div.stDownloadButton > button {
+        width: 100%;
+        height: 56px;
         background-color: #f2f2f2;
         color: #000000;
         border: 1px solid #000000;
-        border-radius: 0px;
-        font-size: 1.1rem;
+        border-radius: 6px;
+        font-size: 1rem;
         font-weight: 600;
         box-shadow: none;
     }
 
-    .excel-button-box div.stButton > button:hover {
+    .descargar-excel-box div.stDownloadButton > button:hover {
         background-color: #e6e6e6;
         color: #000000;
         border: 1px solid #000000;
@@ -196,16 +158,14 @@ st.markdown(
 # Helpers
 # ---------------------------------------------------------------------------
 def _local_tag(tag: str) -> str:
-    """Extrae el nombre local de un tag XML con namespace."""
-
+    """Quita namespace de la etiqueta XML."""
     if "}" in tag:
         return tag.split("}", 1)[1]
     return tag
 
 
 def parse_emisor_from_xml(xml_bytes: bytes) -> tuple[str | None, str | None]:
-    """Obtiene (RFC, Nombre) del nodo <cfdi:Emisor> en un CFDI."""
-
+    """Regresa (RFC, Nombre) del nodo <cfdi:Emisor>."""
     try:
         root = ET.fromstring(xml_bytes)
     except ET.ParseError:
@@ -224,30 +184,26 @@ def parse_emisor_from_xml(xml_bytes: bytes) -> tuple[str | None, str | None]:
                 or node.attrib.get("nombre")
             )
             return rfc, nombre
-
     return None, None
 
 
-def dataframe_to_excel_bytes(df: pd.DataFrame) -> bytes:
-    """Convierte un DataFrame a bytes XLSX en memoria."""
-
-    output = io.BytesIO()
-    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-        df.to_excel(writer, index=False, sheet_name="Coincidencias")
-    return output.getvalue()
-
-
-def load_blacklist_file(file) -> pd.DataFrame:
-    """Carga la lista negra SAT desde CSV o Excel normalizando la columna RFC."""
-
-    name_lower = file.name.lower()
+def load_blacklist_file(handle) -> pd.DataFrame:
+    """Lee Firmes.csv / Excel en DataFrame normalizando la columna RFC.
+    handle puede ser un archivo subido (UploadedFile) o un file handle local (open('rb')).
+    """
+    # Nota: si es UploadedFile, tiene .name
+    name_lower = getattr(handle, "name", "firmes_subido").lower()
 
     if name_lower.endswith(".csv"):
-        df = pd.read_csv(file, encoding="latin-1")
+        df = pd.read_csv(handle, encoding="latin-1")
     elif name_lower.endswith(".xlsx") or name_lower.endswith(".xls"):
-        df = pd.read_excel(file)
+        df = pd.read_excel(handle)
     else:
-        df = pd.DataFrame()
+        # fallback: intentar CSV latin-1
+        try:
+            df = pd.read_csv(handle, encoding="latin-1")
+        except Exception:
+            df = pd.DataFrame()
 
     if "RFC" in df.columns:
         df["RFC"] = df["RFC"].astype(str).str.strip()
@@ -255,151 +211,252 @@ def load_blacklist_file(file) -> pd.DataFrame:
     return df
 
 
+def build_coincidencias_excel_bytes(df_xml: pd.DataFrame, df_blacklist: pd.DataFrame) -> bytes:
+    """Cruza RFCs y devuelve bytes XLSX listo para descargar."""
+    rfcs_xml_unicos = df_xml["RFC Emisor"].astype(str).str.strip().unique().tolist()
+
+    df_blacklist_norm = df_blacklist.copy()
+    df_blacklist_norm["RFC"] = df_blacklist_norm["RFC"].astype(str).str.strip()
+
+    coincidencias = df_blacklist_norm[df_blacklist_norm["RFC"].isin(rfcs_xml_unicos)].copy()
+
+    final_df = coincidencias if not coincidencias.empty else pd.DataFrame(columns=df_blacklist_norm.columns)
+
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+        final_df.to_excel(writer, index=False, sheet_name="Coincidencias")
+    return output.getvalue()
+
+
+def read_manifest() -> dict | None:
+    """Lee manifest.json si existe y lo parsea."""
+    if MANIFEST_PATH.exists():
+        try:
+            return json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+    return None
+
+
+def load_firmes_from_disk() -> pd.DataFrame:
+    """Intenta cargar Firmes previamente guardado en disco, usando manifest."""
+    manifest = read_manifest()
+    if not manifest:
+        return pd.DataFrame()
+
+    stored_name = manifest.get("stored_as", "")
+    if not stored_name:
+        return pd.DataFrame()
+
+    stored_path = FIRMES_DIR / stored_name
+    if not stored_path.exists():
+        return pd.DataFrame()
+
+    # Abrimos en binario y pasamos el handle a load_blacklist_file
+    try:
+        with stored_path.open("rb") as handle:
+            df = load_blacklist_file(handle)
+    except Exception:
+        return pd.DataFrame()
+
+    # Validamos que realmente sirva
+    if df.empty or "RFC" not in df.columns:
+        return pd.DataFrame()
+
+    return df
+
+
+def persist_firmes_to_disk(uploaded_file) -> None:
+    """Guarda el Firmes que subio el usuario en disco, y escribe manifest.json.
+
+    - Guardamos el archivo binario exacto que el usuario subio.
+    - Creamos/manipulamos manifest.json con info basica:
+      {
+        "filename": "...nombre original...",
+        "stored_as": "...nombre interno en disco..."
+      }
+    """
+    original_name = uploaded_file.name
+    # Nombre interno estable: firmes_original.ext
+    stored_as = f"firmes_{original_name}"
+
+    # Guardar archivo tal cual
+    dest_path = FIRMES_DIR / stored_as
+    with dest_path.open("wb") as out:
+        out.write(uploaded_file.getbuffer())
+
+    manifest = {
+        "filename": original_name,
+        "stored_as": stored_as,
+    }
+    MANIFEST_PATH.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 # ---------------------------------------------------------------------------
-# Estado de sesión
+# Estado de sesion
 # ---------------------------------------------------------------------------
 if "parsed_df" not in st.session_state:
     st.session_state.parsed_df = pd.DataFrame(
         columns=["Archivo XML", "RFC Emisor", "Nombre Emisor"]
     )
 
+if "archivos_xml_nombres" not in st.session_state:
+    st.session_state.archivos_xml_nombres = []
+
 if "blacklist_df" not in st.session_state:
-    st.session_state.blacklist_df = pd.DataFrame()
+    # Intento inicial de cargar Firmes automaticamente desde disco
+    st.session_state.blacklist_df = load_firmes_from_disk()
 
-if "excel_ready" not in st.session_state:
-    st.session_state.excel_ready = False
+if "mostrar_lista_xml" not in st.session_state:
+    st.session_state.mostrar_lista_xml = False
 
-if "excel_bytes" not in st.session_state:
-    st.session_state.excel_bytes = b""
+if "status_msg" not in st.session_state:
+    st.session_state.status_msg = ""
+    st.session_state.status_is_error = False
 
 
 # ---------------------------------------------------------------------------
-# UI: Título principal
+# Titulo
 # ---------------------------------------------------------------------------
 st.markdown(
-    '<h1 class="titulo-sat">Consulta la Relación de Contribuyentes Incumplidos (Lista Negra SAT)</h1>',
+    '<h1 class="titulo-sat">Cruce de RFC con Lista Negra del SAT</h1>',
     unsafe_allow_html=True,
 )
 
 
 # ---------------------------------------------------------------------------
-# Uploader #1: CFDI XML
+# Paso actual del flujo
 # ---------------------------------------------------------------------------
-st.markdown('<div class="file-upload-wrapper">', unsafe_allow_html=True)
-
-uploaded_xml_files = st.file_uploader(
-    label="",
-    type=["xml"],
-    accept_multiple_files=True,
-    key="xml_files",
+tengo_xml = not st.session_state.parsed_df.empty
+tengo_firmes = (
+    (not st.session_state.blacklist_df.empty)
+    and ("RFC" in st.session_state.blacklist_df.columns)
 )
 
-st.markdown('</div>', unsafe_allow_html=True)
-
-if uploaded_xml_files:
-    rows: list[dict[str, str]] = []
-    for file in uploaded_xml_files:
-        file.seek(0)
-        xml_bytes = file.read()
-        rfc, nombre = parse_emisor_from_xml(xml_bytes)
-        rows.append(
-            {
-                "Archivo XML": file.name,
-                "RFC Emisor": (rfc or "").strip(),
-                "Nombre Emisor": (nombre or "").strip(),
-            }
-        )
-
-    st.session_state.parsed_df = pd.DataFrame(rows)
-    st.session_state.excel_ready = False
-    st.session_state.excel_bytes = b""
-
 
 # ---------------------------------------------------------------------------
-# Vista previa de RFCs y carga de lista negra
+# 1. Uploader dinamico con rerun inmediato
+#    Paso 1: subir XML
+#    Paso 2: subir Firmes (solo si no lo encontramos ya en disco)
 # ---------------------------------------------------------------------------
-if not st.session_state.parsed_df.empty:
-    st.markdown(
-        '<div class="preview-title">Vista previa de RFC encontrados en los CFDI</div>',
-        unsafe_allow_html=True,
-    )
-    st.markdown('<div class="preview-wrapper">', unsafe_allow_html=True)
 
-    st.dataframe(
-        st.session_state.parsed_df[["RFC Emisor"]],
-        use_container_width=True,
-        height=200,
+if not tengo_xml:
+    # Paso 1: Subir CFDI XML
+    st.markdown('<div class="card-box">', unsafe_allow_html=True)
+    st.markdown('<div class="accion-titulo">Cargar archivos XML</div>', unsafe_allow_html=True)
+
+    uploaded_xml_files = st.file_uploader(
+        label="Selecciona o arrastra tus CFDI en XML",
+        type=["xml"],
+        accept_multiple_files=True,
+        key="xml_files_uploader",
     )
 
-    st.markdown('<div class="lista-wrapper">', unsafe_allow_html=True)
+    if uploaded_xml_files:
+        rows = []
+        nombres_xml = []
+        for file in uploaded_xml_files:
+            file.seek(0)
+            xml_bytes = file.read()
+            rfc, nombre = parse_emisor_from_xml(xml_bytes)
+            rows.append(
+                {
+                    "Archivo XML": file.name,
+                    "RFC Emisor": (rfc or "").strip(),
+                    "Nombre Emisor": (nombre or "").strip(),
+                }
+            )
+            nombres_xml.append(file.name)
 
-    uploaded_blacklist_file = st.file_uploader(
-        label="",
-        type=["csv", "xls", "xlsx"],
-        accept_multiple_files=False,
-        key="blacklist_file",
-    )
+        st.session_state.parsed_df = pd.DataFrame(rows)
+        st.session_state.archivos_xml_nombres = nombres_xml
+
+        st.session_state.status_msg = f"Se cargaron {len(nombres_xml)} archivo(s) XML correctamente."
+        st.session_state.status_is_error = False
+
+        st.rerun()
 
     st.markdown('</div>', unsafe_allow_html=True)
 
-    if uploaded_blacklist_file:
-        uploaded_blacklist_file.seek(0)
-        st.session_state.blacklist_df = load_blacklist_file(uploaded_blacklist_file)
-        st.session_state.excel_ready = False
-        st.session_state.excel_bytes = b""
+elif tengo_xml and not tengo_firmes:
+    st.markdown('<div class="card-box">', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="accion-titulo">Cargar archivo Firmes (SAT)</div>',
+        unsafe_allow_html=True,
+    )
+    st.write(
+        "Actualiza el archivo Firmes desde la opcion 'Archivo Firmes' en la barra superior. "
+        "Una vez hecho, regresa a esta pantalla y usa el boton 'Reintentar' para recargar la informacion."
+    )
+    if st.button('Reintentar', key='firmes_reload_btn'):
+        st.experimental_rerun()
 
-    if not st.session_state.blacklist_df.empty:
-        st.markdown('<div class="excel-button-box">', unsafe_allow_html=True)
-        generar_btn = st.button("GENERAR EXCEL", key="generar_excel_btn")
-        st.markdown('</div>', unsafe_allow_html=True)
-    else:
-        generar_btn = False
-        st.info(
-            "Sube el archivo Firmes.csv (lista negra SAT) para habilitar 'GENERAR EXCEL'."
-        )
 
-    if generar_btn:
-        df_xml = st.session_state.parsed_df.copy()
-        rfcs_xml_unicos = (
-            df_xml["RFC Emisor"].astype(str).str.strip().unique().tolist()
-        )
 
-        if "RFC" not in st.session_state.blacklist_df.columns:
-            st.error("El archivo de la lista negra no tiene la columna 'RFC'.")
-            st.session_state.excel_ready = False
-            st.session_state.excel_bytes = b""
+# Si ya tenemos XML y Firmes valido, ya no mostramos uploader.
+
+
+# ---------------------------------------------------------------------------
+# 2. Bloque para ver / ocultar nombres de XML cargados
+#    Este bloque aparece desde que ya hay XML en memoria.
+# ---------------------------------------------------------------------------
+if tengo_xml:
+    st.markdown('<div class="card-box">', unsafe_allow_html=True)
+
+    col_toggle, col_info = st.columns([1, 3])
+
+    with col_toggle:
+        if st.button("Mostrar / ocultar archivos cargados", key="toggle_xml_btn"):
+            st.session_state.mostrar_lista_xml = not st.session_state.mostrar_lista_xml
+
+    with col_info:
+        if st.session_state.status_msg:
+            css_class = "error-texto" if st.session_state.status_is_error else "info-texto"
+            st.markdown(
+                f'<div class="{css_class}">{st.session_state.status_msg}</div>',
+                unsafe_allow_html=True,
+            )
+
+    if st.session_state.mostrar_lista_xml:
+        if st.session_state.archivos_xml_nombres:
+            listado = "<br>".join(f"- {n}" for n in st.session_state.archivos_xml_nombres)
         else:
-            df_blacklist = st.session_state.blacklist_df.copy()
-            df_blacklist["RFC"] = df_blacklist["RFC"].astype(str).str.strip()
+            listado = "No hay archivos XML en memoria."
 
-            coincidencias = df_blacklist[
-                df_blacklist["RFC"].isin(rfcs_xml_unicos)
-            ].copy()
-
-            if coincidencias.empty:
-                st.info(
-                    "No hubo coincidencias de RFC con la lista negra SAT. "
-                    "Se genera Excel vacío con encabezados."
-                )
-                st.session_state.excel_bytes = dataframe_to_excel_bytes(
-                    pd.DataFrame(columns=df_blacklist.columns)
-                )
-                st.session_state.excel_ready = True
-            else:
-                st.success(
-                    f"Se encontraron {len(coincidencias)} coincidencia(s). "
-                    "Ya puedes descargar el Excel."
-                )
-                st.session_state.excel_bytes = dataframe_to_excel_bytes(coincidencias)
-                st.session_state.excel_ready = True
-
-    if st.session_state.excel_ready and st.session_state.excel_bytes:
-        st.download_button(
-            label="Descargar Excel",
-            data=st.session_state.excel_bytes,
-            file_name="RFCs_Coinciden_Lista_Negra.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            key="download_excel_btn",
+        st.markdown(
+            f'<div class="lista-archivos-box">{listado}</div>',
+            unsafe_allow_html=True,
         )
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+# ---------------------------------------------------------------------------
+# 3. Generar y descargar Excel
+#    - Solo se muestra si ya tenemos XML y Firmes validos.
+#    - Sin mensajes verdes extra ni boton doble.
+#    - El unico boton ya dispara la descarga.
+#    - El Excel se calcula aqui mismo en cada render.
+# ---------------------------------------------------------------------------
+tengo_todo = tengo_xml and tengo_firmes
+
+if tengo_todo:
+    excel_bytes_ready = build_coincidencias_excel_bytes(
+        st.session_state.parsed_df,
+        st.session_state.blacklist_df,
+    )
+
+    st.markdown('<div class="card-box">', unsafe_allow_html=True)
+    st.markdown('<div class="accion-titulo">Cruce y descarga</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="descargar-excel-box">', unsafe_allow_html=True)
+    st.download_button(
+        label="Generar y descargar Excel",
+        data=excel_bytes_ready,
+        file_name="Cruce_RFC_vs_Lista_Negra_SAT.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        key="download_excel_btn_final",
+    )
+    st.markdown('</div>', unsafe_allow_html=True)
 
     st.markdown('</div>', unsafe_allow_html=True)

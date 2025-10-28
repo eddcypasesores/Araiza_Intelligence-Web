@@ -1,4 +1,4 @@
-# pages/1_Calculadora.py — Costos de traslado (secciones con encabezado compacto y desglose controlado)
+# pages/1_Calculadora.py  Costos de traslado (secciones con encabezado compacto y desglose controlado)
 from __future__ import annotations
 
 from dataclasses import dataclass, field
@@ -35,12 +35,12 @@ HARDCODED_MAPS_API_KEY = "AIzaSyBqSuQGWucHtypH60GpAAIxJVap76CgRL8"
 ALLOWED_ROLES: set[str] = {"admin", "operador"}
 
 # ===============================
-# Configuración de página + CSS
+# Configuracion de pagina + CSS
 # ===============================
 st.set_page_config(page_title="Costos de traslado", layout="wide", initial_sidebar_state="expanded")
 inject_css("styles.css")
 
-# Estilos de refuerzo (sin cajas grises; solo línea azul + layout)
+# Estilos de refuerzo (sin cajas grises; solo linea azul + layout)
 st.markdown(
     """
     <style>
@@ -87,7 +87,7 @@ st.markdown(
 )
 
 # ===============================
-# Sesión y permisos
+# Sesion y permisos
 # ===============================
 ensure_session_from_token()
 
@@ -96,7 +96,7 @@ render_nav(
     active_top="calculadora",
     active_child=None,
     show_cta=is_logged_in,
-    show_inicio=not bool(st.session_state.get("calc_show_landing", False)),
+    show_inicio=False,
 )
 
 conn = get_conn()
@@ -108,6 +108,8 @@ def _render_login() -> None:
     """Muestra el formulario de acceso para la calculadora."""
 
     inject_hero_css()
+
+    render_nav(active_top=None, show_cta=False, show_inicio=False)
 
     raw_next = st.query_params.get("next")
     redirect_target: str | None
@@ -188,13 +190,13 @@ def _render_login() -> None:
         rol = validar_usuario(conn, username, password)
     except Exception as exc:  # pragma: no cover - feedback en UI
         st.error(
-            "No fue posible validar las credenciales. Verifica la conexión a la base de datos."
+            "No fue posible validar las credenciales. Verifica la conexion a la base de datos."
         )
-        st.caption(f"Detalle técnico: {exc}")
+        st.caption(f"Detalle tecnico: {exc}")
         return
 
     if not rol:
-        st.error("Usuario o contraseña incorrectos.")
+        st.error("Usuario o contrasena incorrectos.")
         return
 
     if rol not in ALLOWED_ROLES:
@@ -373,7 +375,7 @@ PLAZAS = plazas_catalog(ROUTES)
 
 vid = get_active_version_id(conn)
 if vid is None:
-    st.error("No hay parámetros de costeo publicados. Configura una versión vigente en la pantalla de parámetros.")
+    st.error("No hay parametros de costeo publicados. Configura una version vigente en la pantalla de parametros.")
     st.stop()
 PARAMS = read_params(conn, vid)
 
@@ -401,7 +403,7 @@ if maps_api_key:
             st.session_state.pop("gmaps_client_key", None)
 else:
     MAPS_ERROR = (
-        "Configura la variable de entorno GOOGLE_MAPS_API_KEY para habilitar el autocompletado y el cálculo de rutas."
+        "Configura la variable de entorno GOOGLE_MAPS_API_KEY para habilitar el autocompletado y el calculo de rutas."
     )
 
 maps_client = st.session_state.get("gmaps_client")
@@ -410,7 +412,7 @@ MANUAL_MODE = not MAPS_AVAILABLE
 if MAPS_ERROR:
     msg = MAPS_ERROR
     if not MAPS_AVAILABLE:
-        msg += " Se habilitó el modo manual sin integración con Google Maps."
+        msg += " Se habilito el modo manual sin integracion con Google Maps."
     st.warning(msg)
 maps_cache = st.session_state.setdefault("gmaps_cache", {})
 for bucket in ("autocomplete", "place_details", "directions", "plaza_lookup", "plaza_geometry"):
@@ -429,24 +431,24 @@ def get_pdf_builder():
 
     if importlib.util.find_spec("reportlab") is None:
         st.info(
-            "La librería opcional 'reportlab' es necesaria para generar el PDF. Ejecuta `pip install -r requirements.txt` o `pip install reportlab` e intenta de nuevo.",
-            icon='ℹ️',
+            "La libreria opcional 'reportlab' es necesaria para generar el PDF. Ejecuta `pip install -r requirements.txt` o `pip install reportlab` e intenta de nuevo.",
+            icon='i',
         )
         return None
 
-    from core.pdf import build_pdf_costeo  # noqa: WPS433 (import dentro de la función)
+    from core.pdf import build_pdf_costeo  # noqa: WPS433 (import dentro de la funcion)
 
     _PDF_BUILDER = build_pdf_costeo
     return _PDF_BUILDER
 
     if importlib.util.find_spec("reportlab") is None:
         st.error(
-            "La librería opcional 'reportlab' es necesaria para generar el PDF. "
+            "La libreria opcional 'reportlab' es necesaria para generar el PDF. "
             "Ejecuta `pip install -r requirements.txt` o `pip install reportlab` e intenta de nuevo."
         )
         st.stop()
 
-    from core.pdf import build_pdf_costeo  # noqa: WPS433 (import dentro de la función)
+    from core.pdf import build_pdf_costeo  # noqa: WPS433 (import dentro de la funcion)
 
     _PDF_BUILDER = build_pdf_costeo
     return _PDF_BUILDER
@@ -466,11 +468,11 @@ class SectionOutput:
 
 
 def section(title: str, total_value: float | None, body_fn=None) -> SectionOutput:
-    """Renderiza una sección en formato compacto."""
+    """Renderiza una seccion en formato compacto."""
 
     toggle_key = f"section_toggle_{normalize_name(title)}"
     show_details = bool(st.session_state.get(toggle_key, False))
-    icon_char = "▼" if show_details else "▶"
+    icon_char = "" if show_details else ""
 
     header_cols = st.columns([0.75, 0.1, 0.15], gap="small")
     with header_cols[0]:
@@ -521,7 +523,7 @@ def autocomplete_input(label: str, key_prefix: str) -> dict[str, str] | None:
         label,
         value=st.session_state.get(query_key, ""),
         key=query_key,
-        placeholder="Ingresa dirección, ciudad o caseta",
+        placeholder="Ingresa direccion, ciudad o caseta",
     )
 
     trimmed = (query_value or "").strip()
@@ -553,7 +555,7 @@ def autocomplete_input(label: str, key_prefix: str) -> dict[str, str] | None:
                 cache=maps_cache["autocomplete"],
             )
         except GoogleMapsError as exc:
-            st.warning(f"Google Maps (autocomplete) respondió con un error: {exc}")
+            st.warning(f"Google Maps (autocomplete) respondio con un error: {exc}")
             predictions = []
         st.session_state[options_key] = predictions
     else:
@@ -591,7 +593,7 @@ def autocomplete_input(label: str, key_prefix: str) -> dict[str, str] | None:
                         cache=maps_cache["place_details"],
                     )
                 except GoogleMapsError as exc:
-                    st.warning(f"Google Maps (detalles) respondió con un error: {exc}")
+                    st.warning(f"Google Maps (detalles) respondio con un error: {exc}")
                     details = {}
 
                 result = details.get("result", {}) if isinstance(details, dict) else {}
@@ -628,7 +630,7 @@ def autocomplete_input(label: str, key_prefix: str) -> dict[str, str] | None:
             if len(trimmed) < 3:
                 st.caption("Escribe al menos 3 caracteres para buscar.")
             else:
-                st.info("Sin coincidencias para la búsqueda.")
+                st.info("Sin coincidencias para la busqueda.")
 
     return st.session_state.get(data_key)
 
@@ -641,9 +643,9 @@ def _calculate_route(
     avoid_tolls: bool,
 ):
     if not origin or not destination:
-        return None, "Selecciona un origen y un destino válidos."
+        return None, "Selecciona un origen y un destino validos."
     if maps_client is None:
-        return None, "Google Maps no está disponible en este momento."
+        return None, "Google Maps no esta disponible en este momento."
 
     waypoint_ids = [waypoint["place_id"]] if waypoint else None
     try:
@@ -669,7 +671,7 @@ clases = ["MOTO", "AUTOMOVIL", "B2", "B3", "B4", "T2", "T3", "T4", "T5", "T6", "
 default_idx = clases.index("T5")
 
 trab_df = read_trabajadores(conn)
-trab_opc = ["(Sin conductor)"] + [f"{r['nombre_completo']} — {r['numero_economico']}" for _, r in trab_df.iterrows()]
+trab_opc = ["(Sin conductor)"] + [f"{r['nombre_completo']}  {r['numero_economico']}" for _, r in trab_df.iterrows()]
 
 dias_manual_flag_key = "dias_input_manual"
 if dias_manual_flag_key not in st.session_state:
@@ -720,7 +722,7 @@ with st.container():
         )
         st.markdown("<div class='add-stop-button'>", unsafe_allow_html=True)
         if st.button(
-            "➕",
+            "",
             key="toggle_stop_btn",
             type="primary",
             use_container_width=True,
@@ -783,7 +785,7 @@ with st.container():
                     up_available = idx > 0
                     down_available = idx < len(route_roles) - 1
                     if up_available:
-                        if st.button("↑", key=f"{prefix}_up"):
+                        if st.button("", key=f"{prefix}_up"):
                             upper_role = route_roles[idx - 1]
                             _swap_point_data(role, upper_role)
                             route_roles[idx - 1], route_roles[idx] = route_roles[idx], route_roles[idx - 1]
@@ -791,7 +793,7 @@ with st.container():
                             rerun()
                             st.stop()
                     if down_available:
-                        if st.button("↓", key=f"{prefix}_down"):
+                        if st.button("", key=f"{prefix}_down"):
                             lower_role = route_roles[idx + 1]
                             _swap_point_data(role, lower_role)
                             route_roles[idx + 1], route_roles[idx] = route_roles[idx], route_roles[idx + 1]
@@ -804,7 +806,7 @@ with st.container():
             clase = st.selectbox("CLASE (TIPO DE AUTO)", clases, index=default_idx, key="top_clase")
         with meta_cols[1]:
             viaticos_mxn = st.number_input(
-                "VIÁTICOS (MXN)",
+                "VIATICOS (MXN)",
                 min_value=0.0,
                 value=float(st.session_state.get("viat_input_main", 0.0)),
                 step=50.0,
@@ -826,7 +828,7 @@ with st.container():
             ):
                 st.session_state["dias_estimados_input"] = target_dias
             dias_est = st.number_input(
-                "DÍAS ESTIMADOS",
+                "DIAS ESTIMADOS",
                 min_value=1.0,
                 step=0.5,
                 format="%.2f",
@@ -890,7 +892,7 @@ def compute_route_data():
     if match:
         ruta_nombre, secuencia = match
     else:
-        ruta_nombre = summary.summary or "Ruta Google Maps (sin coincidencia en catálogo)"
+        ruta_nombre = summary.summary or "Ruta Google Maps (sin coincidencia en catalogo)"
         secuencia = []
 
     rows = [
@@ -911,7 +913,7 @@ def manual_route_flow(
     origin_label = (origin or {}).get("description", "").strip()
     destination_label = (destination or {}).get("description", "").strip()
     if not origin_label or not destination_label:
-        st.info("Ingresa un origen y un destino para comenzar el cálculo manual.")
+        st.info("Ingresa un origen y un destino para comenzar el calculo manual.")
         return None, None, empty_df, None
 
     st.info(
@@ -932,14 +934,14 @@ def manual_route_flow(
         )
     with cols[1]:
         route_options = sorted(ROUTES.keys()) if ROUTES else []
-        select_options = ["(Sin catálogo)"] + route_options
+        select_options = ["(Sin catalogo)"] + route_options
         if "manual_route_choice" not in st.session_state:
             st.session_state["manual_route_choice"] = select_options[0]
         route_choice = st.selectbox(
             "Ruta de referencia (opcional)",
             select_options,
             key="manual_route_choice",
-            help="Selecciona una ruta precargada para poblar automáticamente las casetas.",
+            help="Selecciona una ruta precargada para poblar automaticamente las casetas.",
         )
 
     if "_manual_last_route" not in st.session_state:
@@ -947,7 +949,7 @@ def manual_route_flow(
 
     if route_choice != st.session_state.get("_manual_last_route"):
         st.session_state["_manual_last_route"] = route_choice
-        if route_choice != "(Sin catálogo)":
+        if route_choice != "(Sin catalogo)":
             st.session_state["manual_plazas"] = list(ROUTES.get(route_choice, []))
         else:
             st.session_state["manual_plazas"] = st.session_state.get("manual_plazas", [])
@@ -958,10 +960,10 @@ def manual_route_flow(
         PLAZAS,
         default=default_plazas,
         key="manual_plazas",
-        help="Selecciona las casetas que se incluirán en el cálculo.",
+        help="Selecciona las casetas que se incluiran en el calculo.",
     )
 
-    if route_choice != "(Sin catálogo)":
+    if route_choice != "(Sin catalogo)":
         order_map = {p: idx for idx, p in enumerate(ROUTES.get(route_choice, []))}
         manual_plazas_sorted = sorted(
             manual_plazas,
@@ -977,7 +979,7 @@ def manual_route_flow(
 
     df = pd.DataFrame(rows) if rows else empty_df
 
-    route_title = route_choice if route_choice != "(Sin catálogo)" else f"{origin_label} → {destination_label}"
+    route_title = route_choice if route_choice != "(Sin catalogo)" else f"{origin_label}  {destination_label}"
     st.session_state["maps_distance_km"] = float(manual_distance or 0.0)
     st.session_state["gmaps_route"] = None
     st.session_state["maps_polyline_points"] = []
@@ -1003,7 +1005,7 @@ if MANUAL_MODE:
 else:
     route_summary, ruta_nombre, df, route_error = compute_route_data()
 if route_error:
-    st.error(f"❌ {route_error}")
+    st.error(f" {route_error}")
     st.stop()
 
 if route_summary is None:
@@ -1086,7 +1088,7 @@ def _peaje_body(show: bool) -> SectionBodyResult:
         if included:
             subtotal += float(r["tarifa"])
         status = "Incluida" if included else "Excluida"
-        breakdown.append((str(r["plaza"]), f"{status} — ${float(r['tarifa']):,.2f}"))
+        breakdown.append((str(r["plaza"]), f"{status}  ${float(r['tarifa']):,.2f}"))
 
     st.session_state["subtotal_peajes"] = subtotal
     breakdown.append(("Subtotal peajes considerados", f"${subtotal:,.2f}"))
@@ -1118,14 +1120,14 @@ def _diesel_body(show: bool) -> SectionBodyResult:
     if show:
         for label, value in rows:
             st.write(f"**{label}:** {value}")
-    rows.append(("Subtotal diésel", f"${subtotal_combustible:,.2f}"))
+    rows.append(("Subtotal diesel", f"${subtotal_combustible:,.2f}"))
     return SectionBodyResult(total=subtotal_combustible, breakdown=rows)
 
 diesel_section = section("DIESEL", subtotal_combustible, _diesel_body)
 section_outputs.append(diesel_section)
 
 # ===============================
-# 3) MANO DE OBRA (método Edwin)
+# 3) MANO DE OBRA (metodo Edwin)
 # ===============================
 trab_show = st.session_state.get("conductor_select", trab_opc[0])
 
@@ -1137,7 +1139,7 @@ if st.session_state.get(dias_manual_flag_key, False) and abs(dias_est - float(di
 trabajador_sel = None
 if trab_show != "(Sin conductor)":
     for _, r in trab_df.iterrows():
-        if f"{r['nombre_completo']} — {r['numero_economico']}" == trab_show:
+        if f"{r['nombre_completo']}  {r['numero_economico']}" == trab_show:
             trabajador_sel = r.to_dict()
             break
 
@@ -1159,22 +1161,22 @@ def _mo_body(show: bool) -> SectionBodyResult:
         )
 
     rows = [
-        ("Antigüedad estimada", f"{anios} año(s)"),
+        ("Antiguedad estimada", f"{anios} ano(s)"),
         ("Salario diario base", f"${float(trabajador_sel.get('salario_diario',0)):,.2f}"),
         ("Aguinaldo (prorrateado)", "Incluido"),
         ("Prima vacacional (prorrateada)", "Incluida"),
-        ("IMSS / Carga social (día)", f"${impuestos_dia:,.2f}"),
+        ("IMSS / Carga social (dia)", f"${impuestos_dia:,.2f}"),
         ("Costo diario total", f"${costo_diario_total:,.2f}"),
-        ("Días estimados", f"{dias_est}"),
+        ("Dias estimados", f"{dias_est}"),
     ]
     if show:
-        st.write(f"**Antigüedad estimada:** {anios} año(s)")
+        st.write(f"**Antiguedad estimada:** {anios} ano(s)")
         st.write(f"**Salario diario base:** ${float(trabajador_sel.get('salario_diario',0)):,.2f}")
         st.write("**Aguinaldo (prorrateado):** incluido")
         st.write("**Prima vacacional (prorrateada):** incluida")
-        st.write(f"**IMSS / Carga social (día):** ${impuestos_dia:,.2f}")
+        st.write(f"**IMSS / Carga social (dia):** ${impuestos_dia:,.2f}")
         st.write(f"**Costo diario total:** ${costo_diario_total:,.2f}")
-        st.write(f"**Días estimados:** {dias_est}")
+        st.write(f"**Dias estimados:** {dias_est}")
     rows.append(("Total mano de obra", f"${subtotal_conductor:,.2f}"))
     return SectionBodyResult(total=subtotal_conductor, breakdown=rows)
 
@@ -1228,7 +1230,7 @@ mantenimiento_section = section("MANTENIMIENTO", sub_mantto, _mantto_body)
 section_outputs.append(mantenimiento_section)
 
 # ===============================
-# 7) DEPRECIACIÓN
+# 7) DEPRECIACION
 # ===============================
 dep = PARAMS["depreciacion"]
 dep_anual = (float(dep["costo_adq"]) - float(dep["valor_residual"])) / max(int(dep["vida_anios"]),1)
@@ -1236,21 +1238,21 @@ dep_km = dep_anual / max(int(dep["km_anuales"]),1)
 sub_dep = dep_km * km_totales
 def _dep_body(show: bool) -> SectionBodyResult:
     rows = [
-        ("Costo adquisición", f"${float(dep['costo_adq']):,.2f}"),
+        ("Costo adquisicion", f"${float(dep['costo_adq']):,.2f}"),
         ("Valor residual", f"${float(dep['valor_residual']):,.2f}"),
-        ("Vida útil", f"{int(dep['vida_anios'])} años"),
+        ("Vida util", f"{int(dep['vida_anios'])} anos"),
         ("KM anuales", f"{int(dep['km_anuales'])}"),
-        ("Depreciación por km", f"${dep_km:,.4f}"),
+        ("Depreciacion por km", f"${dep_km:,.4f}"),
     ]
     if show:
-        st.write(f"**Costo adquisición:** ${float(dep['costo_adq']):,.2f}")
+        st.write(f"**Costo adquisicion:** ${float(dep['costo_adq']):,.2f}")
         st.write(f"**Valor residual:** ${float(dep['valor_residual']):,.2f}")
-        st.write(f"**Vida:** {int(dep['vida_anios'])} años · **KM/año:** {int(dep['km_anuales'])}")
-        st.write(f"**Depreciación por km:** ${dep_km:,.4f}")
-    rows.append(("Total depreciación", f"${sub_dep:,.2f}"))
+        st.write(f"**Vida:** {int(dep['vida_anios'])} anos  **KM/ano:** {int(dep['km_anuales'])}")
+        st.write(f"**Depreciacion por km:** ${dep_km:,.4f}")
+    rows.append(("Total depreciacion", f"${sub_dep:,.2f}"))
     return SectionBodyResult(total=sub_dep, breakdown=rows)
 
-depreciacion_section = section("DEPRECIACIÓN", sub_dep, _dep_body)
+depreciacion_section = section("DEPRECIACION", sub_dep, _dep_body)
 section_outputs.append(depreciacion_section)
 
 # ===============================
@@ -1266,7 +1268,7 @@ def _seg_body(show: bool) -> SectionBodyResult:
         ("Seguro por km", f"${seg_km:,.4f}"),
     ]
     if show:
-        st.write(f"**Prima anual:** ${float(seg['prima_anual']):,.2f} · **KM/año:** {int(seg['km_anuales'])}")
+        st.write(f"**Prima anual:** ${float(seg['prima_anual']):,.2f}  **KM/ano:** {int(seg['km_anuales'])}")
         st.write(f"**Seguro por km:** ${seg_km:,.4f}")
     rows.append(("Total seguros", f"${sub_seg:,.2f}"))
     return SectionBodyResult(total=sub_seg, breakdown=rows)
@@ -1276,7 +1278,7 @@ section_outputs.append(seguros_section)
 
 
 # ===============================
-# 9) VIÁTICOS
+# 9) VIATICOS
 # ===============================
 def _viat_body(show: bool) -> SectionBodyResult:
     if show:
@@ -1284,7 +1286,7 @@ def _viat_body(show: bool) -> SectionBodyResult:
     rows = [("Monto fijo ingresado", f"${viaticos_mxn:,.2f}")]
     return SectionBodyResult(total=viaticos_mxn, breakdown=rows)
 
-viaticos_section = section("VIÁTICOS", viaticos_mxn, _viat_body)
+viaticos_section = section("VIATICOS", viaticos_mxn, _viat_body)
 section_outputs.append(viaticos_section)
 
 # ===============================
@@ -1328,13 +1330,13 @@ litros_def = litros_estimados * pct_def
 sub_def = litros_def * precio_def
 def _def_body(show: bool) -> SectionBodyResult:
     rows = [
-        ("% DEF vs diésel", f"{pct_def*100:.2f}%"),
+        ("% DEF vs diesel", f"{pct_def*100:.2f}%"),
         ("Litros DEF", f"{litros_def:,.2f} L"),
         ("Precio DEF/L", f"${precio_def:,.2f}"),
     ]
     if show:
-        st.write(f"**% DEF vs diésel:** {pct_def*100:.2f}%")
-        st.write(f"**Litros DEF:** {litros_def:,.2f} · **Precio DEF/L:** ${precio_def:,.2f}")
+        st.write(f"**% DEF vs diesel:** {pct_def*100:.2f}%")
+        st.write(f"**Litros DEF:** {litros_def:,.2f}  **Precio DEF/L:** ${precio_def:,.2f}")
     rows.append(("Total DEF", f"${sub_def:,.2f}"))
     return SectionBodyResult(total=sub_def, breakdown=rows)
 
@@ -1342,22 +1344,22 @@ def_section = section("DEF", sub_def, _def_body)
 section_outputs.append(def_section)
 
 # ===============================
-# 13) COMISIÓN TAG
+# 13) COMISION TAG
 # ===============================
 pct_tag = float(PARAMS["tag"]["pct_comision_tag"] or 0.0)
 sub_tag = peajes_ajustados * pct_tag
 def _tag_body(show: bool) -> SectionBodyResult:
     rows = [
-        ("Comisión TAG %", f"{pct_tag*100:.2f}%"),
+        ("Comision TAG %", f"{pct_tag*100:.2f}%"),
         ("Base peajes", f"${peajes_ajustados:,.2f}"),
     ]
     if show:
-        st.write(f"**Comisión TAG %:** {pct_tag*100:.2f}%")
+        st.write(f"**Comision TAG %:** {pct_tag*100:.2f}%")
         st.write(f"**Base peajes:** ${peajes_ajustados:,.2f}")
-    rows.append(("Total comisión TAG", f"${sub_tag:,.2f}"))
+    rows.append(("Total comision TAG", f"${sub_tag:,.2f}"))
     return SectionBodyResult(total=sub_tag, breakdown=rows)
 
-tag_section = section("COMISIÓN TAG", sub_tag, _tag_body)
+tag_section = section("COMISION TAG", sub_tag, _tag_body)
 section_outputs.append(tag_section)
 
 # ===============================
@@ -1388,11 +1390,11 @@ sub_fin = base_val * tasa * (dias_cobro / 360.0)
 def _fin_body(show: bool) -> SectionBodyResult:
     rows = [
         ("Tasa anual", f"{tasa*100:.2f}%"),
-        ("Días de cobro", f"{dias_cobro}"),
+        ("Dias de cobro", f"{dias_cobro}"),
         ("Base considerada", f"${base_val:,.2f}"),
     ]
     if show:
-        st.write(f"**Tasa anual:** {tasa*100:.2f}% · **Días de cobro:** {dias_cobro}")
+        st.write(f"**Tasa anual:** {tasa*100:.2f}%  **Dias de cobro:** {dias_cobro}")
         st.write(f"**Base considerada:** ${base_val:,.2f}")
     rows.append(("Total financiamiento", f"${sub_fin:,.2f}"))
     return SectionBodyResult(total=sub_fin, breakdown=rows)
@@ -1505,7 +1507,7 @@ if pdf_builder:
             litros=litros_estimados_pdf, costo_combustible=subtotal_combustible_pdf,
             total_general=total_pdf,
             trabajador_sel=trabajador_sel_row,
-            esquema_conductor="Por día (método Edwin)" if trabajador_sel_row else "Sin conductor",
+            esquema_conductor="Por dia (metodo Edwin)" if trabajador_sel_row else "Sin conductor",
             horas_estimadas=horas_totales,
             costo_conductor=subtotal_conductor_pdf,
             tarifa_dia=float(costo_diario_pdf) if trabajador_sel_row else None,
@@ -1516,7 +1518,7 @@ if pdf_builder:
         )
 
         st.download_button(
-            "⬇️ DESCARGAR COSTEO (PDF)",
+            " DESCARGAR COSTEO (PDF)",
             data=pdf_bytes,
             file_name=f"costeo_{normalize_name(origin_label)}_{normalize_name(destination_label)}.pdf",
             mime="application/pdf",
