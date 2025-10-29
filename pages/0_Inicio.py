@@ -1,10 +1,12 @@
 ﻿# pages/0_Inicio.py — Tarjetas alternadas (zigzag) 100% clickeables con verificación de páginas
 from __future__ import annotations
 from pathlib import Path
+from urllib.parse import urlencode
+
 import streamlit as st
 
 from core.auth import ensure_session_from_token
-from core.navigation import render_nav
+from core.navigation import PAGE_PARAM_NAMES, render_nav
 from pages.components.hero import first_image_base64, inject_hero_css
 
 st.set_page_config(
@@ -38,6 +40,21 @@ def page_exists(rel_page: str) -> bool:
         return False
     return p.is_file()
 
+
+def _product_href(script_path: str, *, force_logout: bool = False) -> str:
+    """Construye un href absoluto para el multipage actual."""
+
+    label = PAGE_PARAM_NAMES.get(script_path)
+    if label is None:
+        label = (
+            script_path.replace("pages/", "")
+            .replace(".py", "")
+            .strip()
+        )
+    params: dict[str, str] = {"page": label or script_path}
+    if force_logout:
+        params["logout"] = "1"
+    return "/?" + urlencode(params)
 IMG_RIESGO = image_src_for((
     Path("assets/riesgo_cover.png"),
     Path("assets/riesgo_cover.jpg"),
@@ -191,7 +208,7 @@ PRODUCTS = [
     {"title": "Riesgo fiscal sin sobresaltos",
      "desc": "Cruza CFDI contra listas 69/69-B/69-Bis y documenta acciones preventivas ante cambios del SAT.",
      "bullets": ["Detecta EFOS publicados", "Monitoreo de cambios del SAT", "Alertas a finanzas y cumplimiento"],
-     "img": IMG_RIESGO, "page": "pages/14_Riesgo_fiscal.py", "key": "go_riesgo"},
+     "img": IMG_RIESGO, "page": "pages/14_Riesgo_fiscal.py", "key": "go_riesgo", "force_logout": True},
 
     {"title": "Monitoreo especializado de EFOS",
      "desc": "Identifica proveedores EFOS, conserva historial y evidencia para auditorías internas y externas.",
@@ -211,7 +228,7 @@ PRODUCTS = [
     {"title": "Traslado inteligente",
      "desc": "Calcula el costo real por ruta: km, peajes, combustible, viáticos y mantenimiento con escenarios comparativos.",
      "bullets": ["Costeo urgente con clientes", "Simulación de rutas y tiempos", "Control de margen operativo"],
-     "img": IMG_TRASLADO, "page": "pages/1_Calculadora.py", "key": "go_traslado"},
+     "img": IMG_TRASLADO, "page": "pages/1_Calculadora.py", "key": "go_traslado", "force_logout": True},
 
     {"title": "Generador de pólizas contables",
      "desc": "Convierte CFDI en pólizas listas para tu ERP, trazables desde factura a registro.",
@@ -250,9 +267,8 @@ for i, p in enumerate(PRODUCTS):
 
     # Enlace invisible SOLO si la página existe (no genera error ni “fantasma”)
     if exists:
-        st.markdown('<div class="overlay-link">', unsafe_allow_html=True)
-        st.page_link(p["page"], label=" ")
-        st.markdown('</div>', unsafe_allow_html=True)
+        href = _product_href(p["page"], force_logout=bool(p.get("force_logout")))
+        st.markdown(f'<div class="overlay-link"><a href="{href}" target="_self"></a></div>', unsafe_allow_html=True)
 
     st.markdown("</div>", unsafe_allow_html=True)  # cierra card-split
 
