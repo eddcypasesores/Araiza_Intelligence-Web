@@ -310,23 +310,23 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# -------- SECCIÓN: Traslado Inteligente --------
+# -------- SECCIÓN: Cédula de Impuestos --------
 render_section(
-    title="Traslado inteligente con costos completos",
+    title="Cédula de impuestos para cierre anual",
     paragraphs=[
-        "Calcula en segundos el costo real de cada ruta combinando kilometraje, peajes, combustible, viáticos y mantenimientos proyectados.",
-        "Genera escenarios comparativos entre rutas y planifica márgenes antes de aceptar un servicio de flete.",
+        "Calcula coeficiente de utilidad, integra PTU y cruza deducciones con facilidad para preparar tus declaraciones anuales.",
+        "Documenta decisiones clave con evidencia y formatos listos para revisión fiscal o auditoría.",
     ],
-    bullet_title="Ideal para:",
+    bullet_title="Te permite:",
     bullets=[
-        "Cotizaciones urgentes con clientes clave.",
-        "Simular rutas alternas y tiempos estimados.",
-        "Controlar el margen operativo por cliente o zona.",
+        "Simular escenarios antes de enviar la declaración.",
+        "Controlar obligaciones fiscales por entidad o razón social.",
+        "Producir reportes ejecutivos para dirección y comités.",
     ],
-    img_src=IMG_TRASLADO,
-    button_key="btn_traslado_inteligente",
-    page_target="pages/1_Calculadora.py",
-    reverse=False,
+    img_src=IMG_CEDULA,
+    button_key="btn_cedula_impuestos",
+    page_target="pages/XX_Cedula_impuestos.py",
+    reverse=True,
 )
 st.markdown("<div class=\"section-spacer\"></div>", unsafe_allow_html=True)
 
@@ -346,31 +346,11 @@ render_section(
     img_src=IMG_RIESGO,
     button_key="btn_riesgo_fiscal",
     page_target="pages/14_Riesgo_fiscal.py",
-    reverse=True,
-)
-st.markdown("<div class=\"section-spacer\"></div>", unsafe_allow_html=True)
-
-# -------- SECCIÓN: Lista Negra SAT --------
-render_section(
-    title="Cruce masivo contra la lista negra SAT",
-    paragraphs=[
-        "Carga tus catálogos de proveedores y obtén el detalle de cada RFC con estatus, fundamento y fecha de publicación en los listados del SAT.",
-        "Consolida evidencia descargable para justificar decisiones de bloqueo o seguimiento con tesorería y fiscalistas externos.",
-    ],
-    bullet_title="Resultados inmediatos:",
-    bullets=[
-        "Resumen ejecutivo por tipo de listado.",
-        "Detalle histórico del RFC en 69, 69-B y 69-B Bis.",
-        "Exportación a Excel para dar seguimiento con responsables.",
-    ],
-    img_src=IMG_RIESGO,
-    button_key="btn_lista_negra",
-    page_target="pages/15_Lista_negra_Sat.py",
     reverse=False,
 )
 st.markdown("<div class=\"section-spacer\"></div>", unsafe_allow_html=True)
 
-# -------- SECCIÓN: EFOS --------
+# -------- SECCIÓN: Monitoreo especializado de EFOS --------
 render_section(
     title="Monitoreo especializado de EFOS",
     paragraphs=[
@@ -410,26 +390,6 @@ render_section(
 )
 st.markdown("<div class=\"section-spacer\"></div>", unsafe_allow_html=True)
 
-# -------- SECCIÓN: Generador de Pólizas --------
-render_section(
-    title="Generador automático de pólizas contables",
-    paragraphs=[
-        "Convierte CFDI en pólizas contables listas para integrar a tu ERP o sistema contable con las cuentas que definiste.",
-        "Reduce capturas manuales y asegura trazabilidad desde la factura hasta la póliza registrada.",
-    ],
-    bullet_title="Automatiza:",
-    bullets=[
-        "Clasificación contable por tipo de gasto o ingreso.",
-        "Control de impuestos y retenciones aplicables.",
-        "Exportación en formatos compatibles con tu sistema.",
-    ],
-    img_src=IMG_POLIZAS,
-    button_key="btn_generador_polizas",
-    page_target="pages/XX_Generador_polizas.py",
-    reverse=True,
-)
-st.markdown("<div class=\"section-spacer\"></div>", unsafe_allow_html=True)
-
 # -------- SECCIÓN: Convertidor de Estados de Cuenta --------
 render_section(
     title="Convertidor de estados de cuenta listo para conciliaciones",
@@ -446,26 +406,46 @@ render_section(
     img_src=IMG_ESTADOS_CTA,
     button_key="btn_convertidor_estados",
     page_target="pages/XX_Convertidor_estados.py",
+    reverse=True,
+)
+st.markdown("<div class=\"section-spacer\"></div>", unsafe_allow_html=True)
+
+# -------- SECCIÓN: Traslado Inteligente --------
+render_section(
+    title="Traslado inteligente con costos completos",
+    paragraphs=[
+        "Calcula en segundos el costo real de cada ruta combinando kilometraje, peajes, combustible, viáticos y mantenimientos proyectados.",
+        "Genera escenarios comparativos entre rutas y planifica márgenes antes de aceptar un servicio de flete.",
+    ],
+    bullet_title="Ideal para:",
+    bullets=[
+        "Cotizaciones urgentes con clientes clave.",
+        "Simular rutas alternas y tiempos estimados.",
+        "Controlar el margen operativo por cliente o zona.",
+    ],
+    img_src=IMG_TRASLADO,
+    button_key="btn_traslado_inteligente",
+    page_target="pages/1_Calculadora.py",
     reverse=False,
 )
 st.markdown("<div class=\"section-spacer\"></div>", unsafe_allow_html=True)
 
-# -------- SECCIÓN: Cédula de Impuestos --------
+# -------- SECCIÓN: Generador de Pólizas --------
 render_section(
-    title="Cédula de impuestos para cierre anual",
+    title="Generador automático de pólizas contables",
     paragraphs=[
-        "Calcula coeficiente de utilidad, integra PTU y cruza deducciones con facilidad para preparar tus declaraciones anuales.",
-        "Documenta decisiones clave con evidencia y formatos listos para revisión fiscal o auditoría.",
+        "Convierte CFDI en pólizas contables listas para integrar a tu ERP o sistema contable con las cuentas que definiste.",
+        "Reduce capturas manuales y asegura trazabilidad desde la factura hasta la póliza registrada.",
     ],
-    bullet_title="Te permite:",
+    bullet_title="Automatiza:",
     bullets=[
-        "Simular escenarios antes de enviar la declaración.",
-        "Controlar obligaciones fiscales por entidad o razón social.",
-        "Producir reportes ejecutivos para dirección y comités.",
+        "Clasificación contable por tipo de gasto o ingreso.",
+        "Control de impuestos y retenciones aplicables.",
+        "Exportación en formatos compatibles con tu sistema.",
     ],
-    img_src=IMG_CEDULA,
-    button_key="btn_cedula_impuestos",
-    page_target="pages/XX_Cedula_impuestos.py",
+    img_src=IMG_POLIZAS,
+    button_key="btn_generador_polizas",
+    page_target="pages/XX_Generador_polizas.py",
     reverse=True,
 )
 # =========================
