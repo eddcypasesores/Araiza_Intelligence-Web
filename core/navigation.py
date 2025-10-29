@@ -297,6 +297,7 @@ PAGE_PARAM_NAMES: dict[str, str] = {
     "pages/17_Archivo_firmes.py": "Archivo Firmes",
     "pages/18_Restablecer_contrasena.py": "Recuperar contrasena",
     "pages/19_Admin_portal.py": "Administracion del portal",
+    "pages/20_Admin_login.py": "Acceso super administrador",
 }
 
 
@@ -324,6 +325,11 @@ PRODUCT_ACTIONS: tuple[DropdownAction, ...] = (
     DropdownAction("Generador de Polizas", "producto_polizas", "pages/XX_Generador_polizas.py"),
     DropdownAction("Convertidor de Estados de Cuenta", "producto_estados", "pages/XX_Convertidor_estados.py"),
     DropdownAction("Cedula de Impuestos", "producto_cedula", "pages/XX_Cedula_impuestos.py"),
+)
+
+ABOUT_ACTIONS: tuple[DropdownAction, ...] = (
+    DropdownAction("Acerca de Nosotros", "acerca_resumen", "pages/16_Acerca_de_nosotros.py"),
+    DropdownAction("Administrar", "acerca_admin", "pages/20_Admin_login.py"),
 )
 
 
@@ -447,19 +453,19 @@ def _resolve_nav_mode(active_top: str | None) -> str:
 
     if active_top in LANDING_TOPS:
         return "landing"
+    if active_top in TRASLADOS_TOPS:
+        return "traslados"
+    if active_top in RIESGO_TOPS:
+        return "riesgo"
+    if active_top == "admin_portal":
+        return "portal_admin"
 
     logged_in = bool(st.session_state.get("usuario"))
     permisos = set(st.session_state.get("permisos") or [])
 
-    if logged_in and active_top == "admin_portal" and "admin" in permisos:
-        return "portal_admin"
-    if logged_in and active_top in RIESGO_TOPS and "riesgos" in permisos:
-        return "riesgo"
-    if logged_in and active_top in TRASLADOS_TOPS and "traslados" in permisos:
+    if logged_in and "traslados" in permisos:
         return "traslados"
-    if logged_in and "traslados" in permisos and active_top is None:
-        return "traslados"
-    if logged_in and "riesgos" in permisos and active_top is None:
+    if logged_in and "riesgos" in permisos:
         return "riesgo"
     if logged_in and "admin" in permisos:
         return "portal_admin"
@@ -474,30 +480,26 @@ def _build_nav_items(
 ) -> list[str]:
     """Build the list of navigation items for the requested mode."""
 
-    permisos = set(st.session_state.get("permisos") or [])
+    if mode == "landing":
+        return [
+            _dropdown_html(
+                label="Productos",
+                actions=PRODUCT_ACTIONS,
+                active_top=active_top,
+                active_child=active_child,
+                top_key="productos",
+            ),
+            _dropdown_html(
+                label="Acerca de Nosotros",
+                actions=ABOUT_ACTIONS,
+                active_top=active_top,
+                active_child=active_child,
+                top_key="acerca",
+            ),
+        ]
 
-    
-if mode == "landing":
-    return [
-        _dropdown_html(
-            label="Productos",
-            actions=PRODUCT_ACTIONS,
-            active_top=active_top,
-            active_child=active_child,
-            top_key="productos",
-        ),
-        _root_link_html(
-            label="Acerca de Nosotros",
-            target_page="pages/16_Acerca_de_nosotros.py",
-            top_key="acerca",
-            active_top=active_top,
-        ),
-    ]
-
-if mode == "traslados":
-    items: list[str] = []
-    if "traslados" in permisos:
-        items.append(
+    if mode == "traslados":
+        items: list[str] = [
             _dropdown_html(
                 label="Tarifas",
                 actions=[
@@ -509,9 +511,7 @@ if mode == "traslados":
                 active_top=active_top,
                 active_child=active_child,
                 top_key="tarifas",
-            )
-        )
-        items.append(
+            ),
             _dropdown_html(
                 label="Trabajadores",
                 actions=[
@@ -523,9 +523,7 @@ if mode == "traslados":
                 active_top=active_top,
                 active_child=active_child,
                 top_key="trabajadores",
-            )
-        )
-        items.append(
+            ),
             _dropdown_html(
                 label="Parametros",
                 actions=[
@@ -537,81 +535,60 @@ if mode == "traslados":
                 active_top=active_top,
                 active_child=active_child,
                 top_key="parametros",
+            ),
+        ]
+        items.append(
+            _root_link_html(
+                label="Cerrar sesion",
+                target_page="pages/0_Inicio.py",
+                top_key="logout",
+                active_top=active_top,
+                extra={"logout": "1"},
             )
         )
-    items.append(
-        _root_link_html(
-            label="Cerrar sesion",
-            target_page="pages/0_Inicio.py",
-            top_key="logout",
-            active_top=active_top,
-            extra={"logout": "1"},
-        )
-    )
-    return items
+        return items
 
-if mode == "riesgo":
-    return [
-        _root_link_html(
-            label="Lista negra SAT",
-            target_page="pages/15_Lista_negra_Sat.py",
-            top_key="riesgo",
-            active_top=active_top,
-        ),
-        _root_link_html(
-            label="Archivo Firmes",
-            target_page="pages/17_Archivo_firmes.py",
-            top_key="riesgo_firmes",
-            active_top=active_top,
-        ),
-        _root_link_html(
-            label="Cerrar sesion",
-            target_page="pages/14_Riesgo_fiscal.py",
-            top_key="logout",
-            active_top=active_top,
-            extra={"logout": "1"},
-        ),
-    ]
+    if mode == "riesgo":
+        return [
+            _root_link_html(
+                label="Lista negra SAT",
+                target_page="pages/15_Lista_negra_Sat.py",
+                top_key="riesgo",
+                active_top=active_top,
+            ),
+            _root_link_html(
+                label="Archivo Firmes",
+                target_page="pages/17_Archivo_firmes.py",
+                top_key="riesgo_firmes",
+                active_top=active_top,
+            ),
+            _root_link_html(
+                label="Cerrar sesion",
+                target_page="pages/14_Riesgo_fiscal.py",
+                top_key="logout",
+                active_top=active_top,
+                extra={"logout": "1"},
+            ),
+        ]
 
-if mode == "portal_admin":
-    return [
-        _root_link_html(
-            label="Administracion",
-            target_page="pages/19_Admin_portal.py",
-            top_key="admin_portal",
-            active_top=active_top,
-        ),
-        _root_link_html(
-            label="Cerrar sesion",
-            target_page="pages/0_Inicio.py",
-            top_key="logout",
-            active_top=active_top,
-            extra={"logout": "1"},
-        ),
-    ]
+    if mode == "portal_admin":
+        return [
+            _root_link_html(
+                label="Administracion",
+                target_page="pages/19_Admin_portal.py",
+                top_key="admin_portal",
+                active_top=active_top,
+            ),
+            _root_link_html(
+                label="Cerrar sesion",
+                target_page="pages/0_Inicio.py",
+                top_key="logout",
+                active_top=active_top,
+                extra={"logout": "1"},
+            ),
+        ]
 
-# Default public layout# Default public layout
-    active_key = active_top or "inicio"
-    return [
-        _root_link_html(
-            label="Traslados",
-            target_page="pages/1_Calculadora.py",
-            top_key="calculadora",
-            active_top=active_key,
-        ),
-        _root_link_html(
-            label="Riesgo Fiscal",
-            target_page="pages/14_Riesgo_fiscal.py",
-            top_key="riesgo",
-            active_top=active_key,
-        ),
-        _root_link_html(
-            label="Acerca de Nosotros",
-            target_page="pages/16_Acerca_de_nosotros.py",
-            top_key="acerca",
-            active_top=active_key,
-        ),
-    ]
+    return []
 
 
 

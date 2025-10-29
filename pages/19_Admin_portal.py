@@ -25,6 +25,7 @@ from core.db import (
     portal_update_user,
 )
 from core.navigation import render_nav
+from core.streamlit_compat import rerun
 
 _MODULE_LABEL_OVERRIDES = {
     "traslados": "Traslados",
@@ -142,7 +143,7 @@ def _create_user(conn: sqlite3.Connection) -> None:
             must_change_password=True,
         )
         st.success("Usuario creado. La contrasena inicial es el mismo RFC (mayusculas).")
-        st.experimental_rerun()
+        rerun()
     except Exception as exc:
         st.error(f"No fue posible crear el usuario: {exc}")
 
@@ -202,7 +203,7 @@ def _edit_user(conn: sqlite3.Connection) -> None:
         if nueva_contrasena:
             portal_set_password(conn, record["rfc"], nueva_contrasena, require_change=must_change)
         st.success("Usuario actualizado correctamente.")
-        st.experimental_rerun()
+        rerun()
     except Exception as exc:
         st.error(f"No fue posible actualizar el usuario: {exc}")
 
@@ -221,7 +222,7 @@ def _delete_users(conn: sqlite3.Connection) -> None:
         try:
             portal_delete_users(conn, seleccion)
             st.success("Usuarios eliminados.")
-            st.experimental_rerun()
+            rerun()
         except Exception as exc:
             st.error(f"No fue posible eliminar usuarios: {exc}")
 
@@ -310,7 +311,7 @@ def _manage_recovery_tokens(conn: sqlite3.Connection) -> None:
                 try:
                     portal_revoke_reset_tokens(conn, tokens=tokens_to_revoke)
                     st.success("Enlaces revocados.")
-                    st.experimental_rerun()
+                    rerun()
                 except Exception as exc:
                     st.error(f"No fue posible revocar los enlaces: {exc}")
 

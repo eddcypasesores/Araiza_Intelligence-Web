@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 from pathlib import Path
 import streamlit as st
 
@@ -17,13 +17,13 @@ ensure_session_from_token()
 inject_hero_css()
 
 # =========================
-# helper para obtener base64 de primera imagen válida
+# helper para obtener base64 de primera imagen vÃ¡lida
 # =========================
 def image_src_for(candidates: tuple[Path, ...]) -> str | None:
     return first_image_base64(candidates)
 
 # =========================
-# imágenes asociadas a cada sección
+# imÃ¡genes asociadas a cada secciÃ³n
 # =========================
 IMG_RIESGO = image_src_for((
     Path("assets/riesgo_cover.png"),
@@ -106,7 +106,7 @@ st.markdown(
         margin: 0 auto !important;
     }
 
-    /* --- TÍTULO GENERAL --- */
+    /* --- TÃTULO GENERAL --- */
     .landing-welcome {
         font-family: system-ui,-apple-system,BlinkMacSystemFont,"Inter",Roboto,Arial,sans-serif !important;
         font-size: 1.4rem !important;
@@ -117,7 +117,7 @@ st.markdown(
         margin: 0 0 0.75rem 0 !important;
     }
 
-    /* --- BLOQUE TEXTO DE CADA SECCIÓN --- */
+    /* --- BLOQUE TEXTO DE CADA SECCIÃ“N --- */
     .landing-section {
         max-width: 600px !important;
     }
@@ -127,7 +127,7 @@ st.markdown(
         font-weight: 700 !important;
         color: #0f172a !important;
         line-height: 1.15 !important;
-        margin: 0 0 0.4rem 0 !important; /* menos espacio debajo del título */
+        margin: 0 0 0.4rem 0 !important; /* menos espacio debajo del tÃ­tulo */
     }
 
     .landing-section p {
@@ -173,7 +173,7 @@ st.markdown(
         line-height: 1rem !important;
     }
 
-    /* --- IMAGEN DE LA SECCIÓN --- */
+    /* --- IMAGEN DE LA SECCIÃ“N --- */
     .landing-illustration img {
         width: 100% !important;
         max-width: 360px !important;
@@ -184,7 +184,7 @@ st.markdown(
         display: block !important;
     }
 
-    /* --- BOTÓN ROJO --- */
+    /* --- BOTÃ“N ROJO --- */
     div.stButton > button {
         background-color: #dc2626 !important;
         color: #fff !important;
@@ -213,24 +213,6 @@ st.markdown(
         margin-bottom: 0.5rem !important;
     }
 
-    /* --- CONTACTO --- */
-    .contact-wrapper {
-        max-width: 1000px !important;
-        margin: 0.75rem auto 1rem auto !important;
-        border-radius: 12px !important;
-        background-color: #f8fafc !important;
-        border: 1px solid rgba(0,0,0,0.04) !important;
-        box-shadow: 0 6px 16px rgba(15,23,42,0.06) !important;
-        padding: 0.75rem 1rem !important;
-    }
-
-    .contact-text {
-        font-size: 0.8rem !important;
-        line-height: 1.1rem !important;
-        color: #475569 !important;
-        margin: 0.2rem 0 !important;
-    }
-
     /* --- FOOTER --- */
     .landing-footer {
         text-align: center !important;
@@ -246,7 +228,7 @@ st.markdown(
 )
 
 # =========================
-# helper para renderizar cada sección en el layout 2 columnas
+# helper para renderizar cada secciÃ³n en el layout 2 columnas
 # =========================
 def render_section(
     *,
@@ -274,7 +256,7 @@ def render_section(
             st.markdown('<div class="landing-section">', unsafe_allow_html=True)
             st.markdown(f"<h2>{title}</h2>", unsafe_allow_html=True)
 
-            # agrupar ideas en menos párrafos ayuda a bajar altura vertical
+            # agrupar ideas en menos pÃ¡rrafos ayuda a bajar altura vertical
             for p in paragraphs:
                 st.markdown(f"<p>{p}</p>", unsafe_allow_html=True)
 
@@ -289,15 +271,15 @@ def render_section(
                     st.markdown(f"<li>{item}</li>", unsafe_allow_html=True)
                 st.markdown("</ul>", unsafe_allow_html=True)
 
-            # botón
+            # botÃ³n
             if reverse:
-                # imagen izq, texto der → botón alineado derecha
+                # imagen izq, texto der â†’ botÃ³n alineado derecha
                 _, btn_col_right = st.columns([3, 1])
                 with btn_col_right:
                     if st.button("INICIAR", key=button_key):
                         st.switch_page(page_target)
             else:
-                # texto izq → botón alineado izq
+                # texto izq â†’ botÃ³n alineado izq
                 btn_col_left, _ = st.columns([1, 5])
                 with btn_col_left:
                     if st.button("INICIAR", key=button_key):
@@ -314,7 +296,7 @@ def render_section(
                     unsafe_allow_html=True,
                 )
             else:
-                st.info("Falta imagen para esta sección.")
+                st.info("Falta imagen para esta secciÃ³n.")
             st.markdown('</div>', unsafe_allow_html=True)
 
 # =========================
@@ -322,171 +304,170 @@ def render_section(
 # =========================
 st.markdown('<div class="landing-wrapper">', unsafe_allow_html=True)
 
-# título arriba
+# tÃ­tulo arriba
 st.markdown(
     '<div class="landing-welcome">Bienvenido a Araiza Intelligence</div>',
     unsafe_allow_html=True,
 )
 
-# -------- SECCIÓN: Riesgo Fiscal --------
+# -------- SECCIÓN: Traslado Inteligente --------
 render_section(
-    title="Riesgo fiscal, sin sobresaltos",
+    title="Traslado inteligente con costos completos",
     paragraphs=[
-        "La lista negra del SAT es un registro público que incluye a los contribuyentes (personas físicas y morales) que han cometido irregularidades fiscales, como emitir comprobantes fiscales falsos o tener adeudos fiscales. Nuestro sistema analiza de forma masiva los CFDI de tus proveedores, identifica automáticamente los RFC y los cruza contra esa lista oficial para ayudarte a detectar posibles riesgos fiscales antes de que se conviertan en un problema.",
+        "Calcula en segundos el costo real de cada ruta combinando kilometraje, peajes, combustible, viáticos y mantenimientos proyectados.",
+        "Genera escenarios comparativos entre rutas y planifica márgenes antes de aceptar un servicio de flete.",
     ],
-    bullet_title=None,
-    bullets=[],
-    img_src=IMG_RIESGO,
-    button_key="btn_riesgo_fiscal",
-    page_target="pages/14_Riesgo_fiscal.py",
-    reverse=False,  # texto izq, imagen der
-)
-
-st.markdown('<div class="section-spacer"></div>', unsafe_allow_html=True)
-
-# -------- SECCIÓN: Traslado Inteligente / Costos de Ruta --------
-render_section(
-    title="Precisión en movimiento",
-    paragraphs=[
-        "Nuestra plataforma calcula con exactitud los costos reales de cada flete, integrando tecnología avanzada, APIs de Google Maps y bases de datos inteligentes para ofrecer resultados precisos y actualizados en tiempo real. Obtén en segundos el costo total de una ruta — peajes, combustible, mantenimiento y demás gastos operativos — con una interfaz ágil, intuitiva y confiable. Además, administra fácilmente usuarios y trabajadores, garantizando control, trazabilidad y eficiencia en cada viaje.",
-    ],
-    bullet_title="Características principales:",
+    bullet_title="Ideal para:",
     bullets=[
-        "Cálculo automático de rutas, distancias y casetas.",
-        "Estimación real de combustible y costos operativos.",
-        "Gestión integrada de usuarios y trabajadores.",
-        "Reportes claros y listos para la toma de decisiones.",
-        "Transparencia y precisión en cada operación.",
+        "Cotizaciones urgentes con clientes clave.",
+        "Simular rutas alternas y tiempos estimados.",
+        "Controlar el margen operativo por cliente o zona.",
     ],
     img_src=IMG_TRASLADO,
-    button_key="btn_traslado",
+    button_key="btn_traslado_inteligente",
     page_target="pages/1_Calculadora.py",
-    reverse=True,  # imagen izq, texto der
-)
-
-st.markdown('<div class="section-spacer"></div>', unsafe_allow_html=True)
-
-# -------- SECCIÓN: EFOS --------
-render_section(
-    title="Verificación EFOS",
-    paragraphs=[
-        "¿Sabes si la empresa con la que trabajas aparece como EFOS ante el SAT? Evita multas, pérdida de deducciones y riesgos legales. Te ayudamos a verificar si un proveedor está listado como emisor de comprobantes fiscales simulados antes de operar con él.",
-    ],
-    bullet_title="Riesgos que evitamos:",
-    bullets=[
-        "Multas y recargos.",
-        "Pérdida de deducciones fiscales.",
-        "Auditorías y revisiones fiscales.",
-        "Responsabilidades legales en casos graves.",
-    ],
-    img_src=IMG_EFOS,
-    button_key="btn_efos",
-    page_target="pages/14_Riesgo_fiscal.py",  # ajusta si tienes otra vista EFOS específica
     reverse=False,
 )
+st.markdown("<div class=\"section-spacer\"></div>", unsafe_allow_html=True)
 
-st.markdown('<div class="section-spacer"></div>', unsafe_allow_html=True)
-
-# -------- SECCIÓN: Descarga masiva de XML --------
+# -------- SECCIÓN: Riesgo Fiscal --------
 render_section(
-    title="Descarga masiva de XML",
+    title="Riesgo fiscal sin sobresaltos",
     paragraphs=[
-        "Centraliza y valida CFDI de manera automática. Descarga tus facturas en bloque, asegura su autenticidad y mantén un control documental listo para auditoría. Automatiza conciliaciones y acelera el análisis financiero con información confiable.",
-    ],
-    bullet_title="Beneficios clave:",
-    bullets=[
-        "Asegura la veracidad y autenticidad de los comprobantes.",
-        "Optimiza la gestión documental y el cumplimiento fiscal.",
-        "Permite conciliación y análisis financiero automatizado.",
-    ],
-    img_src=IMG_XML,
-    button_key="btn_xml",
-    page_target="pages/14_Riesgo_fiscal.py",  # o módulo específico de XML si lo tienes
-    reverse=True,
-)
-
-st.markdown('<div class="section-spacer"></div>', unsafe_allow_html=True)
-
-# -------- SECCIÓN: Generador de Pólizas --------
-render_section(
-    title="Generador de Pólizas",
-    paragraphs=[
-        "Automatiza el registro contable de ingresos, egresos y provisiones. Convierte archivos Excel (.xlsx) en pólizas listas para subir de forma masiva a sistemas como COI. Menos captura manual. Más consistencia. Más velocidad en cierres contables.",
-    ],
-    bullet_title="Lo que automatizamos:",
-    bullets=[
-        "Ingresos y egresos.",
-        "Provisiones.",
-        "Carga masiva a sistemas contables.",
-    ],
-    img_src=IMG_POLIZAS,
-    button_key="btn_polizas",
-    page_target="pages/XX_Generador_polizas.py",
-    reverse=False,
-)
-
-st.markdown('<div class="section-spacer"></div>', unsafe_allow_html=True)
-
-# -------- SECCIÓN: Convertidor de Estados de Cuenta --------
-render_section(
-    title="Convertidor de Estados de Cuenta",
-    paragraphs=[
-        "Convierte tus estados de cuenta bancarios en información clara y analizable. Automatizamos la lectura y descarga de movimientos bancarios, organizando cargos, abonos, fechas y saldos directamente en Excel en segundos.",
-    ],
-    bullet_title="Beneficios:",
-    bullets=[
-        "Ahorra tiempo en registros.",
-        "Control inmediato del flujo de efectivo.",
-        "Datos precisos listos para análisis financiero.",
-    ],
-    img_src=IMG_ESTADOS_CTA,
-    button_key="btn_estados_cuenta",
-    page_target="pages/XX_Convertidor_estados.py",
-    reverse=True,
-)
-
-st.markdown('<div class="section-spacer"></div>', unsafe_allow_html=True)
-
-# -------- SECCIÓN: Cédula de Impuestos --------
-render_section(
-    title="Cédula de Impuestos",
-    paragraphs=[
-        "Papel de trabajo diseñado para Personas Morales en Régimen General. Facilita el cálculo y la conciliación de ingresos, deducciones, coeficiente de utilidad, PTU y otros rubros clave de la declaración anual. Minimiza errores y acelera el cumplimiento fiscal con formatos estructurados en Excel.",
+        "Cruza automáticamente tus CFDI contra la lista negra del SAT y conoce en qué momento uno de tus proveedores aparece en los listados 69, 69-B o 69-B Bis.",
+        "Genera reportes de seguimiento para auditorías internas y demuestra acciones preventivas frente a autoridades fiscales.",
     ],
     bullet_title="Te ayuda a:",
     bullets=[
-        "Calcular coeficiente de utilidad.",
-        "Integrar PTU.",
-        "Conciliar ingresos y deducciones.",
-        "Cumplir obligaciones fiscales con orden.",
+        "Detectar operaciones con EFOS publicados.",
+        "Monitorear cambios cada vez que el SAT actualiza los listados.",
+        "Alertar a finanzas y cumplimiento antes de que se genere una contingencia.",
     ],
-    img_src=IMG_CEDULA,
-    button_key="btn_cedula",
-    page_target="pages/XX_Cedula_impuestos.py",
+    img_src=IMG_RIESGO,
+    button_key="btn_riesgo_fiscal",
+    page_target="pages/14_Riesgo_fiscal.py",
+    reverse=True,
+)
+st.markdown("<div class=\"section-spacer\"></div>", unsafe_allow_html=True)
+
+# -------- SECCIÓN: Lista Negra SAT --------
+render_section(
+    title="Cruce masivo contra la lista negra SAT",
+    paragraphs=[
+        "Carga tus catálogos de proveedores y obtén el detalle de cada RFC con estatus, fundamento y fecha de publicación en los listados del SAT.",
+        "Consolida evidencia descargable para justificar decisiones de bloqueo o seguimiento con tesorería y fiscalistas externos.",
+    ],
+    bullet_title="Resultados inmediatos:",
+    bullets=[
+        "Resumen ejecutivo por tipo de listado.",
+        "Detalle histórico del RFC en 69, 69-B y 69-B Bis.",
+        "Exportación a Excel para dar seguimiento con responsables.",
+    ],
+    img_src=IMG_RIESGO,
+    button_key="btn_lista_negra",
+    page_target="pages/15_Lista_negra_Sat.py",
     reverse=False,
 )
+st.markdown("<div class=\"section-spacer\"></div>", unsafe_allow_html=True)
 
-st.markdown('<div class="section-spacer"></div>', unsafe_allow_html=True)
-
-# =========================
-# CONTACTO / UBICACIÓN (sin el título "Contáctanos")
-# =========================
-st.markdown(
-    """
-    <div class="contact-wrapper">
-      <div class="contact-text">
-        Teléfono: <strong>55 1234 5678</strong><br/>
-        Ubicación: Av. Cuitláhuac 3139, Claveria, Azcapotzalco, 02840 Ciudad de México, CDMX<br/>
-        Mapa: <a href="https://maps.app.goo.gl/txTQ6SF57XanDBBG7?g_st=aw" target="_blank">Ver en Google Maps</a>
-      </div>
-      <div class="contact-text">
-        Transformamos operación logística, contable y fiscal en información procesable.
-      </div>
-    </div>
-    """,
-    unsafe_allow_html=True,
+# -------- SECCIÓN: EFOS --------
+render_section(
+    title="Monitoreo especializado de EFOS",
+    paragraphs=[
+        "Identifica proveedores señalados como EFOS y documenta acciones de corrección con respaldo de evidencia oficial.",
+        "Centraliza el historial de gestiones para auditores internos y externos sin depender de hojas de cálculo dispersas.",
+    ],
+    bullet_title="Beneficios clave:",
+    bullets=[
+        "Alertas automáticas cuando un RFC cambia de estatus.",
+        "Historial de revisiones por periodo fiscal.",
+        "Bitácora de seguimiento para áreas legales y fiscales.",
+    ],
+    img_src=IMG_EFOS,
+    button_key="btn_efos",
+    page_target="pages/14_Riesgo_fiscal.py",
+    reverse=True,
 )
+st.markdown("<div class=\"section-spacer\"></div>", unsafe_allow_html=True)
 
+# -------- SECCIÓN: Descarga masiva de XML --------
+render_section(
+    title="Descarga masiva de XML simplificada",
+    paragraphs=[
+        "Automatiza la descarga de CFDI directamente desde los servicios del SAT sin depender de tareas manuales y con trazabilidad completa.",
+        "Mantén tus repositorios de facturas al día para conciliaciones contables, devoluciones y fiscalización.",
+    ],
+    bullet_title="Incluye:",
+    bullets=[
+        "Filtros por periodo, emisor y tipo de comprobante.",
+        "Control de usuarios con permisos diferenciados.",
+        "Integración con procesos de validación y timbrado.",
+    ],
+    img_src=IMG_XML,
+    button_key="btn_descarga_xml",
+    page_target="pages/14_Riesgo_fiscal.py",
+    reverse=False,
+)
+st.markdown("<div class=\"section-spacer\"></div>", unsafe_allow_html=True)
+
+# -------- SECCIÓN: Generador de Pólizas --------
+render_section(
+    title="Generador automático de pólizas contables",
+    paragraphs=[
+        "Convierte CFDI en pólizas contables listas para integrar a tu ERP o sistema contable con las cuentas que definiste.",
+        "Reduce capturas manuales y asegura trazabilidad desde la factura hasta la póliza registrada.",
+    ],
+    bullet_title="Automatiza:",
+    bullets=[
+        "Clasificación contable por tipo de gasto o ingreso.",
+        "Control de impuestos y retenciones aplicables.",
+        "Exportación en formatos compatibles con tu sistema.",
+    ],
+    img_src=IMG_POLIZAS,
+    button_key="btn_generador_polizas",
+    page_target="pages/XX_Generador_polizas.py",
+    reverse=True,
+)
+st.markdown("<div class=\"section-spacer\"></div>", unsafe_allow_html=True)
+
+# -------- SECCIÓN: Convertidor de Estados de Cuenta --------
+render_section(
+    title="Convertidor de estados de cuenta listo para conciliaciones",
+    paragraphs=[
+        "Normaliza los formatos bancarios y genera archivos estructurados para conciliación contable y análisis de flujos.",
+        "Integra las transacciones con tu modelo de costos y reportes financieros en cuestión de minutos.",
+    ],
+    bullet_title="Funciones destacadas:",
+    bullets=[
+        "Lectura de estados en PDF o XLSX.",
+        "Identificación de depósitos y retiros recurrentes.",
+        "Exportación a plantillas de conciliación.",
+    ],
+    img_src=IMG_ESTADOS_CTA,
+    button_key="btn_convertidor_estados",
+    page_target="pages/XX_Convertidor_estados.py",
+    reverse=False,
+)
+st.markdown("<div class=\"section-spacer\"></div>", unsafe_allow_html=True)
+
+# -------- SECCIÓN: Cédula de Impuestos --------
+render_section(
+    title="Cédula de impuestos para cierre anual",
+    paragraphs=[
+        "Calcula coeficiente de utilidad, integra PTU y cruza deducciones con facilidad para preparar tus declaraciones anuales.",
+        "Documenta decisiones clave con evidencia y formatos listos para revisión fiscal o auditoría.",
+    ],
+    bullet_title="Te permite:",
+    bullets=[
+        "Simular escenarios antes de enviar la declaración.",
+        "Controlar obligaciones fiscales por entidad o razón social.",
+        "Producir reportes ejecutivos para dirección y comités.",
+    ],
+    img_src=IMG_CEDULA,
+    button_key="btn_cedula_impuestos",
+    page_target="pages/XX_Cedula_impuestos.py",
+    reverse=True,
+)
 # =========================
 # FOOTER
 # =========================

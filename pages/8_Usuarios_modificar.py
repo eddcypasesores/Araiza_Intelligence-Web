@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-import pandas as pd
-import streamlit as st
 from datetime import date
 
+import pandas as pd
+import streamlit as st
+
+from core.streamlit_compat import rerun
 from pages.components.admin import init_admin_section
 
 
@@ -119,7 +121,7 @@ def main() -> None:
             salario_diario=float(salario_diario),
         )
         st.success("Trabajador actualizado correctamente.")
-        st.experimental_rerun()
+        rerun()
     except Exception as exc:
         st.error(f"No fue posible actualizar el trabajador: {exc}")
 

@@ -22,7 +22,7 @@ def _has_permission(module: str) -> bool:
 def _render_login() -> None:
     """Renderiza el formulario de acceso al módulo de Riesgo Fiscal."""
 
-    render_nav(active_top=None, show_inicio=False)
+    render_nav(active_top="riesgo", active_child=None, show_inicio=False)
 
     st.title("Acceso a Riesgo Fiscal")
     st.caption("Valida tus credenciales para consultar el cruce de RFC con la lista negra del SAT.")

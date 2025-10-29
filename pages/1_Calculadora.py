@@ -106,7 +106,7 @@ ensure_session_from_token()
 def _render_login() -> None:
     """Muestra un formulario uniforme de acceso para el módulo de traslados."""
 
-    render_nav(active_top=None, show_inicio=False)
+    render_nav(active_top="calculadora", active_child=None, show_inicio=False)
 
     raw_next = st.query_params.get("next")
     if isinstance(raw_next, list):

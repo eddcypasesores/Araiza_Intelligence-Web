@@ -1,19 +1,16 @@
 """Sección informativa sobre Araiza Intelligence."""
 
-from contextlib import closing
 from pathlib import Path
 import base64
 import streamlit as st
 
-from core.auth import ensure_session_from_token, persist_login
-from core.db import authenticate_portal_user, ensure_schema, get_conn
+from core.auth import ensure_session_from_token
 from core.navigation import render_nav
-from core.streamlit_compat import set_query_params
 
 st.set_page_config(page_title="Acerca de Nosotros | Araiza Intelligence", layout="wide")
 
 ensure_session_from_token()
-render_nav(active_top="acerca", active_child=None)
+render_nav(active_top="acerca", active_child="acerca_resumen")
 
 st.markdown(
     """
@@ -62,6 +59,25 @@ st.markdown(
         object-fit: cover;
         box-shadow: 0 22px 38px rgba(15, 23, 42, 0.18);
         max-height: 420px;
+      }
+      .about-contact {
+        margin-top: clamp(24px, 4vw, 36px);
+        border-radius: 14px;
+        background: #f8fafc;
+        border: 1px solid rgba(148, 163, 184, 0.25);
+        box-shadow: 0 16px 28px rgba(15, 23, 42, 0.1);
+        padding: clamp(18px, 3vw, 28px);
+        color: #334155;
+        font-size: clamp(15px, 1.5vw, 17px);
+        line-height: 1.55;
+      }
+      .about-contact a {
+        color: #1d4ed8;
+        font-weight: 600;
+        text-decoration: none;
+      }
+      .about-contact a:hover {
+        text-decoration: underline;
       }
     </style>
     """,
@@ -164,52 +180,17 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+st.markdown(
+    """
+    <div class="about-contact">
+      Teléfono: <strong>55 1234 5678</strong><br/>
+      Ubicación: Av. Cuitláhuac 3139, Clavería, Azcapotzalco, 02840 Ciudad de México, CDMX<br/>
+      Mapa: <a href="https://maps.app.goo.gl/txTQ6SF57XanDBBG7?g_st=aw" target="_blank" rel="noopener noreferrer">Ver en Google Maps</a>
+      <br/><br/>
+      Transformamos operación logística, contable y fiscal en información procesable.
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
 st.markdown("---")
-with st.expander("Administrar", expanded=False):
-    st.caption(
-        "Acceso reservado. Ingresa solo si administras los módulos y permisos del portal."
-    )
-    with st.form("super_admin_login", clear_on_submit=False):
-        admin_rfc = st.text_input("RFC", placeholder="ej. ADMINISTRADOR")
-        admin_password = st.text_input("Contraseña", type="password", placeholder="********")
-        admin_submitted = st.form_submit_button("Iniciar sesión", use_container_width=True)
-
-    st.caption(
-        "¿Olvidaste tu contraseña? Solicita un enlace temporal y utiliza "
-        "[esta página](?page=pages/18_Restablecer_contrasena.py) para restablecerla."
-    )
-
-    if admin_submitted:
-        username = (admin_rfc or "").strip().upper()
-        password = admin_password or ""
-
-        if not username or not password:
-            st.error("Captura RFC y contraseña para continuar.")
-        else:
-            try:
-                with closing(get_conn()) as conn:
-                    ensure_schema(conn)
-                    record = authenticate_portal_user(conn, username, password)
-            except Exception as exc:
-                st.error("No fue posible validar las credenciales.")
-                st.caption(f"Detalle técnico: {exc}")
-                record = None
-
-            permisos = set(record.get("permisos") or []) if record else set()
-            if not record or "admin" not in permisos:
-                st.error("Credenciales inválidas o sin privilegios de super administrador.")
-            else:
-                token = persist_login(
-                    record["rfc"],
-                    record["permisos"],
-                    must_change_password=record.get("must_change_password", False),
-                    user_id=record.get("id"),
-                )
-                try:
-                    params = {k: v for k, v in st.query_params.items() if k != "auth"}
-                    params["auth"] = token
-                    set_query_params(params)
-                except Exception:
-                    pass
-                st.success("Acceso concedido. Redirigiendo al panel de administración...")
-                st.switch_page("pages/19_Admin_portal.py")

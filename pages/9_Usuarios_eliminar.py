@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from core.streamlit_compat import rerun
 from pages.components.admin import init_admin_section
 
 
@@ -41,7 +42,7 @@ def main() -> None:
             conn.executemany("DELETE FROM trabajadores WHERE id=?", [(i,) for i in ids])
             conn.commit()
             st.success("Trabajadores eliminados correctamente.")
-            st.experimental_rerun()
+            rerun()
         except Exception as exc:
             st.error(f"No fue posible eliminar trabajadores: {exc}")
 

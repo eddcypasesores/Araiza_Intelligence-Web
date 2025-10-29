@@ -422,7 +422,7 @@ elif tengo_xml and not tengo_firmes:
         "Una vez hecho, regresa a esta pantalla y usa el boton 'Reintentar' para recargar la informacion."
     )
     if st.button('Reintentar', key='firmes_reload_btn'):
-        st.experimental_rerun()
+        rerun()
 
 
 
