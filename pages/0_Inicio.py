@@ -1,4 +1,4 @@
-﻿# pages/0_Inicio.py — Tarjetas alternadas (zigzag) 100% clickeables con verificación de páginas
+﻿# pages/0_Inicio.py — Tarjetas alternadas (zigzag) 100% clickeables con verificación de páginas (imágenes 16:9)
 from __future__ import annotations
 from pathlib import Path
 from urllib.parse import urlencode
@@ -132,7 +132,7 @@ IMG_CEDULA = image_src_for((
 render_nav(active_top="inicio", show_inicio=False, show_cta=False)
 
 # -------------------------------------------------------------------------
-# CSS (sin cambios de layout)
+# CSS (misma estructura; + aire entre tarjetas; media 16:9)
 # -------------------------------------------------------------------------
 st.markdown("""
 <style>
@@ -153,9 +153,15 @@ st.markdown("""
   margin: 0 0 18px;
 }
 
-/* GRID */
-.cards-grid{ display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:22px; }
-@media (max-width:1000px){ .cards-grid{ grid-template-columns: 1fr; } }
+/* GRID: más aire entre tarjetas */
+.cards-grid{
+  display:grid;
+  grid-template-columns: repeat(2, minmax(0,1fr));
+  gap: clamp(28px, 4vw, 40px);
+}
+@media (max-width:1000px){
+  .cards-grid{ grid-template-columns: 1fr; gap: 22px; }
+}
 
 /* TARJETA ALTERNADA */
 .card-split{
@@ -166,6 +172,7 @@ st.markdown("""
   transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
   cursor:pointer;
   isolation:isolate;
+  margin: 6px 0 12px; /* aire vertical adicional */
 }
 .card-split:hover{ transform: translateY(-2px); box-shadow:0 14px 32px rgba(2,6,23,.1); border-color:rgba(0,0,0,.08); }
 
@@ -192,9 +199,21 @@ st.markdown("""
 /* alternancia izquierda/derecha */
 .card-split.rev{ flex-direction: row-reverse; }
 
-.card-media{ flex:0 0 42%; background:#f1f5f9; display:flex; align-items:center; justify-content:center; }
-.card-media img{ width:100%; height:100%; max-height: 260px; object-fit:cover; }
+/* MEDIA 16:9 */
+.card-media{
+  flex:0 0 42%;
+  background:#f1f5f9;
+  display:flex; align-items:center; justify-content:center;
+  overflow:hidden; border-radius:14px;
+  aspect-ratio: 16 / 9;      /* fuerza contenedor 16:9 */
+}
+.card-media img{
+  width:100%;
+  height:100%;
+  object-fit: cover;          /* llena el 16:9 sin deformarse */
+}
 
+/* Texto de la tarjeta */
 .card-copy{ flex:1; display:flex; flex-direction:column; padding:16px; position:relative; z-index:3; }
 .card-title{ margin:0 0 6px; font-weight:800; color:#0f172a; font-size:1.25rem; line-height:1.2; }
 .card-desc{ margin:0 0 10px; color:#475569; font-size:.95rem; line-height:1.55rem; text-align:justify; }
@@ -231,8 +250,7 @@ st.markdown("""
 /* Responsive */
 @media (max-width: 720px){
   .card-split, .card-split.rev{ flex-direction:column; }
-  .card-media{ flex: none; }
-  .card-media img{ height: 200px; }
+  .card-media{ flex: none; }  /* ancho = 100% => altura automática según 16:9 */
 }
 </style>
 """, unsafe_allow_html=True)
