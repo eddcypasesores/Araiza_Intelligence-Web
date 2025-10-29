@@ -1,4 +1,4 @@
-"""Reusable sticky navigation bar with dropdown actions for admin sections."""
+﻿"""Reusable sticky navigation bar with dropdown actions for admin sections."""
 
 from __future__ import annotations
 
@@ -283,11 +283,10 @@ PAGE_PARAM_NAMES: dict[str, str] = {
     "pages/3_Tarifas_agregar.py": "Tarifas - Agregar",
     "pages/4_Tarifas_modificar.py": "Tarifas - Modificar",
     "pages/5_Tarifas_eliminar.py": "Tarifas - Eliminar",
-    "pages/3_Trabajadores.py": "Trabajadores",
-    "pages/6_Usuarios_consultar.py": "Usuarios - Consultar",
-    "pages/7_Usuarios_agregar.py": "Usuarios - Agregar",
-    "pages/8_Usuarios_modificar.py": "Usuarios - Modificar",
-    "pages/9_Usuarios_eliminar.py": "Usuarios - Eliminar",
+    "pages/6_Usuarios_consultar.py": "Trabajadores - Consultar",
+    "pages/7_Usuarios_agregar.py": "Trabajadores - Agregar",
+    "pages/8_Usuarios_modificar.py": "Trabajadores - Modificar",
+    "pages/9_Usuarios_eliminar.py": "Trabajadores - Eliminar",
     "pages/10_Parametros_consultar.py": "Parametros - Consultar",
     "pages/11_Parametros_agregar.py": "Parametros - Agregar",
     "pages/12_Parametros_modificar.py": "Parametros - Modificar",
@@ -296,6 +295,8 @@ PAGE_PARAM_NAMES: dict[str, str] = {
     "pages/15_Lista_negra_Sat.py": "Lista negra SAT - Cruce de RFC",
     "pages/16_Acerca_de_nosotros.py": "Acerca de Nosotros",
     "pages/17_Archivo_firmes.py": "Archivo Firmes",
+    "pages/18_Restablecer_contrasena.py": "Recuperar contrasena",
+    "pages/19_Admin_portal.py": "Administracion del portal",
 }
 
 
@@ -307,6 +308,23 @@ class DropdownAction:
     child_id: str
     target_page: str
     query: dict[str, str] | None = None
+
+
+
+LANDING_TOPS: set[str] = {"inicio", "acerca"}
+TRASLADOS_TOPS: set[str] = {"calculadora", "tarifas", "trabajadores", "parametros"}
+RIESGO_TOPS: set[str] = {"riesgo", "riesgo_firmes"}
+
+PRODUCT_ACTIONS: tuple[DropdownAction, ...] = (
+    DropdownAction("Traslado Inteligente", "producto_traslados", "pages/1_Calculadora.py"),
+    DropdownAction("Riesgo Fiscal", "producto_riesgo", "pages/14_Riesgo_fiscal.py"),
+    DropdownAction("Lista Negra SAT", "producto_lista", "pages/14_Riesgo_fiscal.py"),
+    DropdownAction("EFOS", "producto_efos", "pages/14_Riesgo_fiscal.py"),
+    DropdownAction("Descarga masiva de XML", "producto_xml", "pages/14_Riesgo_fiscal.py"),
+    DropdownAction("Generador de Polizas", "producto_polizas", "pages/XX_Generador_polizas.py"),
+    DropdownAction("Convertidor de Estados de Cuenta", "producto_estados", "pages/XX_Convertidor_estados.py"),
+    DropdownAction("Cedula de Impuestos", "producto_cedula", "pages/XX_Cedula_impuestos.py"),
+)
 
 
 def _handle_logout_query() -> None:
@@ -366,8 +384,8 @@ def _brand_html() -> str:
     else:
         img_html = ""
     return (
-        '<div class="nav-brand">'
-        f"{img_html}<span class=\"nav-brand-text\">Araiza Intelligence</span></div>"
+        '<a class="nav-brand" href="/?logout=1" target="_self">'
+        f"{img_html}<span class=\"nav-brand-text\">Araiza Intelligence</span></a>"
     )
 
 
@@ -409,6 +427,7 @@ def _root_link_html(
     target_page: str,
     top_key: str,
     active_top: str | None,
+    extra: dict[str, str] | None = None,
 ) -> str:
     """Return the HTML for a root-level navigation link without dropdown."""
 
@@ -418,7 +437,7 @@ def _root_link_html(
 
     return (
         f'<div class="{root_class}">' \
-        f'<a class="nav-link" href="{_page_href(target_page)}" target="_self">{label}</a>' \
+        f'<a class="nav-link" href="{_page_href(target_page, extra)}" target="_self">{label}</a>' \
         "</div>"
     )
 
@@ -426,13 +445,24 @@ def _root_link_html(
 def _resolve_nav_mode(active_top: str | None) -> str:
     """Return the navigation layout mode based on the current context."""
 
-    rol = str(st.session_state.get("rol", "")).lower()
-    logged_in = bool(st.session_state.get("usuario"))
+    if active_top in LANDING_TOPS:
+        return "landing"
 
-    if logged_in and active_top in {"riesgo", "riesgo_firmes"}:
+    logged_in = bool(st.session_state.get("usuario"))
+    permisos = set(st.session_state.get("permisos") or [])
+
+    if logged_in and active_top == "admin_portal" and "admin" in permisos:
+        return "portal_admin"
+    if logged_in and active_top in RIESGO_TOPS and "riesgos" in permisos:
         return "riesgo"
-    if logged_in and rol in {"admin", "operador"} and active_top in {"calculadora", "tarifas", "usuarios", "parametros"}:
-        return "calculadora"
+    if logged_in and active_top in TRASLADOS_TOPS and "traslados" in permisos:
+        return "traslados"
+    if logged_in and "traslados" in permisos and active_top is None:
+        return "traslados"
+    if logged_in and "riesgos" in permisos and active_top is None:
+        return "riesgo"
+    if logged_in and "admin" in permisos:
+        return "portal_admin"
     return "publico"
 
 
@@ -444,89 +474,123 @@ def _build_nav_items(
 ) -> list[str]:
     """Build the list of navigation items for the requested mode."""
 
-    rol = str(st.session_state.get("rol", "")).lower()
+    permisos = set(st.session_state.get("permisos") or [])
 
-    if mode == "riesgo":
-        return [
-            _root_link_html(
-                label="Lista negra SAT",
-                target_page="pages/15_Lista_negra_Sat.py",
-                top_key="riesgo",
+    
+if mode == "landing":
+    return [
+        _dropdown_html(
+            label="Productos",
+            actions=PRODUCT_ACTIONS,
+            active_top=active_top,
+            active_child=active_child,
+            top_key="productos",
+        ),
+        _root_link_html(
+            label="Acerca de Nosotros",
+            target_page="pages/16_Acerca_de_nosotros.py",
+            top_key="acerca",
+            active_top=active_top,
+        ),
+    ]
+
+if mode == "traslados":
+    items: list[str] = []
+    if "traslados" in permisos:
+        items.append(
+            _dropdown_html(
+                label="Tarifas",
+                actions=[
+                    DropdownAction("Consultar", "consultar", "pages/2_Tarifas_consultar.py"),
+                    DropdownAction("Agregar", "agregar", "pages/3_Tarifas_agregar.py"),
+                    DropdownAction("Modificar", "modificar", "pages/4_Tarifas_modificar.py"),
+                    DropdownAction("Eliminar", "eliminar", "pages/5_Tarifas_eliminar.py"),
+                ],
                 active_top=active_top,
-            ),
-            _root_link_html(
-                label="Archivo Firmes",
-                target_page="pages/17_Archivo_firmes.py",
-                top_key="riesgo_firmes",
+                active_child=active_child,
+                top_key="tarifas",
+            )
+        )
+        items.append(
+            _dropdown_html(
+                label="Trabajadores",
+                actions=[
+                    DropdownAction("Consultar", "consultar", "pages/6_Usuarios_consultar.py"),
+                    DropdownAction("Agregar", "agregar", "pages/7_Usuarios_agregar.py"),
+                    DropdownAction("Modificar", "modificar", "pages/8_Usuarios_modificar.py"),
+                    DropdownAction("Eliminar", "eliminar", "pages/9_Usuarios_eliminar.py"),
+                ],
                 active_top=active_top,
-            ),
-        ]
-
-    if mode == "calculadora":
-        items: list[str] = []
-        if active_top in {"tarifas", "usuarios", "parametros"}:
-            items.append(
-                _root_link_html(
-                    label="Calcular",
-                    target_page="pages/1_Calculadora.py",
-                    top_key="calculadora",
-                    active_top=active_top,
-                )
+                active_child=active_child,
+                top_key="trabajadores",
             )
-        if rol == "admin":
-            items.extend(
-                [
-                    _dropdown_html(
-                        label="Tarifas",
-                        actions=[
-                            DropdownAction("Consultar", "consultar", "pages/2_Tarifas_consultar.py"),
-                            DropdownAction("Agregar", "agregar", "pages/3_Tarifas_agregar.py"),
-                            DropdownAction("Modificar", "modificar", "pages/4_Tarifas_modificar.py"),
-                            DropdownAction("Eliminar", "eliminar", "pages/5_Tarifas_eliminar.py"),
-                        ],
-                        active_top=active_top,
-                        active_child=active_child,
-                        top_key="tarifas",
-                    ),
-                    _dropdown_html(
-                        label="Usuarios",
-                        actions=[
-                            DropdownAction("Consultar", "consultar", "pages/6_Usuarios_consultar.py"),
-                            DropdownAction("Agregar", "agregar", "pages/7_Usuarios_agregar.py"),
-                            DropdownAction("Modificar", "modificar", "pages/8_Usuarios_modificar.py"),
-                            DropdownAction("Eliminar", "eliminar", "pages/9_Usuarios_eliminar.py"),
-                        ],
-                        active_top=active_top,
-                        active_child=active_child,
-                        top_key="usuarios",
-                    ),
-                    _dropdown_html(
-                        label="Parametros",
-                        actions=[
-                            DropdownAction("Consultar", "consultar", "pages/10_Parametros_consultar.py"),
-                            DropdownAction("Agregar", "agregar", "pages/11_Parametros_agregar.py"),
-                            DropdownAction("Modificar", "modificar", "pages/12_Parametros_modificar.py"),
-                            DropdownAction("Eliminar", "eliminar", "pages/13_Parametros_eliminar.py"),
-                        ],
-                        active_top=active_top,
-                        active_child=active_child,
-                        top_key="parametros",
-                    ),
-                ]
+        )
+        items.append(
+            _dropdown_html(
+                label="Parametros",
+                actions=[
+                    DropdownAction("Consultar", "consultar", "pages/10_Parametros_consultar.py"),
+                    DropdownAction("Agregar", "agregar", "pages/11_Parametros_agregar.py"),
+                    DropdownAction("Modificar", "modificar", "pages/12_Parametros_modificar.py"),
+                    DropdownAction("Eliminar", "eliminar", "pages/13_Parametros_eliminar.py"),
+                ],
+                active_top=active_top,
+                active_child=active_child,
+                top_key="parametros",
             )
-        else:
-            if not items:
-                items.append(
-                    _root_link_html(
-                        label="Calcular",
-                        target_page="pages/1_Calculadora.py",
-                        top_key="calculadora",
-                        active_top=active_top,
-                    )
-                )
-        return items
+        )
+    items.append(
+        _root_link_html(
+            label="Cerrar sesion",
+            target_page="pages/0_Inicio.py",
+            top_key="logout",
+            active_top=active_top,
+            extra={"logout": "1"},
+        )
+    )
+    return items
 
-    # Default public layout
+if mode == "riesgo":
+    return [
+        _root_link_html(
+            label="Lista negra SAT",
+            target_page="pages/15_Lista_negra_Sat.py",
+            top_key="riesgo",
+            active_top=active_top,
+        ),
+        _root_link_html(
+            label="Archivo Firmes",
+            target_page="pages/17_Archivo_firmes.py",
+            top_key="riesgo_firmes",
+            active_top=active_top,
+        ),
+        _root_link_html(
+            label="Cerrar sesion",
+            target_page="pages/14_Riesgo_fiscal.py",
+            top_key="logout",
+            active_top=active_top,
+            extra={"logout": "1"},
+        ),
+    ]
+
+if mode == "portal_admin":
+    return [
+        _root_link_html(
+            label="Administracion",
+            target_page="pages/19_Admin_portal.py",
+            top_key="admin_portal",
+            active_top=active_top,
+        ),
+        _root_link_html(
+            label="Cerrar sesion",
+            target_page="pages/0_Inicio.py",
+            top_key="logout",
+            active_top=active_top,
+            extra={"logout": "1"},
+        ),
+    ]
+
+# Default public layout# Default public layout
     active_key = active_top or "inicio"
     return [
         _root_link_html(
@@ -557,7 +621,7 @@ def render_nav(
     active_child: str | None = None,
     *,
     show_inicio: bool = True,
-    show_cta: bool = True,
+    show_cta: bool = False,
 ) -> None:
     """Inject shared CSS and render the sticky navigation bar.
 
@@ -566,11 +630,9 @@ def render_nav(
     active_top, active_child
         Optional identifiers used to highlight the active dropdown and option.
     show_inicio
-        If `True` the "Inicio" link is shown; disable it on the landing page to
-        avoid duplicating the current location.
+        Conservado por compatibilidad. Actualmente no agrega enlaces de inicio.
     show_cta
-        Controls whether the trailing call-to-action (login / logout) button is
-        rendered.  The home page keeps the navigation minimalist by hiding it.
+        Parametro en desuso; se ignora. El parametro se mantiene por compatibilidad.
     """
 
     _handle_logout_query()
@@ -598,22 +660,7 @@ def render_nav(
         nav_html = "&nbsp;"
     brand_html = _brand_html()
 
-    if mode == "riesgo" and not st.session_state.get("usuario"):
-        show_cta = False
-
-    if show_cta:
-        if st.session_state.get("usuario"):
-            cta_href = "/?logout=1"
-            cta_label = "Cerrar sesion"
-        else:
-            cta_href = _page_href("pages/1_Calculadora.py")
-            cta_label = "Iniciar sesion"
-        logout_html = (
-            f'<div class="nav-scope logout"><a class="nav-logout" href="{cta_href}" '
-            f'target="_self">{cta_label}</a></div>'
-        )
-    else:
-        logout_html = ""
+    logout_html = ""
 
     markup = (
         '<div class="nav-anchor"></div>'

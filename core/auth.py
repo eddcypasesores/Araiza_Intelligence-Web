@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import secrets
-from typing import MutableMapping
+from typing import MutableMapping, Sequence
 
 import streamlit as st
 
@@ -60,7 +60,7 @@ def ensure_session_from_token() -> None:
             pass
         return
 
-    for key in ("usuario", "rol"):
+    for key in ("usuario", "rol", "permisos", "must_change_password", "portal_user_id"):
         value = record.get(key)
         if value is not None and st.session_state.get(key) != value:
             st.session_state[key] = value
@@ -74,20 +74,43 @@ def ensure_session_from_token() -> None:
             pass
 
 
-def persist_login(username: str, rol: str) -> str:
-    """Genera o renueva el token de autenticación para un usuario válido."""
+def persist_login(
+    username: str,
+    permisos_or_rol: Sequence[str] | str,
+    *,
+    must_change_password: bool = False,
+    user_id: int | None = None,
+) -> str:
+    """Genera o renueva el token de autenticacion para un usuario valido."""
 
     store = _auth_store()
     old_token = st.session_state.pop("auth_token", None)
     if old_token:
         store.pop(str(old_token), None)
 
+    if isinstance(permisos_or_rol, str):
+        rol = permisos_or_rol
+        permisos = ["traslados", "riesgos", "admin"] if rol == "admin" else ["traslados"]
+    else:
+        permisos = sorted({p.strip().lower() for p in permisos_or_rol if p})
+        rol = "admin" if "admin" in permisos else "operador"
+
     token = secrets.token_urlsafe(32)
-    store[token] = {"usuario": username, "rol": rol}
+    store[token] = {
+        "usuario": username,
+        "rol": rol,
+        "permisos": permisos,
+        "must_change_password": bool(must_change_password),
+        "portal_user_id": user_id,
+    }
 
     st.session_state["auth_token"] = token
     st.session_state["usuario"] = username
     st.session_state["rol"] = rol
+    st.session_state["permisos"] = permisos
+    st.session_state["must_change_password"] = bool(must_change_password)
+    if user_id is not None:
+        st.session_state["portal_user_id"] = user_id
 
     return token
 
@@ -100,7 +123,7 @@ def forget_session() -> None:
     if token:
         store.pop(str(token), None)
 
-    for key in ("usuario", "rol"):
+    for key in ("usuario", "rol", "permisos", "must_change_password", "portal_user_id"):
         st.session_state.pop(key, None)
 
     try:

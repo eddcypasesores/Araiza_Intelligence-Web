@@ -16,7 +16,53 @@ import xml.etree.ElementTree as ET
 import pandas as pd
 import streamlit as st
 
+from core.auth import persist_login
+from core.db import portal_set_password
+from core.streamlit_compat import rerun
 from pages.components.admin import init_admin_section
+
+
+def _enforce_password_change(conn) -> None:
+    if not st.session_state.get('must_change_password'):
+        return
+
+    st.warning('Debes actualizar tu contrasena antes de continuar.')
+    with st.form('riesgo_force_password_change', clear_on_submit=False):
+        new_password = st.text_input('Nueva contrasena', type='password')
+        confirm_password = st.text_input('Confirmar contrasena', type='password')
+        submitted = st.form_submit_button('Actualizar contrasena', use_container_width=True)
+
+    if not submitted:
+        st.stop()
+
+    new_password = (new_password or '').strip()
+    confirm_password = (confirm_password or '').strip()
+    if len(new_password) < 8:
+        st.error('La contrasena debe tener al menos 8 caracteres.')
+        st.stop()
+    if new_password != confirm_password:
+        st.error('Las contrasenas no coinciden.')
+        st.stop()
+
+    try:
+        portal_set_password(
+            conn,
+            st.session_state.get('usuario', '') or '',
+            new_password,
+            require_change=False,
+        )
+        permisos_actuales = st.session_state.get('permisos') or []
+        persist_login(
+            st.session_state.get('usuario', ''),
+            permisos_actuales,
+            must_change_password=False,
+            user_id=st.session_state.get('portal_user_id'),
+        )
+        st.success('Contrasena actualizada correctamente.')
+        rerun()
+    except Exception as exc:
+        st.error(f'No fue posible actualizar la contrasena: {exc}')
+        st.stop()
 
 
 # ---------------------------------------------------------------------------
@@ -31,13 +77,13 @@ FIRMES_DIR.mkdir(parents=True, exist_ok=True)  # aseguramos carpeta
 # Inicializacion de sesion / navegacion
 # ---------------------------------------------------------------------------
 conn = init_admin_section(
-    page_title="Lista negra SAT  Cruce de RFC",
+    page_title="Lista negra SAT - Cruce de RFC",
     active_top="riesgo",
     layout="wide",
     show_inicio=False,
 )
-conn.close()
 
+_enforce_password_change(conn)
 
 # ---------------------------------------------------------------------------
 # CSS

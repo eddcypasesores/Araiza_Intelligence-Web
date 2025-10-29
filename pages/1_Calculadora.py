@@ -14,7 +14,14 @@ import streamlit as st
 # --- Utilidades / Proyecto
 from core.auth import ensure_session_from_token, persist_login
 from core.utils import inject_css, is_excluded, set_excluded, normalize_name
-from core.db import get_conn, ensure_schema, get_active_version_id, validar_usuario
+from core.db import (
+    get_conn,
+    ensure_schema,
+    get_active_version_id,
+    authenticate_portal_user,
+    portal_set_password,
+    portal_reset_password_to_default,
+)
 from core.config import GOOGLE_MAPS_API_KEY
 from core.rutas import (
     load_routes,
@@ -32,13 +39,16 @@ from pages.components.hero import first_image_base64, inject_hero_css
 
 HARDCODED_MAPS_API_KEY = "AIzaSyBqSuQGWucHtypH60GpAAIxJVap76CgRL8"
 
-ALLOWED_ROLES: set[str] = {"admin", "operador"}
-
 # ===============================
 # Configuracion de pagina + CSS
 # ===============================
 st.set_page_config(page_title="Costos de traslado", layout="wide", initial_sidebar_state="expanded")
 inject_css("styles.css")
+
+
+def _has_permission(module: str) -> bool:
+    permisos = st.session_state.get("permisos") or []
+    return module in permisos
 
 # Estilos de refuerzo (sin cajas grises; solo linea azul + layout)
 st.markdown(
@@ -91,28 +101,14 @@ st.markdown(
 # ===============================
 ensure_session_from_token()
 
-is_logged_in = bool(st.session_state.get("usuario"))
-render_nav(
-    active_top="calculadora",
-    active_child=None,
-    show_cta=is_logged_in,
-    show_inicio=False,
-)
-
-conn = get_conn()
-ensure_schema(conn)
-
 
 
 def _render_login() -> None:
-    """Muestra el formulario de acceso para la calculadora."""
+    """Muestra un formulario uniforme de acceso para el módulo de traslados."""
 
-    inject_hero_css()
-
-    render_nav(active_top=None, show_cta=False, show_inicio=False)
+    render_nav(active_top=None, show_inicio=False)
 
     raw_next = st.query_params.get("next")
-    redirect_target: str | None
     if isinstance(raw_next, list):
         redirect_target = raw_next[-1] if raw_next else None
     elif isinstance(raw_next, str):
@@ -120,95 +116,66 @@ def _render_login() -> None:
     else:
         redirect_target = None
 
-    current_role = st.session_state.get("rol")
+    st.title("Acceso a Cálculo de Traslados")
+    st.caption("Valida tus credenciales para calcular costos, rutas y parámetros de traslado.")
 
-    image_candidates = [
-        Path("assets/calculadora_cover.png"),
-        Path(__file__).resolve().parent / "assets" / "calculadora_cover.png",
-        Path("assets/logo.jpg"),
-        Path(__file__).resolve().parent / "assets" / "logo.jpg",
-    ]
-    img_base64 = first_image_base64(image_candidates)
+    with st.form("traslados_login", clear_on_submit=False):
+        username = st.text_input("RFC", placeholder="ej. ZELE990823E20")
+        password = st.text_input("Contrasena", type="password", placeholder="********")
+        submitted = st.form_submit_button("Iniciar sesión", use_container_width=True)
 
-    col_img, col_content = st.columns([5, 5])
-    with col_img:
-        st.markdown('<div style="padding-top: 20px;">', unsafe_allow_html=True)
-        if img_base64:
-            st.markdown(
-                f'<img class="hero-image" src="{img_base64}" alt="Araiza Intelligence Logo" />',
-                unsafe_allow_html=True,
-            )
-        else:
-            st.warning(
-                "No se pudo cargar la ilustracion de la calculadora. Verifica la carpeta 'assets'."
-            )
-        st.markdown("</div>", unsafe_allow_html=True)
-
-    with col_content:
-        st.markdown('<div style="padding-top: 20px;">', unsafe_allow_html=True)
-        st.markdown(
-            '<h1 class="hero-title">Calculadora de Traslados</h1>',
-            unsafe_allow_html=True,
-        )
-        st.markdown(
-            """
-            <p class="hero-subtitle">
-                Inicia sesi&oacute;n para acceder a las herramientas de c&aacute;lculo de costos y rutas.
-            </p>
-            <p class="hero-subtitle">
-                Tu cuenta debe contar con el perfil de administrador u operador para continuar.
-            </p>
-            <ul class="hero-list">
-                <li>Calcula costos completos de traslado en segundos.</li>
-                <li>Administra tarifas vigentes y vi&aacute;ticos desde un mismo panel.</li>
-                <li>Coordina operadores, conductores y paradas intermedias sin planillas manuales.</li>
-            </ul>
-            """,
-            unsafe_allow_html=True,
-        )
-        if current_role and current_role not in ALLOWED_ROLES:
-            st.error(
-                "Tu usuario existe, pero no cuenta con permisos para utilizar la calculadora. "
-                "Cierra sesion e intenta con otra cuenta o contacta al administrador."
-            )
-
-        st.markdown('<div class="hero-actions">', unsafe_allow_html=True)
-        with st.form("calculadora_login", clear_on_submit=False):
-            username = st.text_input("Usuario", placeholder="ej. admin")
-            password = st.text_input("Contrasena", type="password", placeholder="********")
-            submitted = st.form_submit_button("Iniciar sesion", use_container_width=True)
-        st.markdown("</div>", unsafe_allow_html=True)
-
-        st.markdown("</div>", unsafe_allow_html=True)
+    with st.expander("¿Olvidaste tu contrasena?", expanded=False):
+        st.markdown("[Ya tengo un token de recuperacion](?page=pages/18_Restablecer_contrasena.py)")
+        st.caption("Solicita a un administrador que genere un enlace temporal si no cuentas con uno.")
+        recovery_rfc = st.text_input("RFC para restablecer", key="calc_recovery_rfc")
+        if st.button("Restablecer al RFC", key="calc_recovery_btn"):
+            rec_conn = get_conn()
+            ensure_schema(rec_conn)
+            try:
+                if portal_reset_password_to_default(rec_conn, recovery_rfc):
+                    st.success(
+                        "Contrasena restablecida al valor del RFC. Inicia sesion y cambiala inmediatamente."
+                    )
+                else:
+                    st.error("No se encontro una cuenta con ese RFC.")
+            finally:
+                rec_conn.close()
 
     if not submitted:
-        return
+        st.stop()
 
-    username = username.strip()
+    username = (username or "").strip()
+    password = password or ""
 
+    conn = get_conn()
+    ensure_schema(conn)
     try:
-        rol = validar_usuario(conn, username, password)
-    except Exception as exc:  # pragma: no cover - feedback en UI
-        st.error(
-            "No fue posible validar las credenciales. Verifica la conexion a la base de datos."
-        )
-        st.caption(f"Detalle tecnico: {exc}")
-        return
+        record = authenticate_portal_user(conn, username, password)
+    except Exception as exc:
+        st.error("No fue posible validar las credenciales. Inténtalo de nuevo.")
+        st.caption(f"Detalle técnico: {exc}")
+        conn.close()
+        st.stop()
+    if not record:
+        conn.close()
+        st.error("RFC o contrasena incorrectos.")
+        st.stop()
 
-    if not rol:
-        st.error("Usuario o contrasena incorrectos.")
-        return
+    permisos = set(record.get("permisos") or [])
+    if "traslados" not in permisos:
+        conn.close()
+        st.error("Tu cuenta no tiene permiso para acceder al módulo de Traslados.")
+        st.stop()
 
-    if rol not in ALLOWED_ROLES:
-        st.error(
-            "Tu perfil se autentica correctamente, pero no tiene permiso para acceder a la calculadora."
-        )
-        return
-
-    token = persist_login(username, rol)
+    token = persist_login(
+        record["rfc"],
+        record["permisos"],
+        must_change_password=record.get("must_change_password", False),
+        user_id=record.get("id"),
+    )
     st.session_state["calc_show_landing"] = True
-    welcome = f"Bienvenido, {username} ({'Administrador' if rol == 'admin' else 'Calculador'})."
-    st.session_state["login_flash"] = welcome
+    st.session_state["login_flash"] = f"Bienvenido, {record['rfc']}"
+    conn.close()
 
     if redirect_target:
         remaining = {k: v for k, v in st.query_params.items() if k != "next"}
@@ -233,9 +200,64 @@ def _render_login() -> None:
     rerun()
 
 
-if st.session_state.get("rol") not in ALLOWED_ROLES:
+def _enforce_password_change(conn) -> None:
+    if not st.session_state.get("must_change_password"):
+        return
+
+    st.warning("Por seguridad, debes actualizar tu contrasena antes de continuar.")
+    with st.form("force_password_change", clear_on_submit=False):
+        new_password = st.text_input("Nueva contrasena", type="password")
+        confirm_password = st.text_input("Confirmar contrasena", type="password")
+        submitted = st.form_submit_button("Actualizar contrasena", use_container_width=True)
+
+    if not submitted:
+        st.stop()
+
+    new_password = (new_password or "").strip()
+    confirm_password = (confirm_password or "").strip()
+    if len(new_password) < 8:
+        st.error("La contrasena debe tener al menos 8 caracteres.")
+        st.stop()
+    if new_password != confirm_password:
+        st.error("Las contrasenas no coinciden.")
+        st.stop()
+
+    try:
+        portal_set_password(
+            conn,
+            st.session_state.get("usuario", "") or "",
+            new_password,
+            require_change=False,
+        )
+        permisos_actuales = st.session_state.get("permisos") or []
+        persist_login(
+            st.session_state.get("usuario", ""),
+            permisos_actuales,
+            must_change_password=False,
+            user_id=st.session_state.get("portal_user_id"),
+        )
+        st.success("Contrasena actualizada correctamente.")
+        rerun()
+    except Exception as exc:
+        st.error(f"No fue posible actualizar la contrasena: {exc}")
+        st.stop()
+
+
+
+if not (_has_permission("traslados") and st.session_state.get("usuario")):
     _render_login()
     st.stop()
+
+render_nav(
+    active_top="calculadora",
+    active_child=None,
+    show_inicio=False,
+)
+inject_hero_css()
+conn = get_conn()
+ensure_schema(conn)
+
+_enforce_password_change(conn)
 
 flash_message = st.session_state.pop("login_flash", None)
 # No banners on landing screens; show only when not landing

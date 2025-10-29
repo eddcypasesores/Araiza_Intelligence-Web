@@ -37,10 +37,11 @@ def _ensure_admin_session(redirect_to: str | None = None) -> None:
 
     ensure_session_from_token()
 
-    if "usuario" not in st.session_state or "rol" not in st.session_state:
+    if "usuario" not in st.session_state:
         _redirect_to_login(redirect_to)
 
-    if str(st.session_state.get("rol", "")).lower() != "admin":
+    permisos = set(st.session_state.get("permisos") or [])
+    if "admin" not in permisos:
         st.error(" No tienes permiso para acceder a esta pagina.")
         st.stop()
 
@@ -91,12 +92,11 @@ def init_admin_section(
         except ValueError:
             redirect_target = Path(caller_file).name
 
-    require_auth = active_top not in {"tarifas", "usuarios"}
-    # Riesgo Fiscal no requiere rol de administrador; solo sesion valida
     if active_top in {"riesgo", "riesgo_firmes"}:
-        if "usuario" not in st.session_state or "rol" not in st.session_state:
+        permisos = set(st.session_state.get("permisos") or [])
+        if "usuario" not in st.session_state or "riesgos" not in permisos:
             _redirect_to_login(redirect_target, switch_to_page="pages/14_Riesgo_fiscal.py")
-    elif require_auth:
+    else:
         _ensure_admin_session(redirect_target)
 
     conn = get_conn()
@@ -107,5 +107,5 @@ def init_admin_section(
         except Exception:
             pass
 
-    render_nav(active_top=active_top, active_child=active_child, show_inicio=show_inicio, show_cta=True)
+    render_nav(active_top=active_top, active_child=active_child, show_inicio=show_inicio)
     return conn

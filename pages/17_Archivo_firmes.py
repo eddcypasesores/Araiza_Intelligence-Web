@@ -8,7 +8,53 @@ from pathlib import Path
 
 import streamlit as st
 
+from core.auth import persist_login
+from core.db import portal_set_password
+from core.streamlit_compat import rerun
 from pages.components.admin import init_admin_section
+
+
+def _enforce_password_change(conn) -> None:
+    if not st.session_state.get("must_change_password"):
+        return
+
+    st.warning("Debes actualizar tu contrasena antes de administrar el archivo Firmes.")
+    with st.form("firmes_force_password_change", clear_on_submit=False):
+        new_password = st.text_input("Nueva contrasena", type="password")
+        confirm_password = st.text_input("Confirmar contrasena", type="password")
+        submitted = st.form_submit_button("Actualizar contrasena", use_container_width=True)
+
+    if not submitted:
+        st.stop()
+
+    new_password = (new_password or "").strip()
+    confirm_password = (confirm_password or "").strip()
+    if len(new_password) < 8:
+        st.error("La contrasena debe tener al menos 8 caracteres.")
+        st.stop()
+    if new_password != confirm_password:
+        st.error("Las contrasenas no coinciden.")
+        st.stop()
+
+    try:
+        portal_set_password(
+            conn,
+            st.session_state.get("usuario", "") or "",
+            new_password,
+            require_change=False,
+        )
+        permisos_actuales = st.session_state.get("permisos") or []
+        persist_login(
+            st.session_state.get("usuario", ""),
+            permisos_actuales,
+            must_change_password=False,
+            user_id=st.session_state.get("portal_user_id"),
+        )
+        st.success("Contrasena actualizada correctamente.")
+        rerun()
+    except Exception as exc:
+        st.error(f"No fue posible actualizar la contrasena: {exc}")
+        st.stop()
 
 conn = init_admin_section(
     page_title="Archivo Firmes - Riesgo Fiscal",
@@ -17,6 +63,8 @@ conn = init_admin_section(
     show_inicio=False,
     enable_foreign_keys=False,
 )
+
+_enforce_password_change(conn)
 conn.close()
 
 FIRMES_DIR = Path("data/firmes")

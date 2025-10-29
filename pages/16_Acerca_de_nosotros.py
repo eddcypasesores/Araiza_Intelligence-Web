@@ -1,11 +1,14 @@
 """Sección informativa sobre Araiza Intelligence."""
 
+from contextlib import closing
 from pathlib import Path
 import base64
 import streamlit as st
 
-from core.auth import ensure_session_from_token
+from core.auth import ensure_session_from_token, persist_login
+from core.db import authenticate_portal_user, ensure_schema, get_conn
 from core.navigation import render_nav
+from core.streamlit_compat import set_query_params
 
 st.set_page_config(page_title="Acerca de Nosotros | Araiza Intelligence", layout="wide")
 
@@ -160,3 +163,53 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+st.markdown("---")
+with st.expander("Administrar", expanded=False):
+    st.caption(
+        "Acceso reservado. Ingresa solo si administras los módulos y permisos del portal."
+    )
+    with st.form("super_admin_login", clear_on_submit=False):
+        admin_rfc = st.text_input("RFC", placeholder="ej. ADMINISTRADOR")
+        admin_password = st.text_input("Contraseña", type="password", placeholder="********")
+        admin_submitted = st.form_submit_button("Iniciar sesión", use_container_width=True)
+
+    st.caption(
+        "¿Olvidaste tu contraseña? Solicita un enlace temporal y utiliza "
+        "[esta página](?page=pages/18_Restablecer_contrasena.py) para restablecerla."
+    )
+
+    if admin_submitted:
+        username = (admin_rfc or "").strip().upper()
+        password = admin_password or ""
+
+        if not username or not password:
+            st.error("Captura RFC y contraseña para continuar.")
+        else:
+            try:
+                with closing(get_conn()) as conn:
+                    ensure_schema(conn)
+                    record = authenticate_portal_user(conn, username, password)
+            except Exception as exc:
+                st.error("No fue posible validar las credenciales.")
+                st.caption(f"Detalle técnico: {exc}")
+                record = None
+
+            permisos = set(record.get("permisos") or []) if record else set()
+            if not record or "admin" not in permisos:
+                st.error("Credenciales inválidas o sin privilegios de super administrador.")
+            else:
+                token = persist_login(
+                    record["rfc"],
+                    record["permisos"],
+                    must_change_password=record.get("must_change_password", False),
+                    user_id=record.get("id"),
+                )
+                try:
+                    params = {k: v for k, v in st.query_params.items() if k != "auth"}
+                    params["auth"] = token
+                    set_query_params(params)
+                except Exception:
+                    pass
+                st.success("Acceso concedido. Redirigiendo al panel de administración...")
+                st.switch_page("pages/19_Admin_portal.py")
