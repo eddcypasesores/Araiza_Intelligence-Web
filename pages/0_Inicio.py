@@ -92,38 +92,31 @@ def as_html_desc(text: str) -> str:
 # -------------------------------------------------------------------------
 IMG_RIESGO = image_src_for((
     Path("assets/riesgo_cover.png"),
-    Path("assets/riesgo_cover.jpg"),
     Path(__file__).resolve().parent / "assets" / "riesgo_cover.png",
-    Path(__file__).resolve().parent / "assets" / "riesgo_cover.jpg",
 ))
 IMG_TRASLADO = image_src_for((
     Path("assets/traslado_inteligente_card.png"),
-    Path("assets/inicio_card.png"),
-    Path("assets/calculadora_cover.png"),
-    Path("assets/calculadora_cover.jpg"),
     Path(__file__).resolve().parent / "assets" / "traslado_inteligente_card.png",
-    Path(__file__).resolve().parent / "assets" / "inicio_card.png",
-    Path(__file__).resolve().parent / "assets" / "calculadora_cover.png",
 ))
 IMG_EFOS = image_src_for((
     Path("assets/efos_card.png"),
     Path(__file__).resolve().parent / "assets" / "efos_card.png",
 ))
 IMG_XML = image_src_for((
-    Path("assets/descarga_masiva_xml_card.jpg"),
-    Path(__file__).resolve().parent / "assets" / "descarga_masiva_xml_card.jpg",
+    Path("assets/descarga_masiva_xml_card.png"),
+    Path(__file__).resolve().parent / "assets" / "descarga_masiva_xml_card.png",
 ))
 IMG_POLIZAS = image_src_for((
     Path("assets/generador_poliza_card.png"),
     Path(__file__).resolve().parent / "assets" / "generador_poliza_card.png",
 ))
 IMG_ESTADOS_CTA = image_src_for((
-    Path("assets/convertidor_estados_cuenta.jpg"),
-    Path(__file__).resolve().parent / "assets" / "convertidor_estados_cuenta.jpg",
+    Path("assets/convertidor_estados_cuenta.png"),
+    Path(__file__).resolve().parent / "assets" / "convertidor_estados_cuenta.png",
 ))
 IMG_CEDULA = image_src_for((
-    Path("assets/cedula_impuestos_card.jpg"),
-    Path(__file__).resolve().parent / "assets" / "cedula_impuestos_card.jpg",
+    Path("assets/cedula_impuestos_card.png"),
+    Path(__file__).resolve().parent / "assets" / "cedula_impuestos_card.png",
 ))
 
 # -------------------------------------------------------------------------
@@ -206,11 +199,12 @@ st.markdown("""
   display:flex; align-items:center; justify-content:center;
   overflow:hidden; border-radius:14px;
   aspect-ratio: 16 / 9;      /* fuerza contenedor 16:9 */
+  padding:12px;
 }
 .card-media img{
   width:100%;
   height:100%;
-  object-fit: cover;          /* llena el 16:9 sin deformarse */
+  object-fit: contain;          /* muestra la imagen completa */
 }
 
 /* Texto de la tarjeta */
@@ -278,7 +272,7 @@ PRODUCTS = [
     {
         "title": "Riesgo fiscal sin sobresaltos",
         "desc": (
-            "Evita multas y sanciones ante el SAT analizando automáticamente tus CFDI’s para identificar inconsistencias, errores "
+            "Evita multas y sanciones ante el SAT analizando automáticamente tus CFDI's para identificar inconsistencias, errores "
             "y otros factores en el timbrado que podrían generar problemas fiscales.\n\n"
             "Riesgos de ISR\n"
             "Riesgos de PTU\n"
@@ -288,7 +282,7 @@ PRODUCTS = [
         ),
         "bullets": [],
         "img": IMG_RIESGO,
-        "page": "pages/Riesgos_Fiscales.py",
+        "page": "pages/14_Riesgo_fiscal.py",
         "key": "go_riesgo",
         "force_logout": True,
     },

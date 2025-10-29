@@ -10,7 +10,7 @@ from typing import Sequence
 
 import streamlit as st
 
-from core.auth import ensure_session_from_token, forget_session, persist_login
+from core.auth import ensure_session_from_token, persist_login
 from core.db import (
     PORTAL_ALLOWED_MODULES,
     ensure_schema,
@@ -374,11 +374,6 @@ def main() -> None:
 
     st.title("Administracion del portal")
     st.caption("Administra cuentas de acceso y permisos para los distintos modulos.")
-
-    if st.button("Cerrar sesion", use_container_width=False):
-        forget_session()
-        st.success("Sesion cerrada.")
-        st.stop()
 
     with closing(get_conn()) as conn:
         ensure_schema(conn)

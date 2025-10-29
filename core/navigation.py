@@ -12,6 +12,7 @@ from urllib.parse import urlencode
 import streamlit as st
 
 from .auth import auth_query_params
+from .flash import consume_flash, set_flash
 from .session import process_logout_flag
 from .streamlit_compat import set_query_params
 
@@ -339,6 +340,8 @@ def _handle_logout_query() -> None:
     if not process_logout_flag():
         return
 
+    set_flash("Sesion cerrada con exito")
+
     try:
         st.switch_page("pages/0_Inicio.py")
     except Exception:
@@ -614,6 +617,7 @@ def render_nav(
 
     _handle_logout_query()
     st.markdown(NAV_CSS, unsafe_allow_html=True)
+    consume_flash()
 
     token = st.session_state.get("auth_token")
     if token:

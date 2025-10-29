@@ -8,36 +8,46 @@ import streamlit as st
 
 from core.auth import ensure_session_from_token, persist_login
 from core.db import authenticate_portal_user, ensure_schema, get_conn
-from core.navigation import render_nav
+from core.flash import consume_flash, set_flash
+from core.login_ui import render_login_header, render_token_reset_section
 from core.streamlit_compat import set_query_params
 
-st.set_page_config(page_title="Acceso Administrador | Araiza Intelligence", layout="wide")
+st.set_page_config(
+    page_title="Acceso Administrador | Araiza Intelligence",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
 
 ensure_session_from_token()
+consume_flash()
 
 permisos = set(st.session_state.get("permisos") or [])
 if st.session_state.get("usuario") and "admin" in permisos:
-    render_nav(active_top="acerca", active_child="acerca_admin")
-    st.success("Ya tienes una sesión activa. Redirigiendo al panel principal...")
+    set_flash("Sesion ya activa. Redirigiendo al panel principal.")
     st.switch_page("pages/19_Admin_portal.py")
     st.stop()
 
-render_nav(active_top="acerca", active_child="acerca_admin")
+render_login_header("Iniciar sesion", subtitle="Acceso super administrador")
 
-st.title("Acceso a la administración del portal")
 st.caption(
     "Valida tus credenciales de super administrador para gestionar usuarios, permisos y restablecimientos."
 )
 
 with st.form("super_admin_login", clear_on_submit=False):
     admin_rfc = st.text_input("RFC", placeholder="ej. ADMINISTRADOR")
-    admin_password = st.text_input("Contraseña", type="password", placeholder="********")
-    submitted = st.form_submit_button("Iniciar sesión", use_container_width=True)
+    admin_password = st.text_input("Contrasena", type="password", placeholder="********")
+    col_login, col_cancel = st.columns(2)
+    submitted = col_login.form_submit_button("Iniciar sesion", use_container_width=True)
+    cancelled = col_cancel.form_submit_button("Cancelar", use_container_width=True)
 
-st.caption(
-    "¿Olvidaste tu contraseña? Solicita un enlace temporal y utiliza "
-    "[esta página](?page=pages/18_Restablecer_contrasena.py) para restablecerla."
-)
+if cancelled:
+    st.switch_page("pages/0_Inicio.py")
+    st.stop()
+
+handled_reset = render_token_reset_section("admin")
+
+if handled_reset:
+    st.stop()
 
 if not submitted:
     st.stop()
@@ -46,7 +56,7 @@ username = (admin_rfc or "").strip().upper()
 password = admin_password or ""
 
 if not username or not password:
-    st.error("Captura RFC y contraseña para continuar.")
+    st.error("Captura RFC y contrasena para continuar.")
     st.stop()
 
 try:
@@ -55,11 +65,11 @@ try:
         record = authenticate_portal_user(conn, username, password)
 except Exception as exc:
     st.error("No fue posible validar las credenciales.")
-    st.caption(f"Detalle técnico: {exc}")
+    st.caption(f"Detalle tecnico: {exc}")
     st.stop()
 
 if not record:
-    st.error("RFC o contraseña incorrectos.")
+    st.error("RFC o contrasena incorrectos.")
     st.stop()
 
 permisos_record = set(record.get("permisos") or [])
@@ -74,6 +84,8 @@ token = persist_login(
     user_id=record.get("id"),
 )
 
+set_flash("Inicio de sesion exitoso")
+
 try:
     params = {k: v for k, v in st.query_params.items() if k != "auth"}
     params["auth"] = token
@@ -81,5 +93,4 @@ try:
 except Exception:
     pass
 
-st.success("Acceso concedido. Redirigiendo al panel de administración...")
 st.switch_page("pages/19_Admin_portal.py")

@@ -5,9 +5,10 @@ from __future__ import annotations
 import streamlit as st
 
 from core.auth import ensure_session_from_token, persist_login
-from core.db import ensure_schema, get_conn, authenticate_portal_user, portal_reset_password_to_default
-from core.navigation import render_nav
+from core.db import ensure_schema, get_conn, authenticate_portal_user
 from core.streamlit_compat import set_query_params
+from core.flash import consume_flash, set_flash
+from core.login_ui import render_login_header, render_token_reset_section
 
 st.set_page_config(page_title="Riesgo Fiscal | Araiza Intelligence", layout="wide")
 
@@ -22,31 +23,27 @@ def _has_permission(module: str) -> bool:
 def _render_login() -> None:
     """Renderiza el formulario de acceso al módulo de Riesgo Fiscal."""
 
-    render_nav(active_top="riesgo", active_child=None, show_inicio=False)
+    consume_flash()
 
-    st.title("Acceso a Riesgo Fiscal")
+    render_login_header("Iniciar sesion", subtitle="Acceso Riesgo Fiscal")
+
     st.caption("Valida tus credenciales para consultar el cruce de RFC con la lista negra del SAT.")
 
     with st.form("riesgo_login", clear_on_submit=False):
         username = st.text_input("RFC", placeholder="ej. ZELE990823E20")
         password = st.text_input("Contrasena", type="password", placeholder="********")
-        submitted = st.form_submit_button("Iniciar sesión", use_container_width=True)
+        col_login, col_cancel = st.columns(2)
+        submitted = col_login.form_submit_button("Iniciar sesion", use_container_width=True)
+        cancelled = col_cancel.form_submit_button("Cancelar", use_container_width=True)
 
-    with st.expander("¿Olvidaste tu contrasena?", expanded=False):
-        st.markdown("[Ya tengo un token de recuperacion](?page=pages/18_Restablecer_contrasena.py)")
-        st.caption("Solicita a un administrador que genere un enlace temporal si no cuentas con uno.")
-        recovery_rfc = st.text_input("RFC para restablecer", key="riesgo_recovery_rfc")
-        if st.button("Restablecer al RFC", key="riesgo_recovery_btn"):
-            rec_conn = get_conn()
-            ensure_schema(rec_conn)
-            try:
-                ok = portal_reset_password_to_default(rec_conn, recovery_rfc)
-            finally:
-                rec_conn.close()
-            if ok:
-                st.success("Contrasena restablecida al valor del RFC. Inicia sesion y cambiala inmediatamente.")
-            else:
-                st.error("No se encontro una cuenta con ese RFC.")
+    if cancelled:
+        st.switch_page("pages/0_Inicio.py")
+        st.stop()
+
+    handled_reset = render_token_reset_section("riesgo")
+
+    if handled_reset:
+        st.stop()
 
     if not submitted:
         st.stop()
@@ -80,6 +77,7 @@ def _render_login() -> None:
         must_change_password=record.get("must_change_password", False),
         user_id=record.get("id"),
     )
+    set_flash("Inicio de sesion exitoso")
     try:
         params = {k: v for k, v in st.query_params.items() if k != "auth"}
         params["auth"] = token

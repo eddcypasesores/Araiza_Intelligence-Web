@@ -20,7 +20,6 @@ from core.db import (
     get_active_version_id,
     authenticate_portal_user,
     portal_set_password,
-    portal_reset_password_to_default,
 )
 from core.config import GOOGLE_MAPS_API_KEY
 from core.rutas import (
@@ -34,6 +33,8 @@ from core.driver_costs import read_trabajadores, costo_diario_trabajador_auto
 from core.params import read_params
 from core.maps import GoogleMapsClient, GoogleMapsError
 from core.navigation import render_nav
+from core.flash import consume_flash, set_flash
+from core.login_ui import render_login_header, render_token_reset_section
 from core.streamlit_compat import rerun, set_query_params
 
 HARDCODED_MAPS_API_KEY = "AIzaSyBqSuQGWucHtypH60GpAAIxJVap76CgRL8"
@@ -112,7 +113,7 @@ ensure_session_from_token()
 def _render_login() -> None:
     """Muestra un formulario uniforme de acceso para el módulo de traslados."""
 
-    render_nav(active_top="calculadora", active_child=None, show_inicio=False)
+    consume_flash()
 
     raw_next = st.query_params.get("next")
     if isinstance(raw_next, list):
@@ -122,30 +123,25 @@ def _render_login() -> None:
     else:
         redirect_target = None
 
-    st.title("Acceso a Cálculo de Traslados")
-    st.caption("Valida tus credenciales para calcular costos, rutas y parámetros de traslado.")
+    render_login_header("Iniciar sesion", subtitle="Acceso Traslado Inteligente")
+
+    st.caption("Valida tus credenciales para calcular costos, rutas y parametros de traslado.")
 
     with st.form("traslados_login", clear_on_submit=False):
         username = st.text_input("RFC", placeholder="ej. ZELE990823E20")
         password = st.text_input("Contrasena", type="password", placeholder="********")
-        submitted = st.form_submit_button("Iniciar sesión", use_container_width=True)
+        col_login, col_cancel = st.columns(2)
+        submitted = col_login.form_submit_button("Iniciar sesion", use_container_width=True)
+        cancelled = col_cancel.form_submit_button("Cancelar", use_container_width=True)
 
-    with st.expander("¿Olvidaste tu contrasena?", expanded=False):
-        st.markdown("[Ya tengo un token de recuperacion](?page=pages/18_Restablecer_contrasena.py)")
-        st.caption("Solicita a un administrador que genere un enlace temporal si no cuentas con uno.")
-        recovery_rfc = st.text_input("RFC para restablecer", key="calc_recovery_rfc")
-        if st.button("Restablecer al RFC", key="calc_recovery_btn"):
-            rec_conn = get_conn()
-            ensure_schema(rec_conn)
-            try:
-                if portal_reset_password_to_default(rec_conn, recovery_rfc):
-                    st.success(
-                        "Contrasena restablecida al valor del RFC. Inicia sesion y cambiala inmediatamente."
-                    )
-                else:
-                    st.error("No se encontro una cuenta con ese RFC.")
-            finally:
-                rec_conn.close()
+    if cancelled:
+        st.switch_page("pages/0_Inicio.py")
+        st.stop()
+
+    handled_reset = render_token_reset_section("calc")
+
+    if handled_reset:
+        st.stop()
 
     if not submitted:
         st.stop()
@@ -180,7 +176,7 @@ def _render_login() -> None:
         user_id=record.get("id"),
     )
     st.session_state.pop("calc_show_landing", None)
-    st.session_state["login_flash"] = f"Bienvenido, {record['rfc']}"
+    set_flash(f"Inicio de sesion exitoso. Bienvenido, {record['rfc']}.")
     conn.close()
 
     if redirect_target:
@@ -264,7 +260,6 @@ ensure_schema(conn)
 
 _enforce_password_change(conn)
 
-st.session_state.pop("login_flash", None)
 ROUTES = load_routes()
 PLAZAS = plazas_catalog(ROUTES)
 
