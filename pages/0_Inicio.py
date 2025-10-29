@@ -2,13 +2,18 @@
 from __future__ import annotations
 from pathlib import Path
 from urllib.parse import urlencode
+import html
 
 import streamlit as st
 
+# --- dependencias del proyecto (ajusta si tu módulo se llama distinto) ---
 from core.auth import ensure_session_from_token
 from core.navigation import PAGE_PARAM_NAMES, render_nav
 from pages.components.hero import first_image_base64, inject_hero_css
 
+# -------------------------------------------------------------------------
+# Configuración de página
+# -------------------------------------------------------------------------
 st.set_page_config(
     page_title="Inicio - Araiza Intelligence",
     page_icon="AI",
@@ -23,8 +28,11 @@ inject_hero_css()
 ROOT = Path(__file__).resolve().parent.parent     # carpeta raíz del proyecto (donde está app.py)
 PAGES_DIR = ROOT / "pages"
 
-# -------- helpers de imagen --------
+# -------------------------------------------------------------------------
+# Helpers de imágenes y páginas
+# -------------------------------------------------------------------------
 def image_src_for(candidates: tuple[Path, ...]) -> str | None:
+    """Devuelve una data URI base64 válida para <img src="..."> o None."""
     return first_image_base64(candidates)
 
 def page_exists(rel_page: str) -> bool:
@@ -40,21 +48,48 @@ def page_exists(rel_page: str) -> bool:
         return False
     return p.is_file()
 
-
 def _product_href(script_path: str, *, force_logout: bool = False) -> str:
     """Construye un href absoluto para el multipage actual."""
-
     label = PAGE_PARAM_NAMES.get(script_path)
     if label is None:
-        label = (
-            script_path.replace("pages/", "")
-            .replace(".py", "")
-            .strip()
-        )
+        label = script_path.replace("pages/", "").replace(".py", "").strip()
     params: dict[str, str] = {"page": label or script_path}
     if force_logout:
         params["logout"] = "1"
     return "/?" + urlencode(params)
+
+# -------------------------------------------------------------------------
+# Formateo seguro de descripciones largas (texto proveniente de Word)
+# -------------------------------------------------------------------------
+def as_html_desc(text: str) -> str:
+    """
+    Convierte texto 'plano' de Word a HTML simple:
+    - Respeta párrafos (doble salto = <br><br>, salto simple = espacio)
+    - Detecta viñetas que empiezan con '• ' y arma un <ul><li>...</li></ul>
+    - Escapa cualquier '<' '>' que viniera del clipboard
+    """
+    if not text:
+        return ""
+    # Normaliza saltos
+    t = text.replace("\r\n", "\n").replace("\r", "\n").strip()
+
+    lines = [ln.strip() for ln in t.split("\n")]
+    bullet_lines = [ln[2:].strip() for ln in lines if ln.startswith("• ")]
+    non_bullet = [ln for ln in lines if not ln.startswith("• ") and ln != ""]
+
+    parts = []
+    if non_bullet:
+        # Une líneas en párrafos simples
+        para = html.escape("\n".join(non_bullet)).replace("\n\n", "<br><br>").replace("\n", " ")
+        parts.append(f'<p class="card-desc">{para}</p>')
+    if bullet_lines:
+        lis = "".join(f"<li>{html.escape(x)}</li>" for x in bullet_lines)
+        parts.append(f'<ul class="card-list">{lis}</ul>')
+    return "".join(parts)
+
+# -------------------------------------------------------------------------
+# Imágenes (candidatos en /assets; ajusta nombres si usas otros)
+# -------------------------------------------------------------------------
 IMG_RIESGO = image_src_for((
     Path("assets/riesgo_cover.png"),
     Path("assets/riesgo_cover.jpg"),
@@ -91,10 +126,14 @@ IMG_CEDULA = image_src_for((
     Path(__file__).resolve().parent / "assets" / "cedula_impuestos_card.jpg",
 ))
 
-# -------- navbar --------
+# -------------------------------------------------------------------------
+# Navbar
+# -------------------------------------------------------------------------
 render_nav(active_top="inicio", show_inicio=False, show_cta=False)
 
-# -------- CSS --------
+# -------------------------------------------------------------------------
+# CSS (sin cambios de layout)
+# -------------------------------------------------------------------------
 st.markdown("""
 <style>
 .block-container{
@@ -158,7 +197,7 @@ st.markdown("""
 
 .card-copy{ flex:1; display:flex; flex-direction:column; padding:16px; position:relative; z-index:3; }
 .card-title{ margin:0 0 6px; font-weight:800; color:#0f172a; font-size:1.25rem; line-height:1.2; }
-.card-desc{ margin:0 0 10px; color:#475569; font-size:.95rem; line-height:1.45rem; text-align:justify; }
+.card-desc{ margin:0 0 10px; color:#475569; font-size:.95rem; line-height:1.55rem; text-align:justify; }
 .card-list{ margin:0; padding-left: 1.05rem; color:#475569; font-size:.92rem; line-height:1.25rem; }
 .card-list li{ margin: 0 0 .28rem; }
 .card-list li::marker{ color:#dc2626; }
@@ -198,47 +237,119 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# -------- data --------
+# -------------------------------------------------------------------------
+# Data (respetando tu orden y con los textos completos en desc)
+# -------------------------------------------------------------------------
 PRODUCTS = [
-    {"title": "Cédula de impuestos para cierre anual",
-     "desc": "Calcula coeficiente de utilidad, integra PTU y cruza deducciones con formatos listos para revisión fiscal.",
-     "bullets": ["Simula escenarios antes del envío", "Control por entidad/razón social", "Reportes ejecutivos para dirección"],
-     "img": IMG_CEDULA, "page": "pages/XX_Cedula_impuestos.py", "key": "go_cedula"},
-
-    {"title": "Riesgo fiscal sin sobresaltos",
-     "desc": "Cruza CFDI contra listas 69/69-B/69-Bis y documenta acciones preventivas ante cambios del SAT.",
-     "bullets": ["Detecta EFOS publicados", "Monitoreo de cambios del SAT", "Alertas a finanzas y cumplimiento"],
-     "img": IMG_RIESGO, "page": "pages/14_Riesgo_fiscal.py", "key": "go_riesgo", "force_logout": True},
-
-    {"title": "Monitoreo especializado de EFOS",
-     "desc": "Identifica proveedores EFOS, conserva historial y evidencia para auditorías internas y externas.",
-     "bullets": ["Alertas por cambio de estatus", "Historial por periodo", "Bitácora para legal y fiscal"],
-     "img": IMG_EFOS, "page": "pages/XX_Monitoreo_EFOS.py", "key": "go_efos"},
-
-    {"title": "Descarga masiva de XML",
-     "desc": "Automatiza la descarga de CFDI con filtros y trazabilidad completa para conciliaciones y fiscalización.",
-     "bullets": ["Filtros por periodo/emisor/tipo", "Permisos por usuario", "Integración con validación/timbrado"],
-     "img": IMG_XML, "page": "pages/XX_Descarga_XML.py", "key": "go_xml"},
-
-    {"title": "Convertidor de estados de cuenta",
-     "desc": "Normaliza bancos y genera archivos para conciliación contable y análisis de flujos.",
-     "bullets": ["Lee PDF/XLSX", "Detecta patrones de depósitos/retiros", "Exporta a plantillas de conciliación"],
-     "img": IMG_ESTADOS_CTA, "page": "pages/XX_Convertidor_estados.py", "key": "go_estados"},
-
-    {"title": "Traslado inteligente",
-     "desc": "Calcula el costo real por ruta: km, peajes, combustible, viáticos y mantenimiento con escenarios comparativos.",
-     "bullets": ["Costeo urgente con clientes", "Simulación de rutas y tiempos", "Control de margen operativo"],
-     "img": IMG_TRASLADO, "page": "pages/1_Calculadora.py", "key": "go_traslado", "force_logout": True},
-
-    {"title": "Generador de pólizas contables",
-     "desc": "Convierte CFDI en pólizas listas para tu ERP, trazables desde factura a registro.",
-     "bullets": ["Clasificación contable", "Impuestos y retenciones", "Exportación compatible con tu sistema"],
-     "img": IMG_POLIZAS, "page": "pages/XX_Generador_polizas.py", "key": "go_polizas"},
+    {
+        "title": "Cédula de impuestos para cierre anual",
+        "desc": (
+            "Optimiza la preparación de la declaración anual de tu empresa con nuestro Papel de Trabajo para Personas Morales en el Régimen General.\n\n"
+            "Facilita el cálculo y la conciliación de ingresos, deducciones, coeficiente de utilidad, PTU y otros aspectos fiscales clave como:\n"
+            "• Formatos estructurados en Excel.\n"
+            "• Ahorrar tiempo\n"
+            "• Minimiza errores\n"
+            "• Y cumple con tus obligaciones fiscales de manera eficiente."
+        ),
+        "bullets": [],  # no pintamos <ul> vacío
+        "img": IMG_CEDULA,
+        "page": "pages/Cedula_Impuestos.py",
+        "key": "go_cedula",
+        "force_logout": True,
+    },
+    {
+        "title": "Riesgo fiscal sin sobresaltos",
+        "desc": (
+            "Evita multas y sanciones ante el SAT analizando automáticamente tus CFDI’s para identificar inconsistencias, errores "
+            "y otros factores en el timbrado que podrían generar problemas fiscales.\n\n"
+            "Riesgos de ISR\n"
+            "Riesgos de PTU\n"
+            "Riesgos de Impuestos Trasladados\n"
+            "Riesgos de Multa\n"
+            "Riesgos de Auditoría"
+        ),
+        "bullets": [],
+        "img": IMG_RIESGO,
+        "page": "pages/Riesgos_Fiscales.py",
+        "key": "go_riesgo",
+        "force_logout": True,
+    },
+    {
+        "title": "Monitoreo especializado de EFOS",
+        "desc": (
+            "¿Sabes si la empresa con la que trabajas aparece como EFOS?\n\n"
+            "¡No pongas en riesgo tu negocio! Trabajar con una empresa incluida en la lista de EFOS puede generar sanciones y problemas fiscales. "
+            "Consulta aquí el listado oficial del SAT y verifica a tus proveedores antes de realizar operaciones y evita:\n"
+            "• Multas y recargos\n"
+            "• Pérdida de deducciones fiscales\n"
+            "• Auditorías y revisiones fiscales\n"
+            "• Problemas legales en casos graves, pueden derivar en responsabilidades penales."
+        ),
+        "bullets": [],
+        "img": IMG_EFOS,
+        "page": "pages/EFOS.py",
+        "key": "go_efos",
+    },
+    {
+        "title": "Descarga masiva de XML",
+        "desc": (
+            "Asegura la veracidad y autenticidad de los comprobantes.\n\n"
+            "Optimiza la gestión documental y el cumplimiento fiscal.\n\n"
+            "Permite procesos automatizados de conciliación y análisis financiero."
+        ),
+        "bullets": [],
+        "img": IMG_XML,
+        "page": "pages/Descarga_XML.py",
+        "key": "go_xml",
+        "force_logout": True,
+    },
+    {
+        "title": "Convertidor de estados de cuenta",
+        "desc": (
+            "Convierte tus estados de cuenta en información clara y lista para analizar, automatiza la lectura y descarga de archivos bancarios "
+            "en formato Excel, organizando cargos, abonos, fechas y saldos en segundos. ¡Ahorra tiempo y toma decisiones con datos precisos al instante!"
+        ),
+        "bullets": [],
+        "img": IMG_ESTADOS_CTA,
+        "page": "pages/Convertidor_Estados.py",
+        "key": "go_estados",
+    },
+    {
+        "title": "Traslado inteligente",
+        "desc": (
+            "Potencia la eficiencia operativa con una solución digital que transforma el cálculo de los costos de traslado. "
+            "Nuestra plataforma integra un monitoreo de consumo de diésel y cálculo automatizado de costos (casetas, gastos operativos y administrativos, "
+            "mantenimiento, viáticos, sueldos, multas, seguros, estadías, etc.). Mediante inteligencia artificial y analítica avanzada, "
+            "convierte la información en estrategias de innovación, precisión y control en cada kilómetro."
+        ),
+        "bullets": [],
+        "img": IMG_TRASLADO,
+        "page": "pages/1_Calculadora.py",
+        "key": "go_traslado",
+        "force_logout": True,
+    },
+    {
+        "title": "Generador de pólizas contables",
+        "desc": (
+            "El Generador de Pólizas es una herramienta diseñada para optimizar el trabajo contable mediante la automatización del registro "
+            "de movimientos financieros como ingresos, egresos y provisiones. Su principal función es convertir y subir archivos Excel (.xlsx) "
+            "a programas contables como COI, entre otros sistemas, de manera masiva, rápida y precisa."
+        ),
+        "bullets": [],
+        "img": IMG_POLIZAS,
+        "page": "pages/Generador_Polizas.py",
+        "key": "go_polizas",
+    },
 ]
-# -------- encabezado --------
+
+# -------------------------------------------------------------------------
+# Encabezado
+# -------------------------------------------------------------------------
 st.markdown('<div class="landing-title">Bienvenido a Araiza Intelligence</div>', unsafe_allow_html=True)
 
-# -------- render --------
+# -------------------------------------------------------------------------
+# Render (idéntico layout, con formateo de desc + sin <ul> vacío)
+# -------------------------------------------------------------------------
 st.markdown('<div class="cards-grid">', unsafe_allow_html=True)
 for i, p in enumerate(PRODUCTS):
     exists = page_exists(p["page"])
@@ -246,35 +357,48 @@ for i, p in enumerate(PRODUCTS):
     dis_cls = " is-disabled" if not exists else ""
     cls = f"card-split {alt_cls}{dis_cls}".strip()
 
-    # Tarjeta
+    # Overlay clickeable solo si la página existe
+    overlay_html = ""
+    if exists:
+        href = _product_href(p["page"], force_logout=bool(p.get("force_logout")))
+        overlay_html = f'<div class="overlay-link"><a href="{href}" target="_self"></a></div>'
+
+    badge_html = '<div class="badge">Próximamente</div>' if not exists else ""
+
+    # Descripción formateada (párrafos + viñetas si las hay)
+    desc_html = as_html_desc(p.get("desc", ""))
+
+    # Bullets adicionales (opcional, si tu dict los trae)
+    extra_bullets = p.get("bullets") or []
+    extra_list_html = ""
+    if extra_bullets:
+        lis = "".join(f"<li>{html.escape(b)}</li>" for b in extra_bullets)
+        extra_list_html = f'<ul class="card-list">{lis}</ul>'
+
+    img_src = p.get("img") or ""
+    media_html = f'<div class="card-media"><img src="{img_src}" alt="{html.escape(p["title"])}"/></div>' if img_src else ""
+
     st.markdown(
         f"""
         <div class="{cls}">
-          {'<div class="badge">Próximamente</div>' if not exists else ''}
-          <div class="card-media">
-            <img src="{p.get('img') or ''}" alt="{p['title']}"/>
-          </div>
+          {badge_html}
+          {media_html}
           <div class="card-copy">
-            <h3 class="card-title">{p['title']}</h3>
-            <p class="card-desc">{p['desc']}</p>
-            <ul class="card-list">
-              {''.join(f"<li>{b}</li>" for b in p['bullets'])}
-            </ul>
+            <h3 class="card-title">{html.escape(p['title'])}</h3>
+            {desc_html}
+            {extra_list_html}
           </div>
+          {overlay_html}
+        </div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
-
-    # Enlace invisible SOLO si la página existe (no genera error ni “fantasma”)
-    if exists:
-        href = _product_href(p["page"], force_logout=bool(p.get("force_logout")))
-        st.markdown(f'<div class="overlay-link"><a href="{href}" target="_self"></a></div>', unsafe_allow_html=True)
-
-    st.markdown("</div>", unsafe_allow_html=True)  # cierra card-split
 
 st.markdown('</div>', unsafe_allow_html=True)
 
-# -------- footer --------
+# -------------------------------------------------------------------------
+# Footer
+# -------------------------------------------------------------------------
 st.markdown("---")
 st.markdown(
     '<div style="text-align:center;color:#64748b;font-size:.78rem;padding:8px 0 18px;">'

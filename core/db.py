@@ -623,6 +623,20 @@ def clear_usuario_trabajador(conn, username: str):
 PORTAL_ALLOWED_MODULES: tuple[str, ...] = ("traslados", "riesgos", "admin")
 DEFAULT_RESET_TOKEN_TTL_MINUTES = 60
 
+SUPERADMIN_SEED: dict[str, str | bool | list[str]] = {
+    "rfc": "ZELE990823E20",
+    "password_raw": "ZELE990823E20",
+    "regimen_fiscal": "PERSONA FISICA CON ACTIVIDADES EMPRESARIALES",
+    "calle": "DAVID HERNANDEZ 09",
+    "colonia": "EJERCITO DEL TRABAJO",
+    "cp": "56390",
+    "municipio": "CHICOLOAPAN",
+    "email": "werzl330@gmail.com",
+    "telefono": "5549386304",
+    "permisos": ["admin", "traslados", "riesgos"],
+    "must_change_password": True,
+}
+
 
 def _normalize_rfc(value: str) -> str:
     return (value or "").strip().upper()
@@ -694,19 +708,45 @@ def _permisos_from_text(raw: str | None) -> list[str]:
 
 
 def ensure_portal_admin(conn: sqlite3.Connection) -> None:
-    cur = conn.cursor()
-    count = cur.execute("SELECT COUNT(*) FROM portal_users").fetchone()[0]
-    if count:
+    """Crea el super administrador configurado si no existe."""
+
+    seed_rfc = _normalize_rfc(str(SUPERADMIN_SEED.get("rfc") or ""))
+    if not seed_rfc:
         return
-    admin_rfc = "ADMINISTRADOR"
-    permisos = _permisos_to_text(["traslados", "riesgos", "admin"])
-    conn.execute(
+
+    cur = conn.cursor()
+    exists = cur.execute(
+        "SELECT 1 FROM portal_users WHERE rfc=?",
+        (seed_rfc,),
+    ).fetchone()
+    if exists:
+        return
+
+    permisos = SUPERADMIN_SEED.get("permisos") or ["admin", "traslados", "riesgos"]
+    permisos_text = _permisos_to_text(permisos)
+    must_change_password = 1 if SUPERADMIN_SEED.get("must_change_password", True) else 0
+    password_hash = _hash_password(str(SUPERADMIN_SEED.get("password_raw") or seed_rfc))
+
+    cur.execute(
         """
         INSERT INTO portal_users(
-            rfc, password_hash, permisos, must_change_password, regimen_fiscal
-        ) VALUES (?,?,?,?,?)
+            rfc, password_hash, regimen_fiscal, calle, colonia, cp, municipio,
+            email, telefono, permisos, must_change_password
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
         """,
-        (admin_rfc, _hash_password(admin_rfc), permisos, 1, "Administrador"),
+        (
+            seed_rfc,
+            password_hash,
+            SUPERADMIN_SEED.get("regimen_fiscal"),
+            SUPERADMIN_SEED.get("calle"),
+            SUPERADMIN_SEED.get("colonia"),
+            SUPERADMIN_SEED.get("cp"),
+            SUPERADMIN_SEED.get("municipio"),
+            SUPERADMIN_SEED.get("email"),
+            SUPERADMIN_SEED.get("telefono"),
+            permisos_text,
+            must_change_password,
+        ),
     )
     conn.commit()
 
