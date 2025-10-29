@@ -640,23 +640,38 @@ def _hash_password(raw_password: str) -> str:
     return f"pbkdf2_sha256${iterations}${salt.hex()}${digest.hex()}"
 
 
-def _verify_password(raw_password: str, stored_hash: str) -> bool:
-    try:
-        algorithm, iterations_str, salt_hex, digest_hex = stored_hash.split("$")
+def _verify_password(raw_password: str, stored_hash: str) -> tuple[bool, bool]:
+    """Return (is_valid, needs_rehash)."""
+
+    if stored_hash and stored_hash.startswith("pbkdf2_sha256$"):
+        try:
+            algorithm, iterations_str, salt_hex, digest_hex = stored_hash.split("$")
+            iterations = int(iterations_str)
+            salt = bytes.fromhex(salt_hex)
+            expected = bytes.fromhex(digest_hex)
+        except Exception:
+            return False, False
         if algorithm != "pbkdf2_sha256":
-            return False
-        iterations = int(iterations_str)
-        salt = bytes.fromhex(salt_hex)
-        expected = bytes.fromhex(digest_hex)
-    except Exception:
-        return False
-    candidate = hashlib.pbkdf2_hmac(
-        "sha256",
-        raw_password.encode("utf-8"),
-        salt,
-        iterations,
-    )
-    return secrets.compare_digest(candidate, expected)
+            return False, False
+        candidate = hashlib.pbkdf2_hmac(
+            "sha256",
+            raw_password.encode("utf-8"),
+            salt,
+            iterations,
+        )
+        return secrets.compare_digest(candidate, expected), False
+
+    # Legacy fallbacks (plain text or SHA-256 hex without salt)
+    normalized = raw_password.strip()
+    legacy_candidates = {
+        normalized,
+        normalized.upper(),
+        hashlib.sha256(normalized.encode("utf-8")).hexdigest(),
+    }
+    if stored_hash in legacy_candidates:
+        return True, True
+
+    return False, False
 
 
 def _permisos_to_text(permisos: Sequence[str] | None) -> str:
@@ -1080,8 +1095,19 @@ def authenticate_portal_user(conn: sqlite3.Connection, rfc: str, password: str):
     ).fetchone()
     if not row:
         return None
-    if not _verify_password(password, row[2]):
+    is_valid, needs_rehash = _verify_password(password, row[2])
+    if not is_valid:
         return None
+    if needs_rehash:
+        new_hash = _hash_password(password)
+        try:
+            conn.execute(
+                "UPDATE portal_users SET password_hash=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (new_hash, row[0]),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
     permisos = _permisos_from_text(row[3])
     return {
         "id": row[0],

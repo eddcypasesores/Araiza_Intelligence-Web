@@ -35,7 +35,6 @@ from core.params import read_params
 from core.maps import GoogleMapsClient, GoogleMapsError
 from core.navigation import render_nav
 from core.streamlit_compat import rerun, set_query_params
-from pages.components.hero import first_image_base64, inject_hero_css
 
 HARDCODED_MAPS_API_KEY = "AIzaSyBqSuQGWucHtypH60GpAAIxJVap76CgRL8"
 
@@ -82,12 +81,19 @@ st.markdown(
       .top-form > div[data-testid="column"] { display:flex; }
       .top-form > div[data-testid="column"] > div { flex:1; display:flex; }
       .top-form .add-stop-card { flex:1; display:flex; flex-direction:column; justify-content:center; align-items:center; min-height:120px; }
-      .top-form .add-stop-card .add-stop-button { width:100%; }
-      .top-form .add-stop-card .add-stop-button button { height:120px; font-size:3.1rem; line-height:1; border-radius:18px; }
+      .top-form .add-stop-card .add-stop-button { width:100%; display:flex; flex-direction:column; align-items:center; gap:.45rem; position:relative; }
+      .top-form .add-stop-card .add-stop-button span { font-size:.78rem; font-weight:600; color:#1e293b; letter-spacing:.05em; text-transform:uppercase; }
+      .top-form .add-stop-card .add-stop-button button { height:120px; font-size:3.1rem; line-height:1; border-radius:18px; display:flex; align-items:center; justify-content:center; }
       .top-form .address-stack { width:100%; display:flex; flex-direction:column; gap:.5rem; }
       .top-form .address-stack > div[data-testid="stVerticalBlock"] { margin-bottom:0 !important; }
       .top-form .address-stack > div[data-testid="stHorizontalBlock"] { margin-top:.4rem; }
       .top-form .address-stack > div[data-testid="stVerticalBlock"]:last-child { margin-top:.35rem; }
+      .top-form .address-row { display:flex; flex-direction:row; gap:.45rem; align-items:stretch; }
+      .top-form .address-row > div[data-testid="column"] { display:flex; align-items:stretch; }
+      .top-form .address-row > div[data-testid="column"] > div { flex:1; display:flex; align-items:stretch; }
+      .top-form .swap-button { width:100%; display:flex; flex-direction:column; justify-content:center; gap:.4rem; }
+      .top-form .swap-button .stButton { width:100%; }
+      .top-form .swap-button .stButton > button { width:100%; height:100%; min-height:52px; border-radius:14px; font-size:1.1rem; line-height:1; padding:0; }
       .top-form .meta-row { display:flex; gap:1rem; }
       .top-form .meta-row > div[data-testid="column"] { display:flex; }
       .top-form .meta-row > div[data-testid="column"] > div { flex:1; }
@@ -173,7 +179,7 @@ def _render_login() -> None:
         must_change_password=record.get("must_change_password", False),
         user_id=record.get("id"),
     )
-    st.session_state["calc_show_landing"] = True
+    st.session_state.pop("calc_show_landing", None)
     st.session_state["login_flash"] = f"Bienvenido, {record['rfc']}"
     conn.close()
 
@@ -253,145 +259,12 @@ render_nav(
     active_child=None,
     show_inicio=False,
 )
-inject_hero_css()
 conn = get_conn()
 ensure_schema(conn)
 
 _enforce_password_change(conn)
 
-flash_message = st.session_state.pop("login_flash", None)
-# No banners on landing screens; show only when not landing
-_pending_landing = bool(st.session_state.get("calc_show_landing", True))
-if (flash_message and not _pending_landing):
-    st.success(flash_message)
-
-# Module landing after login: brief intro + start button
-if bool(st.session_state.get("calc_show_landing", True)):
-    st.markdown(
-        """
-        <style>
-          .module-hero {
-            display: flex;
-            flex-wrap: wrap;
-            gap: clamp(22px, 4vw, 36px);
-            align-items: center;
-            margin-top: clamp(12px, 3vw, 24px);
-          }
-          .module-hero > div {
-            flex: 1 1 320px;
-            min-width: 0;
-            display: flex;
-          }
-          .module-column {
-            display: flex;
-            flex-direction: column;
-            justify-content: space-between;
-            gap: clamp(14px, 2vw, 22px);
-            width: 100%;
-          }
-          .module-copy {
-            flex: 1 1 auto;
-            display: flex;
-            flex-direction: column;
-            gap: clamp(10px, 1.6vw, 18px);
-          }
-          .module-copy h1 {
-            font-size: clamp(26px, 3vw, 34px);
-            margin: 0;
-            font-weight: 800;
-            color: #0f172a;
-          }
-          .module-copy p {
-            font-size: clamp(14px, 1.4vw, 16px);
-            line-height: 1.45;
-            color: #334155;
-            margin: 0;
-          }
-          .module-list {
-            margin: 0 0 0 clamp(16px, 2vw, 22px);
-            padding: 0;
-            list-style-position: inside;
-            color: #0f172a;
-            font-size: clamp(13px, 1.35vw, 15px);
-            line-height: 1.4;
-          }
-          .module-list li {
-            margin-bottom: clamp(4px, 1vw, 6px);
-          }
-          .module-actions {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            margin-top: clamp(12px, 2.5vw, 18px);
-          }
-          .module-actions button[kind="primary"] {
-            min-width: 200px;
-          }
-          .module-cover {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-          .module-cover img {
-            width: clamp(220px, 38vw, 420px);
-            height: auto;
-            max-height: 300px;
-            border-radius: 18px;
-            box-shadow: 0 18px 32px rgba(15, 23, 42, 0.16);
-            object-fit: cover;
-          }
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-    st.markdown('<div class="module-hero">', unsafe_allow_html=True)
-    st.markdown('<div class="module-column">', unsafe_allow_html=True)
-    st.markdown('<div class="module-copy">', unsafe_allow_html=True)
-    st.markdown('<h1>Precisi&oacute;n en movimiento</h1>', unsafe_allow_html=True)
-    st.markdown(
-        """
-        <p>
-          Nuestra plataforma calcula con exactitud los costos reales de cada flete, integrando tecnolog&iacute;a avanzada, APIs de Google Maps y bases de datos inteligentes para ofrecer resultados precisos y actualizados en tiempo real.
-        </p>
-        <p>
-          Obt&eacute;n en segundos el costo total de una ruta &mdash; peajes, combustible, mantenimiento y dem&aacute;s gastos operativos &mdash; con una interfaz &aacute;gil, intuitiva y confiable.
-        </p>
-        <p>
-          Adem&aacute;s, administra f&aacute;cilmente usuarios y trabajadores, garantizando control, trazabilidad y eficiencia en cada viaje.
-        </p>
-        <p><strong>Caracter&iacute;sticas principales:</strong></p>
-        <ul class="module-list">
-          <li>C&aacute;lculo autom&aacute;tico de rutas, distancias y casetas.</li>
-          <li>Estimaci&oacute;n real de combustible y costos operativos.</li>
-          <li>Gesti&oacute;n integrada de usuarios y trabajadores.</li>
-          <li>Reportes claros y listos para la toma de decisiones.</li>
-          <li>Transparencia y precisi&oacute;n en cada operaci&oacute;n.</li>
-        </ul>
-        """,
-        unsafe_allow_html=True,
-    )
-    st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown('<div class="module-actions">', unsafe_allow_html=True)
-    if st.button("Calcular ruta", type="primary", key="btn_calc_start"):
-        st.session_state["calc_show_landing"] = False
-        try:
-            st.rerun()
-        except Exception:
-            pass
-    st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown('<div class="module-cover">', unsafe_allow_html=True)
-    try:
-        st.image("assets/Inicio_card.png", width=420)
-    except Exception:
-        pass
-    st.markdown('</div>', unsafe_allow_html=True)
-
-    st.markdown('</div>', unsafe_allow_html=True)
-    st.stop()
+st.session_state.pop("login_flash", None)
 ROUTES = load_routes()
 PLAZAS = plazas_catalog(ROUTES)
 
@@ -703,11 +576,38 @@ if dias_manual_flag_key not in st.session_state:
 def _mark_dias_manual():
     st.session_state[dias_manual_flag_key] = True
 
+POINT_SUFFIXES: tuple[str, ...] = ("_data", "_query", "_options", "_selection")
+
+
+def _capture_point_state(prefix: str) -> dict[str, Any]:
+    return {suffix: st.session_state.get(f"{prefix}{suffix}") for suffix in POINT_SUFFIXES}
+
+
+def _apply_point_state(prefix: str, state: dict[str, Any]) -> None:
+    for suffix in POINT_SUFFIXES:
+        key = f"{prefix}{suffix}"
+        value = state.get(suffix)
+        if value is None:
+            st.session_state.pop(key, None)
+        else:
+            st.session_state[key] = value
+
+
 stop_state_key = "show_intermediate_stop"
 if stop_state_key not in st.session_state:
     st.session_state[stop_state_key] = False
 if MANUAL_MODE and st.session_state.get(stop_state_key):
     st.session_state[stop_state_key] = False
+
+pending_swap_key = "_pending_route_swaps"
+pending_swaps = st.session_state.pop(pending_swap_key, None)
+if isinstance(pending_swaps, dict):
+    for prefix, payload in pending_swaps.items():
+        if prefix == "_stop_state":
+            st.session_state[stop_state_key] = bool(payload)
+            continue
+        if isinstance(payload, dict):
+            _apply_point_state(prefix, payload)
 
 def _swap_point_data(role_a: str, role_b: str) -> None:
     """Intercambia datos de origen/destino/parada en session_state."""
@@ -717,20 +617,15 @@ def _swap_point_data(role_a: str, role_b: str) -> None:
         "destination": "top_destino",
         "stop": "top_parada",
     }
-    suffixes = ("_data", "_query", "_options", "_selection")
-
     prefix_a = role_prefix.get(role_a)
     prefix_b = role_prefix.get(role_b)
     if not prefix_a or not prefix_b:
         return
 
-    for suffix in suffixes:
-        key_a = f"{prefix_a}{suffix}"
-        key_b = f"{prefix_b}{suffix}"
-        st.session_state[key_a], st.session_state[key_b] = st.session_state.get(key_b), st.session_state.get(key_a)
-
-    if role_a == "stop" or role_b == "stop":
-        st.session_state[stop_state_key] = bool(st.session_state.get("top_parada_data"))
+    pending = st.session_state.setdefault(pending_swap_key, {})
+    pending[prefix_a] = _capture_point_state(prefix_b)
+    pending[prefix_b] = _capture_point_state(prefix_a)
+    pending["_stop_state"] = bool(st.session_state.get("top_parada_data"))
 
 with st.container():
     st.markdown("<div class='top-form'>", unsafe_allow_html=True)
@@ -743,8 +638,14 @@ with st.container():
             "Agregar parada" if not st.session_state.get(stop_state_key) else "Quitar parada"
         )
         st.markdown("<div class='add-stop-button'>", unsafe_allow_html=True)
+        st.markdown(
+            "<span>{}</span>".format(
+                "Parada activa" if st.session_state.get(stop_state_key) else "Agregar parada"
+            ),
+            unsafe_allow_html=True,
+        )
         if st.button(
-            "",
+            "＋",
             key="toggle_stop_btn",
             type="primary",
             use_container_width=True,
@@ -764,32 +665,27 @@ with st.container():
         route_roles = [r for r in route_roles if r in allowed_roles]
 
         if show_stop:
-            if "stop" not in route_roles:
-                route_roles.append("stop")
-            base = [r for r in route_roles if r in ("origin", "destination")]
-            if "origin" not in base:
-                base.insert(0, "origin")
-            if "destination" not in base:
-                base.append("destination")
-            route_roles = base + ["stop"]
+            route_roles = ["origin", "stop", "destination"]
+            st.session_state.setdefault("top_parada_data", None)
+            st.session_state.setdefault("top_parada_query", "")
         else:
-            route_roles = [r for r in route_roles if r in ("origin", "destination")]
-            st.session_state.pop("top_parada_query", None)
-            st.session_state.pop("top_parada_options", None)
-            st.session_state.pop("top_parada_selection", None)
-            st.session_state.pop("top_parada_data", None)
-            st.session_state.pop("top_parada_query", None)
-            st.session_state.pop("top_parada_options", None)
-            st.session_state.pop("top_parada_selection", None)
-            st.session_state.pop("top_parada_data", None)
+            route_roles = ["origin", "destination"]
+            for suffix in ("_query", "_options", "_selection", "_data"):
+                st.session_state.pop(f"top_parada{suffix}", None)
 
         st.session_state["route_roles"] = route_roles
 
-        role_labels = {
-            "origin": "ORIGEN",
-            "destination": "DESTINO",
-            "stop": "PARADA (OPCIONAL)",
-        }
+        if show_stop:
+            role_labels = {
+                "origin": "ORIGEN",
+                "stop": "PARADA",
+                "destination": "DESTINO",
+            }
+        else:
+            role_labels = {
+                "origin": "ORIGEN",
+                "destination": "DESTINO",
+            }
         role_prefix = {
             "origin": "top_origen",
             "destination": "top_destino",
@@ -799,15 +695,17 @@ with st.container():
         for idx, role in enumerate(route_roles):
             prefix = role_prefix[role]
             label = role_labels[role]
-            cols_field = st.columns([0.86, 0.14])
+            st.markdown("<div class='address-row'>", unsafe_allow_html=True)
+            cols_field = st.columns([0.88, 0.12], gap="small")
             with cols_field[0]:
                 autocomplete_input(label, prefix)
             with cols_field[1]:
+                st.markdown("<div class='swap-button'>", unsafe_allow_html=True)
                 if not MANUAL_MODE:
                     up_available = idx > 0
                     down_available = idx < len(route_roles) - 1
                     if up_available:
-                        if st.button("", key=f"{prefix}_up"):
+                        if st.button("↑", key=f"{prefix}_up", help="Mover hacia arriba"):
                             upper_role = route_roles[idx - 1]
                             _swap_point_data(role, upper_role)
                             route_roles[idx - 1], route_roles[idx] = route_roles[idx], route_roles[idx - 1]
@@ -815,13 +713,15 @@ with st.container():
                             rerun()
                             st.stop()
                     if down_available:
-                        if st.button("", key=f"{prefix}_down"):
+                        if st.button("↓", key=f"{prefix}_down", help="Mover hacia abajo"):
                             lower_role = route_roles[idx + 1]
                             _swap_point_data(role, lower_role)
                             route_roles[idx + 1], route_roles[idx] = route_roles[idx], route_roles[idx + 1]
                             st.session_state["route_roles"] = route_roles
                             rerun()
                             st.stop()
+                st.markdown("</div>", unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
 
         meta_cols = st.columns(3, gap="medium")
         with meta_cols[0]:

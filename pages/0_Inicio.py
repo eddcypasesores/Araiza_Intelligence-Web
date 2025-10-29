@@ -1,4 +1,5 @@
-﻿from __future__ import annotations
+﻿# pages/0_Inicio.py — Tarjetas alternadas (zigzag) 100% clickeables con verificación de páginas
+from __future__ import annotations
 from pathlib import Path
 import streamlit as st
 
@@ -13,25 +14,36 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# --- Sesión / estilos base ---
 ensure_session_from_token()
 inject_hero_css()
 
-# =========================
-# helper para obtener base64 de primera imagen vÃ¡lida
-# =========================
+ROOT = Path(__file__).resolve().parent.parent     # carpeta raíz del proyecto (donde está app.py)
+PAGES_DIR = ROOT / "pages"
+
+# -------- helpers de imagen --------
 def image_src_for(candidates: tuple[Path, ...]) -> str | None:
     return first_image_base64(candidates)
 
-# =========================
-# imÃ¡genes asociadas a cada secciÃ³n
-# =========================
+def page_exists(rel_page: str) -> bool:
+    """
+    Verifica que el archivo exista respecto a la raíz del proyecto.
+    Acepta valores como 'app.py' o 'pages/1_Calculadora.py'.
+    """
+    p = (ROOT / rel_page).resolve()
+    try:
+        # Evita salirte del proyecto con rutas extrañas
+        p.relative_to(ROOT)
+    except Exception:
+        return False
+    return p.is_file()
+
 IMG_RIESGO = image_src_for((
     Path("assets/riesgo_cover.png"),
     Path("assets/riesgo_cover.jpg"),
     Path(__file__).resolve().parent / "assets" / "riesgo_cover.png",
     Path(__file__).resolve().parent / "assets" / "riesgo_cover.jpg",
 ))
-
 IMG_TRASLADO = image_src_for((
     Path("assets/traslado_inteligente_card.png"),
     Path("assets/inicio_card.png"),
@@ -40,421 +52,217 @@ IMG_TRASLADO = image_src_for((
     Path(__file__).resolve().parent / "assets" / "traslado_inteligente_card.png",
     Path(__file__).resolve().parent / "assets" / "inicio_card.png",
     Path(__file__).resolve().parent / "assets" / "calculadora_cover.png",
-    Path(__file__).resolve().parent / "assets" / "caliculadora_cover.png",
 ))
-
 IMG_EFOS = image_src_for((
     Path("assets/efos_card.png"),
     Path(__file__).resolve().parent / "assets" / "efos_card.png",
 ))
-
 IMG_XML = image_src_for((
     Path("assets/descarga_masiva_xml_card.jpg"),
     Path(__file__).resolve().parent / "assets" / "descarga_masiva_xml_card.jpg",
 ))
-
 IMG_POLIZAS = image_src_for((
     Path("assets/generador_poliza_card.png"),
     Path(__file__).resolve().parent / "assets" / "generador_poliza_card.png",
 ))
-
 IMG_ESTADOS_CTA = image_src_for((
     Path("assets/convertidor_estados_cuenta.jpg"),
     Path(__file__).resolve().parent / "assets" / "convertidor_estados_cuenta.jpg",
 ))
-
 IMG_CEDULA = image_src_for((
     Path("assets/cedula_impuestos_card.jpg"),
     Path(__file__).resolve().parent / "assets" / "cedula_impuestos_card.jpg",
 ))
 
-# =========================
-# NAVBAR
-# =========================
-render_nav(
-    active_top="inicio",
-    show_inicio=False,
-    show_cta=False,
-)
+# -------- navbar --------
+render_nav(active_top="inicio", show_inicio=False, show_cta=False)
 
-# =========================
-# CSS COMPACTO
-# =========================
-st.markdown(
-    """
-    <style>
-    /* --- NAV / LAYOUT --- */
-    .nav-anchor {
-        height: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-    }
-    .nav-bar {
-        margin-bottom: 0 !important;
-    }
-    .block-container {
-        padding-top: 56px !important;
-        padding-left: clamp(12px,2vw,20px) !important;
-        padding-right: clamp(12px,2vw,20px) !important;
-        padding-bottom: 40px !important;
-        max-width: 1100px !important;
-        margin: 0 auto !important;
-    }
+# -------- CSS --------
+st.markdown("""
+<style>
+.block-container{
+  padding-top:56px !important;
+  padding-left:clamp(12px,2vw,20px) !important;
+  padding-right:clamp(12px,2vw,20px) !important;
+  max-width: 1200px !important; margin:0 auto !important;
+}
 
-    .landing-wrapper {
-        max-width: 1050px !important;
-        margin: 0 auto !important;
-    }
+/* Título GRANDE */
+.landing-title{
+  font-weight:900; 
+  font-size: clamp(32px, 3.6vw, 44px); 
+  line-height:1.1; 
+  text-align:center; 
+  color:#0f172a; 
+  margin: 0 0 18px;
+}
 
-    /* --- TÃTULO GENERAL --- */
-    .landing-welcome {
-        font-family: system-ui,-apple-system,BlinkMacSystemFont,"Inter",Roboto,Arial,sans-serif !important;
-        font-size: 1.4rem !important;
-        font-weight: 700 !important;
-        color: #0f172a !important;
-        text-align: center !important;
-        line-height: 1.1 !important;
-        margin: 0 0 0.75rem 0 !important;
-    }
+/* GRID */
+.cards-grid{ display:grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap:22px; }
+@media (max-width:1000px){ .cards-grid{ grid-template-columns: 1fr; } }
 
-    /* --- BLOQUE TEXTO DE CADA SECCIÃ“N --- */
-    .landing-section {
-        max-width: 600px !important;
-    }
+/* TARJETA ALTERNADA */
+.card-split{
+  position:relative;
+  display:flex; height:100%;
+  border:1px solid rgba(0,0,0,.06); border-radius:14px; background:#fff;
+  box-shadow:0 8px 24px rgba(2,6,23,.06); overflow:hidden;
+  transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  cursor:pointer;
+  isolation:isolate;
+}
+.card-split:hover{ transform: translateY(-2px); box-shadow:0 14px 32px rgba(2,6,23,.1); border-color:rgba(0,0,0,.08); }
 
-    .landing-section h2 {
-        font-size: 1.2rem !important;
-        font-weight: 700 !important;
-        color: #0f172a !important;
-        line-height: 1.15 !important;
-        margin: 0 0 0.4rem 0 !important; /* menos espacio debajo del tÃ­tulo */
-    }
+/* Hover: tinte y flecha */
+.card-split::after{
+  content:"";
+  position:absolute; inset:0;
+  background: rgba(15, 23, 42, 0);
+  transition: background .12s ease;
+  z-index:1;
+}
+.card-split:hover::after{ background: rgba(15, 23, 42, .04); }
 
-    .landing-section p {
-        font-size: 0.88rem !important;
-        line-height: 1.15rem !important;
-        color: #475569 !important;
-        margin: 0 0 0.4rem 0 !important;
-        text-align: justify !important;
-    }
+.card-split::before{
+  content:"";
+  position:absolute; right:12px; top:12px;
+  width:0; height:0; border-left:10px solid #0f172a; border-top:6px solid transparent; border-bottom:6px solid transparent;
+  opacity:0; transform: translateX(-4px);
+  transition: opacity .12s ease, transform .12s ease;
+  z-index:2;
+}
+.card-split:hover::before{ opacity:0.7; transform: translateX(0); }
 
-    .landing-section .subheading {
-        font-size: 0.88rem !important;
-        font-weight: 600 !important;
-        color: #0f172a !important;
-        line-height: 1.15rem !important;
-        margin: 0.5rem 0 0.3rem 0 !important;
-    }
+/* alternancia izquierda/derecha */
+.card-split.rev{ flex-direction: row-reverse; }
 
-    /* --- LISTAS --- */
-    .landing-list {
-        margin: 0 !important;
-        padding-left: 0.7rem !important;
-        list-style: none !important;
-    }
+.card-media{ flex:0 0 42%; background:#f1f5f9; display:flex; align-items:center; justify-content:center; }
+.card-media img{ width:100%; height:100%; max-height: 260px; object-fit:cover; }
 
-    .landing-list li {
-        position: relative !important;
-        padding-left: 0.7rem !important;
-        margin: 0 0 0.25rem 0 !important;
-        font-size: 0.86rem !important;
-        line-height: 1.15rem !important;
-        color: #475569 !important;
-        text-align: justify !important;
-    }
+.card-copy{ flex:1; display:flex; flex-direction:column; padding:16px; position:relative; z-index:3; }
+.card-title{ margin:0 0 6px; font-weight:800; color:#0f172a; font-size:1.25rem; line-height:1.2; }
+.card-desc{ margin:0 0 10px; color:#475569; font-size:.95rem; line-height:1.45rem; text-align:justify; }
+.card-list{ margin:0; padding-left: 1.05rem; color:#475569; font-size:.92rem; line-height:1.25rem; }
+.card-list li{ margin: 0 0 .28rem; }
+.card-list li::marker{ color:#dc2626; }
 
-    .landing-list li::before {
-        content: "\\2022" !important;
-        position: absolute !important;
-        left: 0 !important;
-        top: 0 !important;
-        color: #dc2626 !important;
-        font-weight: 700 !important;
-        line-height: 1rem !important;
-    }
+/* Enlace invisible que cubre toda la tarjeta (st.page_link) */
+.overlay-link{
+  position:absolute; inset:0; z-index:6;
+  margin:0 !important; padding:0 !important;
+}
+.overlay-link > div{               /* wrapper que genera Streamlit */
+  position:absolute !important; inset:0 !important;
+  margin:0 !important; padding:0 !important;
+}
+.overlay-link a{                   /* el <a> real de st.page_link */
+  position:absolute; inset:0;
+  display:block; width:100%; height:100%;
+  opacity:0; text-indent:-9999px;
+  overflow:hidden; border:0; outline:0;
+  cursor:pointer;
+}
 
-    /* --- IMAGEN DE LA SECCIÃ“N --- */
-    .landing-illustration img {
-        width: 100% !important;
-        max-width: 360px !important;
-        border-radius: 12px !important;
-        box-shadow: 0 12px 24px rgba(15,23,42,0.14) !important;
-        border: 1px solid rgba(0,0,0,0.04) !important;
-        margin: 0 !important;
-        display: block !important;
-    }
+/* Estado deshabilitado (página no existe) */
+.card-split.is-disabled{ cursor:not-allowed; }
+.card-split.is-disabled:hover{ transform:none; box-shadow:0 8px 24px rgba(2,6,23,.06); }
+.badge{
+  position:absolute; top:10px; left:10px;
+  background:#e2e8f0; color:#0f172a; border-radius:9999px;
+  font-size:.75rem; font-weight:700; padding:.2rem .6rem; z-index:4;
+}
 
-    /* --- BOTÃ“N ROJO --- */
-    div.stButton > button {
-        background-color: #dc2626 !important;
-        color: #fff !important;
-        border: 1px solid #dc2626 !important;
-        border-radius: 9999px !important;
-        font-weight: 600 !important;
-        font-size: 0.8rem !important;
-        line-height: 1rem !important;
-        padding: 0.4rem 0.8rem !important;
-        min-width: 140px !important;
-        box-shadow: 0 6px 14px rgba(220,38,38,0.3) !important;
-        transition: all .15s ease !important;
-        margin-top: 0.4rem !important;
-        margin-bottom: 0.4rem !important;
-    }
-    div.stButton > button:hover {
-        background-color: #b91c1c !important;
-        border: 1px solid #b91c1c !important;
-        transform: translateY(-1px) !important;
-        box-shadow: 0 8px 16px rgba(185,28,28,0.4) !important;
-    }
+/* Responsive */
+@media (max-width: 720px){
+  .card-split, .card-split.rev{ flex-direction:column; }
+  .card-media{ flex: none; }
+  .card-media img{ height: 200px; }
+}
+</style>
+""", unsafe_allow_html=True)
 
-    /* --- ESPACIO ENTRE SECCIONES --- */
-    .section-spacer {
-        margin-top: 0.5rem !important;
-        margin-bottom: 0.5rem !important;
-    }
+# -------- data --------
+PRODUCTS = [
+    {"title": "Cédula de impuestos para cierre anual",
+     "desc": "Calcula coeficiente de utilidad, integra PTU y cruza deducciones con formatos listos para revisión fiscal.",
+     "bullets": ["Simula escenarios antes del envío", "Control por entidad/razón social", "Reportes ejecutivos para dirección"],
+     "img": IMG_CEDULA, "page": "pages/XX_Cedula_impuestos.py", "key": "go_cedula"},
 
-    /* --- FOOTER --- */
-    .landing-footer {
-        text-align: center !important;
-        color: #64748b !important;
-        font-size: 0.7rem !important;
-        padding: 0.75rem 0 1.5rem 0 !important;
-        line-height: 1rem !important;
-        margin: 0 !important;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True,
-)
+    {"title": "Riesgo fiscal sin sobresaltos",
+     "desc": "Cruza CFDI contra listas 69/69-B/69-Bis y documenta acciones preventivas ante cambios del SAT.",
+     "bullets": ["Detecta EFOS publicados", "Monitoreo de cambios del SAT", "Alertas a finanzas y cumplimiento"],
+     "img": IMG_RIESGO, "page": "pages/14_Riesgo_fiscal.py", "key": "go_riesgo"},
 
-# =========================
-# helper para renderizar cada secciÃ³n en el layout 2 columnas
-# =========================
-def render_section(
-    *,
-    title: str,
-    paragraphs: list[str],
-    bullet_title: str | None,
-    bullets: list[str],
-    img_src: str | None,
-    button_key: str,
-    page_target: str,
-    reverse: bool = False,
-):
-    """
-    reverse = False  -> texto izquierda, imagen derecha
-    reverse = True   -> imagen izquierda, texto derecha
-    """
-    with st.container():
-        if reverse:
-            image_col, text_col = st.columns([5, 7], gap="large")
-        else:
-            text_col, image_col = st.columns([7, 5], gap="large")
+    {"title": "Monitoreo especializado de EFOS",
+     "desc": "Identifica proveedores EFOS, conserva historial y evidencia para auditorías internas y externas.",
+     "bullets": ["Alertas por cambio de estatus", "Historial por periodo", "Bitácora para legal y fiscal"],
+     "img": IMG_EFOS, "page": "pages/XX_Monitoreo_EFOS.py", "key": "go_efos"},
 
-        # TEXTO
-        with text_col:
-            st.markdown('<div class="landing-section">', unsafe_allow_html=True)
-            st.markdown(f"<h2>{title}</h2>", unsafe_allow_html=True)
+    {"title": "Descarga masiva de XML",
+     "desc": "Automatiza la descarga de CFDI con filtros y trazabilidad completa para conciliaciones y fiscalización.",
+     "bullets": ["Filtros por periodo/emisor/tipo", "Permisos por usuario", "Integración con validación/timbrado"],
+     "img": IMG_XML, "page": "pages/XX_Descarga_XML.py", "key": "go_xml"},
 
-            # agrupar ideas en menos pÃ¡rrafos ayuda a bajar altura vertical
-            for p in paragraphs:
-                st.markdown(f"<p>{p}</p>", unsafe_allow_html=True)
+    {"title": "Convertidor de estados de cuenta",
+     "desc": "Normaliza bancos y genera archivos para conciliación contable y análisis de flujos.",
+     "bullets": ["Lee PDF/XLSX", "Detecta patrones de depósitos/retiros", "Exporta a plantillas de conciliación"],
+     "img": IMG_ESTADOS_CTA, "page": "pages/XX_Convertidor_estados.py", "key": "go_estados"},
 
-            if bullet_title:
-                st.markdown(
-                    f'<div class="subheading">{bullet_title}</div>',
-                    unsafe_allow_html=True,
-                )
-            if bullets:
-                st.markdown('<ul class="landing-list">', unsafe_allow_html=True)
-                for item in bullets:
-                    st.markdown(f"<li>{item}</li>", unsafe_allow_html=True)
-                st.markdown("</ul>", unsafe_allow_html=True)
+    {"title": "Traslado inteligente",
+     "desc": "Calcula el costo real por ruta: km, peajes, combustible, viáticos y mantenimiento con escenarios comparativos.",
+     "bullets": ["Costeo urgente con clientes", "Simulación de rutas y tiempos", "Control de margen operativo"],
+     "img": IMG_TRASLADO, "page": "pages/1_Calculadora.py", "key": "go_traslado"},
 
-            # botÃ³n
-            if reverse:
-                # imagen izq, texto der â†’ botÃ³n alineado derecha
-                _, btn_col_right = st.columns([3, 1])
-                with btn_col_right:
-                    if st.button("INICIAR", key=button_key):
-                        st.switch_page(page_target)
-            else:
-                # texto izq â†’ botÃ³n alineado izq
-                btn_col_left, _ = st.columns([1, 5])
-                with btn_col_left:
-                    if st.button("INICIAR", key=button_key):
-                        st.switch_page(page_target)
+    {"title": "Generador de pólizas contables",
+     "desc": "Convierte CFDI en pólizas listas para tu ERP, trazables desde factura a registro.",
+     "bullets": ["Clasificación contable", "Impuestos y retenciones", "Exportación compatible con tu sistema"],
+     "img": IMG_POLIZAS, "page": "pages/XX_Generador_polizas.py", "key": "go_polizas"},
+]
+# -------- encabezado --------
+st.markdown('<div class="landing-title">Bienvenido a Araiza Intelligence</div>', unsafe_allow_html=True)
 
-            st.markdown("</div>", unsafe_allow_html=True)
+# -------- render --------
+st.markdown('<div class="cards-grid">', unsafe_allow_html=True)
+for i, p in enumerate(PRODUCTS):
+    exists = page_exists(p["page"])
+    alt_cls = "rev" if i % 2 else ""
+    dis_cls = " is-disabled" if not exists else ""
+    cls = f"card-split {alt_cls}{dis_cls}".strip()
 
-        # IMAGEN
-        with image_col:
-            st.markdown('<div class="landing-illustration">', unsafe_allow_html=True)
-            if img_src:
-                st.markdown(
-                    f'<img src="{img_src}" alt="{title}" />',
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.info("Falta imagen para esta secciÃ³n.")
-            st.markdown('</div>', unsafe_allow_html=True)
+    # Tarjeta
+    st.markdown(
+        f"""
+        <div class="{cls}">
+          {'<div class="badge">Próximamente</div>' if not exists else ''}
+          <div class="card-media">
+            <img src="{p.get('img') or ''}" alt="{p['title']}"/>
+          </div>
+          <div class="card-copy">
+            <h3 class="card-title">{p['title']}</h3>
+            <p class="card-desc">{p['desc']}</p>
+            <ul class="card-list">
+              {''.join(f"<li>{b}</li>" for b in p['bullets'])}
+            </ul>
+          </div>
+        """,
+        unsafe_allow_html=True
+    )
 
-# =========================
-# CONTENIDO PRINCIPAL
-# =========================
-st.markdown('<div class="landing-wrapper">', unsafe_allow_html=True)
+    # Enlace invisible SOLO si la página existe (no genera error ni “fantasma”)
+    if exists:
+        st.markdown('<div class="overlay-link">', unsafe_allow_html=True)
+        st.page_link(p["page"], label=" ")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-# tÃ­tulo arriba
-st.markdown(
-    '<div class="landing-welcome">Bienvenido a Araiza Intelligence</div>',
-    unsafe_allow_html=True,
-)
+    st.markdown("</div>", unsafe_allow_html=True)  # cierra card-split
 
-# -------- SECCIÓN: Cédula de Impuestos --------
-render_section(
-    title="Cédula de impuestos para cierre anual",
-    paragraphs=[
-        "Calcula coeficiente de utilidad, integra PTU y cruza deducciones con facilidad para preparar tus declaraciones anuales.",
-        "Documenta decisiones clave con evidencia y formatos listos para revisión fiscal o auditoría.",
-    ],
-    bullet_title="Te permite:",
-    bullets=[
-        "Simular escenarios antes de enviar la declaración.",
-        "Controlar obligaciones fiscales por entidad o razón social.",
-        "Producir reportes ejecutivos para dirección y comités.",
-    ],
-    img_src=IMG_CEDULA,
-    button_key="btn_cedula_impuestos",
-    page_target="pages/XX_Cedula_impuestos.py",
-    reverse=True,
-)
-st.markdown("<div class=\"section-spacer\"></div>", unsafe_allow_html=True)
+st.markdown('</div>', unsafe_allow_html=True)
 
-# -------- SECCIÓN: Riesgo Fiscal --------
-render_section(
-    title="Riesgo fiscal sin sobresaltos",
-    paragraphs=[
-        "Cruza automáticamente tus CFDI contra la lista negra del SAT y conoce en qué momento uno de tus proveedores aparece en los listados 69, 69-B o 69-B Bis.",
-        "Genera reportes de seguimiento para auditorías internas y demuestra acciones preventivas frente a autoridades fiscales.",
-    ],
-    bullet_title="Te ayuda a:",
-    bullets=[
-        "Detectar operaciones con EFOS publicados.",
-        "Monitorear cambios cada vez que el SAT actualiza los listados.",
-        "Alertar a finanzas y cumplimiento antes de que se genere una contingencia.",
-    ],
-    img_src=IMG_RIESGO,
-    button_key="btn_riesgo_fiscal",
-    page_target="pages/14_Riesgo_fiscal.py",
-    reverse=False,
-)
-st.markdown("<div class=\"section-spacer\"></div>", unsafe_allow_html=True)
-
-# -------- SECCIÓN: Monitoreo especializado de EFOS --------
-render_section(
-    title="Monitoreo especializado de EFOS",
-    paragraphs=[
-        "Identifica proveedores señalados como EFOS y documenta acciones de corrección con respaldo de evidencia oficial.",
-        "Centraliza el historial de gestiones para auditores internos y externos sin depender de hojas de cálculo dispersas.",
-    ],
-    bullet_title="Beneficios clave:",
-    bullets=[
-        "Alertas automáticas cuando un RFC cambia de estatus.",
-        "Historial de revisiones por periodo fiscal.",
-        "Bitácora de seguimiento para áreas legales y fiscales.",
-    ],
-    img_src=IMG_EFOS,
-    button_key="btn_efos",
-    page_target="pages/14_Riesgo_fiscal.py",
-    reverse=True,
-)
-st.markdown("<div class=\"section-spacer\"></div>", unsafe_allow_html=True)
-
-# -------- SECCIÓN: Descarga masiva de XML --------
-render_section(
-    title="Descarga masiva de XML simplificada",
-    paragraphs=[
-        "Automatiza la descarga de CFDI directamente desde los servicios del SAT sin depender de tareas manuales y con trazabilidad completa.",
-        "Mantén tus repositorios de facturas al día para conciliaciones contables, devoluciones y fiscalización.",
-    ],
-    bullet_title="Incluye:",
-    bullets=[
-        "Filtros por periodo, emisor y tipo de comprobante.",
-        "Control de usuarios con permisos diferenciados.",
-        "Integración con procesos de validación y timbrado.",
-    ],
-    img_src=IMG_XML,
-    button_key="btn_descarga_xml",
-    page_target="pages/14_Riesgo_fiscal.py",
-    reverse=False,
-)
-st.markdown("<div class=\"section-spacer\"></div>", unsafe_allow_html=True)
-
-# -------- SECCIÓN: Convertidor de Estados de Cuenta --------
-render_section(
-    title="Convertidor de estados de cuenta listo para conciliaciones",
-    paragraphs=[
-        "Normaliza los formatos bancarios y genera archivos estructurados para conciliación contable y análisis de flujos.",
-        "Integra las transacciones con tu modelo de costos y reportes financieros en cuestión de minutos.",
-    ],
-    bullet_title="Funciones destacadas:",
-    bullets=[
-        "Lectura de estados en PDF o XLSX.",
-        "Identificación de depósitos y retiros recurrentes.",
-        "Exportación a plantillas de conciliación.",
-    ],
-    img_src=IMG_ESTADOS_CTA,
-    button_key="btn_convertidor_estados",
-    page_target="pages/XX_Convertidor_estados.py",
-    reverse=True,
-)
-st.markdown("<div class=\"section-spacer\"></div>", unsafe_allow_html=True)
-
-# -------- SECCIÓN: Traslado Inteligente --------
-render_section(
-    title="Traslado inteligente con costos completos",
-    paragraphs=[
-        "Calcula en segundos el costo real de cada ruta combinando kilometraje, peajes, combustible, viáticos y mantenimientos proyectados.",
-        "Genera escenarios comparativos entre rutas y planifica márgenes antes de aceptar un servicio de flete.",
-    ],
-    bullet_title="Ideal para:",
-    bullets=[
-        "Cotizaciones urgentes con clientes clave.",
-        "Simular rutas alternas y tiempos estimados.",
-        "Controlar el margen operativo por cliente o zona.",
-    ],
-    img_src=IMG_TRASLADO,
-    button_key="btn_traslado_inteligente",
-    page_target="pages/1_Calculadora.py",
-    reverse=False,
-)
-st.markdown("<div class=\"section-spacer\"></div>", unsafe_allow_html=True)
-
-# -------- SECCIÓN: Generador de Pólizas --------
-render_section(
-    title="Generador automático de pólizas contables",
-    paragraphs=[
-        "Convierte CFDI en pólizas contables listas para integrar a tu ERP o sistema contable con las cuentas que definiste.",
-        "Reduce capturas manuales y asegura trazabilidad desde la factura hasta la póliza registrada.",
-    ],
-    bullet_title="Automatiza:",
-    bullets=[
-        "Clasificación contable por tipo de gasto o ingreso.",
-        "Control de impuestos y retenciones aplicables.",
-        "Exportación en formatos compatibles con tu sistema.",
-    ],
-    img_src=IMG_POLIZAS,
-    button_key="btn_generador_polizas",
-    page_target="pages/XX_Generador_polizas.py",
-    reverse=True,
-)
-# =========================
-# FOOTER
-# =========================
+# -------- footer --------
 st.markdown("---")
 st.markdown(
-    '<div class="landing-footer">&copy; 2025 Araiza Intelligence. Todos los derechos reservados.</div>',
-    unsafe_allow_html=True,
+    '<div style="text-align:center;color:#64748b;font-size:.78rem;padding:8px 0 18px;">'
+    '&copy; 2025 Araiza Intelligence. Todos los derechos reservados.'
+    '</div>',
+    unsafe_allow_html=True
 )
-
-st.markdown("</div>", unsafe_allow_html=True)  # /landing-wrapper

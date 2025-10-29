@@ -11,7 +11,7 @@ import streamlit as st
 
 from core.auth import ensure_session_from_token
 from core.db import ensure_schema, get_conn
-from core.navigation import render_nav
+from core.navigation import RIESGO_TOPS, TRASLADOS_TOPS, render_nav
 
 
 def _redirect_to_login(target_page: str | None = None, switch_to_page: str = "pages/1_Calculadora.py") -> None:
@@ -32,16 +32,21 @@ def _redirect_to_login(target_page: str | None = None, switch_to_page: str = "pa
     st.stop()
 
 
-def _ensure_admin_session(redirect_to: str | None = None) -> None:
-    """Valida que exista una sesion activa con privilegios de administrador."""
+def _ensure_permission(
+    required_permission: str,
+    *,
+    redirect_to: str | None,
+    fallback_page: str,
+) -> None:
+    """Ensure the logged-in user has the required permission for the module."""
 
     ensure_session_from_token()
 
     if "usuario" not in st.session_state:
-        _redirect_to_login(redirect_to)
+        _redirect_to_login(redirect_to, switch_to_page=fallback_page)
 
     permisos = set(st.session_state.get("permisos") or [])
-    if "admin" not in permisos:
+    if required_permission not in permisos:
         st.error(" No tienes permiso para acceder a esta pagina.")
         st.stop()
 
@@ -92,12 +97,24 @@ def init_admin_section(
         except ValueError:
             redirect_target = Path(caller_file).name
 
-    if active_top in {"riesgo", "riesgo_firmes"}:
-        permisos = set(st.session_state.get("permisos") or [])
-        if "usuario" not in st.session_state or "riesgos" not in permisos:
-            _redirect_to_login(redirect_target, switch_to_page="pages/14_Riesgo_fiscal.py")
+    if active_top in RIESGO_TOPS:
+        _ensure_permission(
+            "riesgos",
+            redirect_to=redirect_target,
+            fallback_page="pages/14_Riesgo_fiscal.py",
+        )
+    elif active_top in TRASLADOS_TOPS or active_top is None:
+        _ensure_permission(
+            "traslados",
+            redirect_to=redirect_target,
+            fallback_page="pages/1_Calculadora.py",
+        )
     else:
-        _ensure_admin_session(redirect_target)
+        _ensure_permission(
+            "admin",
+            redirect_to=redirect_target,
+            fallback_page="pages/19_Admin_portal.py",
+        )
 
     conn = get_conn()
     ensure_schema(conn)
