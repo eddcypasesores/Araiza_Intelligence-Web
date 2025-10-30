@@ -37,8 +37,6 @@ from core.flash import consume_flash, set_flash
 from core.login_ui import render_login_header, render_token_reset_section
 from core.streamlit_compat import rerun, set_query_params
 
-HARDCODED_MAPS_API_KEY = "AIzaSyBqSuQGWucHtypH60GpAAIxJVap76CgRL8"
-
 # ===============================
 # Configuracion de pagina + CSS
 # ===============================
@@ -269,7 +267,7 @@ if vid is None:
     st.stop()
 PARAMS = read_params(conn, vid)
 
-maps_api_key = (GOOGLE_MAPS_API_KEY or HARDCODED_MAPS_API_KEY).strip()
+maps_api_key = (GOOGLE_MAPS_API_KEY or "").strip()
 
 MAPS_ERROR = None
 maps_client: GoogleMapsClient | None = None
@@ -293,7 +291,8 @@ if maps_api_key:
             st.session_state.pop("gmaps_client_key", None)
 else:
     MAPS_ERROR = (
-        "Configura la variable de entorno GOOGLE_MAPS_API_KEY para habilitar el autocompletado y el calculo de rutas."
+        "Configura la variable de entorno GOOGLE_MAPS_API_KEY o agrega la clave en .streamlit/secrets.toml "
+        "para habilitar el autocompletado y el calculo de rutas."
     )
 
 maps_client = st.session_state.get("gmaps_client")

@@ -276,6 +276,19 @@ _LOGO_CANDIDATES: tuple[Path, ...] = (
     Path(__file__).resolve().parent.parent / "assets" / "logo.jpg",
 )
 
+_ROOT_DIR = Path(__file__).resolve().parent.parent
+
+
+def _script_exists(script: str | None) -> bool:
+    """Return ``True`` if the target Streamlit script exists."""
+
+    if not script:
+        return False
+    candidate = Path(script)
+    if not candidate.is_absolute():
+        candidate = _ROOT_DIR / script
+    return candidate.is_file()
+
 
 PAGE_PARAM_NAMES: dict[str, str] = {
     "pages/0_Inicio.py": "Inicio",
@@ -410,6 +423,8 @@ def _dropdown_html(
 
     items: list[str] = []
     for action in actions:
+        if action.target_page and not _script_exists(action.target_page):
+            continue
         href = _page_href(action.target_page, action.query)
         option_class = "nav-option"
         if active_child == action.child_id and active_top == top_key:
@@ -417,6 +432,9 @@ def _dropdown_html(
         items.append(
             f'<a class="{option_class}" href="{href}" target="_self">{action.label}</a>'
         )
+
+    if not items:
+        return ""
 
     dropdown_class = "nav-scope has-dropdown"
     if active_top == top_key:

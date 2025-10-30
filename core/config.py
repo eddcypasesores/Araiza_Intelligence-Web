@@ -3,7 +3,13 @@ from pathlib import Path
 import os
 from typing import Iterable
 
-import tomllib
+try:
+    import tomllib  # type: ignore[attr-defined]
+except ModuleNotFoundError:  # pragma: no cover - fallback for Python < 3.11
+    try:
+        import tomli as tomllib  # type: ignore[assignment]
+    except ModuleNotFoundError:  # pragma: no cover - optional dependency
+        tomllib = None  # type: ignore[assignment]
 
 
 def _first_existing(paths: Iterable[Path], default: Path) -> Path:
@@ -51,11 +57,11 @@ def _read_first_existing_text(paths: Iterable[Path]) -> str:
 
 
 def _parse_toml_key(raw: str, key: str) -> str:
-    if not raw:
+    if not raw or tomllib is None:
         return ""
     try:
-        data = tomllib.loads(raw)
-    except tomllib.TOMLDecodeError:
+        data = tomllib.loads(raw)  # type: ignore[union-attr]
+    except Exception:
         return ""
 
     if key in data and isinstance(data[key], str):

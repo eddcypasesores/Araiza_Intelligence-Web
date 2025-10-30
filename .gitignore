@@ -4,3 +4,7 @@ db/tolls.db
 # Archivos de caché de Python
 __pycache__/
 *.pyc
+
+# Configuracion y secretos locales
+.streamlit/
+.env
