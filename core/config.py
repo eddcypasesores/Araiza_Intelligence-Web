@@ -18,6 +18,9 @@ BASE_DIR = Path(__file__).resolve().parents[1]
 db_env = os.getenv("DB_PATH", "").strip()
 DB_PATH = Path(db_env).expanduser() if db_env else BASE_DIR / "db" / "tolls.db"
 
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+PORTAL_DATABASE_URL = os.getenv("PORTAL_DATABASE_URL", "").strip() or DATABASE_URL
+
 routes_env = os.getenv("ROUTES_CSV", "").strip()
 if routes_env:
     ROUTES_CSV = Path(routes_env).expanduser()

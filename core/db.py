@@ -6,13 +6,24 @@ import re
 import secrets
 import sqlite3
 import unicodedata
+from contextlib import contextmanager
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Iterable, Sequence
 
 import pandas as pd  # puede usarse en otros helpers
 
-from .config import DB_PATH, ROUTES_CSV, TARIFFS_XLSX
+from .config import (
+    DB_PATH,
+    PORTAL_DATABASE_URL,
+    ROUTES_CSV,
+    TARIFFS_XLSX,
+)
+
+try:
+    import psycopg
+except ImportError:  # pragma: no cover - solo ocurre si no se instala psycopg
+    psycopg = None
 
 
 CLASES: list[str] = [
@@ -54,6 +65,13 @@ HEADER_ALIASES = {
     "costo": "costo",
     "clase": "clase",
 }
+
+
+USE_PORTAL_POSTGRES = bool(PORTAL_DATABASE_URL)
+if USE_PORTAL_POSTGRES and psycopg is None:  # pragma: no cover - protección de entorno
+    raise RuntimeError(
+        "psycopg es requerido cuando PORTAL_DATABASE_URL o DATABASE_URL están definidos."
+    )
 
 
 def _clean_header(value: str) -> str:
@@ -431,38 +449,6 @@ def ensure_schema(conn):
       ON trabajadores(numero_economico)
       WHERE numero_economico IS NOT NULL AND numero_economico <> '';
     """)
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS portal_users(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            rfc TEXT NOT NULL UNIQUE,
-            password_hash TEXT NOT NULL,
-            regimen_fiscal TEXT,
-            calle TEXT,
-            colonia TEXT,
-            cp TEXT,
-            municipio TEXT,
-            email TEXT,
-            telefono TEXT,
-            permisos TEXT NOT NULL DEFAULT '[]',
-            must_change_password INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        );
-        """
-    )
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS portal_user_resets(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            token TEXT NOT NULL UNIQUE,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            expires_at TEXT NOT NULL,
-            FOREIGN KEY(user_id) REFERENCES portal_users(id) ON DELETE CASCADE
-        );
-        """
-    )
 
     # ---- parámetros versionados ----
     conn.execute("""
@@ -564,6 +550,8 @@ def ensure_schema(conn):
 
     conn.commit()
 
+    ensure_portal_schema(conn)
+
     # Seed mínimo: usuario admin
     cur = conn.cursor()
     cur.execute("SELECT COUNT(*) FROM usuarios")
@@ -617,6 +605,121 @@ def clear_usuario_trabajador(conn, username: str):
         return
     conn.execute("DELETE FROM usuario_trabajador WHERE usuario_id=?", (u[0],))
     conn.commit()
+
+
+# ---------- Portal storage helpers ----------
+@contextmanager
+def _portal_cursor(conn, *, write: bool = False):
+    """Yield (db_conn, cursor) apuntando a la base de datos del portal."""
+
+    if USE_PORTAL_POSTGRES:
+        db = psycopg.connect(PORTAL_DATABASE_URL, autocommit=False)
+        cur = db.cursor()
+        try:
+            yield db, cur
+            if write:
+                db.commit()
+        except Exception:
+            if write:
+                db.rollback()
+            raise
+        finally:
+            cur.close()
+            db.close()
+    else:
+        cur = conn.cursor()
+        try:
+            yield conn, cur
+            if write:
+                conn.commit()
+        except Exception:
+            if write:
+                conn.rollback()
+            raise
+        finally:
+            cur.close()
+
+
+def _portal_sql(sql: str) -> str:
+    return sql.replace("?", "%s") if USE_PORTAL_POSTGRES else sql
+
+
+def _portal_dataframe(cur) -> pd.DataFrame:
+    rows = cur.fetchall()
+    columns = [col[0] for col in cur.description] if cur.description else []
+    return pd.DataFrame(rows, columns=columns)
+
+
+def ensure_portal_schema(conn):
+    """Crea las tablas del portal según el backend configurado."""
+
+    if USE_PORTAL_POSTGRES:
+        with _portal_cursor(conn, write=True) as (_, cur):
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS portal_users(
+                    id BIGSERIAL PRIMARY KEY,
+                    rfc TEXT NOT NULL UNIQUE,
+                    password_hash TEXT NOT NULL,
+                    regimen_fiscal TEXT,
+                    calle TEXT,
+                    colonia TEXT,
+                    cp TEXT,
+                    municipio TEXT,
+                    email TEXT,
+                    telefono TEXT,
+                    permisos TEXT NOT NULL DEFAULT '[]',
+                    must_change_password BOOLEAN NOT NULL DEFAULT TRUE,
+                    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS portal_user_resets(
+                    id BIGSERIAL PRIMARY KEY,
+                    user_id BIGINT NOT NULL REFERENCES portal_users(id) ON DELETE CASCADE,
+                    token TEXT NOT NULL UNIQUE,
+                    expires_at timestamptz NOT NULL,
+                    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
+    else:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS portal_users(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                rfc TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                regimen_fiscal TEXT,
+                calle TEXT,
+                colonia TEXT,
+                cp TEXT,
+                municipio TEXT,
+                email TEXT,
+                telefono TEXT,
+                permisos TEXT NOT NULL DEFAULT '[]',
+                must_change_password INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS portal_user_resets(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                token TEXT NOT NULL UNIQUE,
+                expires_at TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(user_id) REFERENCES portal_users(id) ON DELETE CASCADE
+            )
+            """
+        )
+        conn.commit()
 
 
 # ---------- Portal Users (nueva autenticacion global) ----------
@@ -714,41 +817,42 @@ def ensure_portal_admin(conn: sqlite3.Connection) -> None:
     if not seed_rfc:
         return
 
-    cur = conn.cursor()
-    exists = cur.execute(
-        "SELECT 1 FROM portal_users WHERE rfc=?",
-        (seed_rfc,),
-    ).fetchone()
-    if exists:
-        return
+    with _portal_cursor(conn, write=True) as (_, cur):
+        cur.execute(
+            _portal_sql("SELECT 1 FROM portal_users WHERE rfc=?"),
+            (seed_rfc,),
+        )
+        if cur.fetchone():
+            return
 
-    permisos = SUPERADMIN_SEED.get("permisos") or ["admin", "traslados", "riesgos"]
-    permisos_text = _permisos_to_text(permisos)
-    must_change_password = 1 if SUPERADMIN_SEED.get("must_change_password", True) else 0
-    password_hash = _hash_password(str(SUPERADMIN_SEED.get("password_raw") or seed_rfc))
+        permisos = SUPERADMIN_SEED.get("permisos") or ["admin", "traslados", "riesgos"]
+        permisos_text = _permisos_to_text(permisos)
+        must_change_password = bool(SUPERADMIN_SEED.get("must_change_password", True))
+        password_hash = _hash_password(str(SUPERADMIN_SEED.get("password_raw") or seed_rfc))
 
-    cur.execute(
-        """
-        INSERT INTO portal_users(
-            rfc, password_hash, regimen_fiscal, calle, colonia, cp, municipio,
-            email, telefono, permisos, must_change_password
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
-        """,
-        (
-            seed_rfc,
-            password_hash,
-            SUPERADMIN_SEED.get("regimen_fiscal"),
-            SUPERADMIN_SEED.get("calle"),
-            SUPERADMIN_SEED.get("colonia"),
-            SUPERADMIN_SEED.get("cp"),
-            SUPERADMIN_SEED.get("municipio"),
-            SUPERADMIN_SEED.get("email"),
-            SUPERADMIN_SEED.get("telefono"),
-            permisos_text,
-            must_change_password,
-        ),
-    )
-    conn.commit()
+        cur.execute(
+            _portal_sql(
+                """
+                INSERT INTO portal_users(
+                    rfc, password_hash, regimen_fiscal, calle, colonia, cp, municipio,
+                    email, telefono, permisos, must_change_password
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                """
+            ),
+            (
+                seed_rfc,
+                password_hash,
+                SUPERADMIN_SEED.get("regimen_fiscal"),
+                SUPERADMIN_SEED.get("calle"),
+                SUPERADMIN_SEED.get("colonia"),
+                SUPERADMIN_SEED.get("cp"),
+                SUPERADMIN_SEED.get("municipio"),
+                SUPERADMIN_SEED.get("email"),
+                SUPERADMIN_SEED.get("telefono"),
+                permisos_text,
+                must_change_password,
+            ),
+        )
 
 
 def portal_create_user(
@@ -774,28 +878,30 @@ def portal_create_user(
         permisos_list = ["traslados"]
     permisos_text = _permisos_to_text(permisos_list)
     password_hash = _hash_password(password or norm_rfc)
-    conn.execute(
-        """
-        INSERT INTO portal_users(
-            rfc, password_hash, regimen_fiscal, calle, colonia, cp, municipio,
-            email, telefono, permisos, must_change_password
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
-        """,
-        (
-            norm_rfc,
-            password_hash,
-            regimen_fiscal,
-            calle,
-            colonia,
-            cp,
-            municipio,
-            email,
-            telefono,
-            permisos_text,
-            1 if must_change_password else 0,
-        ),
-    )
-    conn.commit()
+    with _portal_cursor(conn, write=True) as (_, cur):
+        cur.execute(
+            _portal_sql(
+                """
+                INSERT INTO portal_users(
+                    rfc, password_hash, regimen_fiscal, calle, colonia, cp, municipio,
+                    email, telefono, permisos, must_change_password
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                """
+            ),
+            (
+                norm_rfc,
+                password_hash,
+                regimen_fiscal,
+                calle,
+                colonia,
+                cp,
+                municipio,
+                email,
+                telefono,
+                permisos_text,
+                bool(must_change_password),
+            ),
+        )
 
 
 def portal_update_user(
@@ -813,48 +919,52 @@ def portal_update_user(
     must_change_password: bool | None = None,
 ) -> None:
     norm_rfc = _normalize_rfc(rfc)
-    cur = conn.cursor()
-    row = cur.execute("SELECT id FROM portal_users WHERE rfc=?", (norm_rfc,)).fetchone()
-    if not row:
-        raise ValueError("Usuario no encontrado")
-    user_id = row[0]
-    updates = []
-    params = []
-    def _set(field, value):
-        updates.append(f"{field}=?")
-        params.append(value)
-    if regimen_fiscal is not None:
-        _set("regimen_fiscal", regimen_fiscal)
-    if calle is not None:
-        _set("calle", calle)
-    if colonia is not None:
-        _set("colonia", colonia)
-    if cp is not None:
-        _set("cp", cp)
-    if municipio is not None:
-        _set("municipio", municipio)
-    if email is not None:
-        _set("email", email)
-    if telefono is not None:
-        _set("telefono", telefono)
-    if permisos is not None:
-        permisos_list = list(permisos)
-        if not permisos_list:
-            permisos_list = ["traslados"]
-        _set("permisos", _permisos_to_text(permisos_list))
-    if must_change_password is not None:
-        _set("must_change_password", 1 if must_change_password else 0)
-    if updates:
-        params.extend([datetime.now(timezone.utc).isoformat(), norm_rfc])
-        conn.execute(
-            f"""
-            UPDATE portal_users
-            SET {', '.join(updates)}, updated_at=?
-            WHERE rfc=?
-            """,
-            params,
-        )
-        conn.commit()
+    with _portal_cursor(conn, write=True) as (_, cur):
+        cur.execute(_portal_sql('SELECT id FROM portal_users WHERE rfc=?'), (norm_rfc,))
+        if not cur.fetchone():
+            raise ValueError('Usuario no encontrado')
+
+        updates: list[str] = []
+        params: list = []
+
+        def _set(field: str, value):
+            updates.append(f"{field}=?")
+            params.append(value)
+
+        if regimen_fiscal is not None:
+            _set('regimen_fiscal', regimen_fiscal)
+        if calle is not None:
+            _set('calle', calle)
+        if colonia is not None:
+            _set('colonia', colonia)
+        if cp is not None:
+            _set('cp', cp)
+        if municipio is not None:
+            _set('municipio', municipio)
+        if email is not None:
+            _set('email', email)
+        if telefono is not None:
+            _set('telefono', telefono)
+        if permisos is not None:
+            permisos_list = list(permisos)
+            if not permisos_list:
+                permisos_list = ['traslados']
+            _set('permisos', _permisos_to_text(permisos_list))
+        if must_change_password is not None:
+            _set('must_change_password', bool(must_change_password))
+
+        if updates:
+            params.extend([datetime.now(timezone.utc).isoformat(), norm_rfc])
+            cur.execute(
+                _portal_sql(
+                    f"""
+                    UPDATE portal_users
+                    SET {', '.join(updates)}, updated_at=?
+                    WHERE rfc=?
+                    """
+                ),
+                params,
+            )
 
 
 def portal_delete_users(conn: sqlite3.Connection, rfcs: Sequence[str]) -> None:
@@ -863,8 +973,11 @@ def portal_delete_users(conn: sqlite3.Connection, rfcs: Sequence[str]) -> None:
     cleaned = [_normalize_rfc(r) for r in rfcs if r]
     if not cleaned:
         return
-    conn.executemany("DELETE FROM portal_users WHERE rfc=?", [(r,) for r in cleaned])
-    conn.commit()
+    with _portal_cursor(conn, write=True) as (_, cur):
+        cur.executemany(
+            _portal_sql("DELETE FROM portal_users WHERE rfc=?"),
+            [(r,) for r in cleaned],
+        )
 
 
 def portal_list_users(conn: sqlite3.Connection) -> pd.DataFrame:
@@ -885,20 +998,26 @@ def portal_list_users(conn: sqlite3.Connection) -> pd.DataFrame:
     FROM portal_users
     ORDER BY rfc
     """
-    return pd.read_sql_query(query, conn)
+    with _portal_cursor(conn) as (_, cur):
+        cur.execute(_portal_sql(query))
+        return _portal_dataframe(cur)
 
 
 def portal_get_user(conn: sqlite3.Connection, rfc: str):
     norm_rfc = _normalize_rfc(rfc)
-    row = conn.execute(
-        """
-        SELECT id, rfc, password_hash, permisos, must_change_password,
-               regimen_fiscal, calle, colonia, cp, municipio, email, telefono
-        FROM portal_users
-        WHERE rfc=?
-        """,
-        (norm_rfc,),
-    ).fetchone()
+    with _portal_cursor(conn) as (_, cur):
+        cur.execute(
+            _portal_sql(
+                """
+                SELECT id, rfc, password_hash, permisos, must_change_password,
+                       regimen_fiscal, calle, colonia, cp, municipio, email, telefono
+                FROM portal_users
+                WHERE rfc=?
+                """
+            ),
+            (norm_rfc,),
+        )
+        row = cur.fetchone()
     if not row:
         return None
     permisos = _permisos_from_text(row[3])
@@ -926,29 +1045,33 @@ def portal_set_password(
 ) -> None:
     norm_rfc = _normalize_rfc(rfc)
     password_hash = _hash_password(new_password)
-    conn.execute(
-        """
-        UPDATE portal_users
-        SET password_hash=?, must_change_password=?, updated_at=?
-        WHERE rfc=?
-        """,
-        (
-            password_hash,
-            1 if require_change else 0,
-            datetime.now(timezone.utc).isoformat(),
-            norm_rfc,
-        ),
-    )
-    conn.execute(
-        """
-        DELETE FROM portal_user_resets
-        WHERE user_id = (
-            SELECT id FROM portal_users WHERE rfc=?
+    with _portal_cursor(conn, write=True) as (_, cur):
+        cur.execute(
+            _portal_sql(
+                """
+                UPDATE portal_users
+                SET password_hash=?, must_change_password=?, updated_at=?
+                WHERE rfc=?
+                """
+            ),
+            (
+                password_hash,
+                bool(require_change),
+                datetime.now(timezone.utc).isoformat(),
+                norm_rfc,
+            ),
         )
-        """,
-        (norm_rfc,),
-    )
-    conn.commit()
+        cur.execute(
+            _portal_sql(
+                """
+                DELETE FROM portal_user_resets
+                WHERE user_id = (
+                    SELECT id FROM portal_users WHERE rfc=?
+                )
+                """
+            ),
+            (norm_rfc,),
+        )
 
 
 def portal_reset_password_to_default(conn: sqlite3.Connection, rfc: str) -> bool:
@@ -968,14 +1091,15 @@ def _ensure_positive_ttl(minutes: int | None) -> int:
 
 
 def _generate_reset_token(conn: sqlite3.Connection) -> str:
-    while True:
-        token = secrets.token_urlsafe(24)
-        exists = conn.execute(
-            "SELECT 1 FROM portal_user_resets WHERE token=?",
-            (token,),
-        ).fetchone()
-        if not exists:
-            return token
+    with _portal_cursor(conn) as (_, cur):
+        while True:
+            token = secrets.token_urlsafe(24)
+            cur.execute(
+                _portal_sql("SELECT 1 FROM portal_user_resets WHERE token=?"),
+                (token,),
+            )
+            if not cur.fetchone():
+                return token
 
 
 def portal_create_reset_token(
@@ -991,14 +1115,16 @@ def portal_create_reset_token(
     expires_at = datetime.now(timezone.utc) + timedelta(
         minutes=_ensure_positive_ttl(ttl_minutes or DEFAULT_RESET_TOKEN_TTL_MINUTES)
     )
-    conn.execute(
-        """
-        INSERT INTO portal_user_resets(user_id, token, expires_at)
-        VALUES(?,?,?)
-        """,
-        (user["id"], token, expires_at.isoformat()),
-    )
-    conn.commit()
+    with _portal_cursor(conn, write=True) as (_, cur):
+        cur.execute(
+            _portal_sql(
+                """
+                INSERT INTO portal_user_resets(user_id, token, expires_at)
+                VALUES(?,?,?)
+                """
+            ),
+            (user["id"], token, expires_at.isoformat()),
+        )
     return token
 
 
@@ -1006,10 +1132,13 @@ def _row_to_reset_record(row) -> dict | None:
     if not row:
         return None
     expires_raw = row[3]
-    try:
-        expires = datetime.fromisoformat(expires_raw)
-    except Exception:
-        expires = None
+    if isinstance(expires_raw, datetime):
+        expires = expires_raw
+    else:
+        try:
+            expires = datetime.fromisoformat(expires_raw)
+        except Exception:
+            expires = None
     return {
         "id": row[0],
         "user_id": row[1],
@@ -1020,23 +1149,29 @@ def _row_to_reset_record(row) -> dict | None:
 
 
 def portal_get_reset_token(conn: sqlite3.Connection, token: str) -> dict | None:
-    row = conn.execute(
-        """
-        SELECT r.id, r.user_id, r.token, r.expires_at, u.rfc
-        FROM portal_user_resets r
-        JOIN portal_users u ON u.id = r.user_id
-        WHERE r.token=?
-        """,
-        (token,),
-    ).fetchone()
-    record = _row_to_reset_record(row)
-    if not record:
-        return None
-    expires = record["expires_at"]
-    if expires and expires < datetime.now(timezone.utc):
-        conn.execute("DELETE FROM portal_user_resets WHERE id=?", (record["id"],))
-        conn.commit()
-        return None
+    with _portal_cursor(conn, write=True) as (_, cur):
+        cur.execute(
+            _portal_sql(
+                """
+                SELECT r.id, r.user_id, r.token, r.expires_at, u.rfc
+                FROM portal_user_resets r
+                JOIN portal_users u ON u.id = r.user_id
+                WHERE r.token=?
+                """
+            ),
+            (token,),
+        )
+        row = cur.fetchone()
+        record = _row_to_reset_record(row)
+        if not record:
+            return None
+        expires = record["expires_at"]
+        if expires and expires < datetime.now(timezone.utc):
+            cur.execute(
+                _portal_sql("DELETE FROM portal_user_resets WHERE id=?"),
+                (record["id"],),
+            )
+            return None
     return record
 
 
@@ -1048,18 +1183,20 @@ def portal_consume_reset_token(
     record = portal_get_reset_token(conn, token)
     if not record:
         return False
-    user_row = conn.execute(
-        "SELECT rfc FROM portal_users WHERE id=?",
-        (record["user_id"],),
-    ).fetchone()
-    if not user_row:
-        conn.execute("DELETE FROM portal_user_resets WHERE id=?", (record["id"],))
-        conn.commit()
+    rfc = record.get("rfc")
+    if not rfc:
+        with _portal_cursor(conn, write=True) as (_, cur):
+            cur.execute(
+                _portal_sql("DELETE FROM portal_user_resets WHERE id=?"),
+                (record["id"],),
+            )
         return False
-    rfc = user_row[0]
     portal_set_password(conn, rfc, new_password, require_change=False)
-    conn.execute("DELETE FROM portal_user_resets WHERE id=?", (record["id"],))
-    conn.commit()
+    with _portal_cursor(conn, write=True) as (_, cur):
+        cur.execute(
+            _portal_sql("DELETE FROM portal_user_resets WHERE id=?"),
+            (record["id"],),
+        )
     return True
 
 
@@ -1069,32 +1206,39 @@ def portal_list_pending_resets(
 ) -> list[dict]:
     query = """
         SELECT r.id, r.token, r.expires_at, u.rfc
-        FROM portal_user_resets r
-        JOIN portal_users u ON u.id = r.user_id
-        WHERE (? IS NULL OR u.rfc = ?)
-        ORDER BY r.expires_at DESC
-    """
-    rows = conn.execute(query, (rfc, rfc)).fetchall()
+          FROM portal_user_resets r
+          JOIN portal_users u ON u.id = r.user_id
+          WHERE (? IS NULL OR u.rfc = ?)
+          ORDER BY r.expires_at DESC
+      """
     records: list[dict] = []
     now = datetime.now(timezone.utc)
-    for row in rows:
-        try:
-            expires = datetime.fromisoformat(row[2])
-        except Exception:
-            expires = None
-        if expires and expires < now:
-            conn.execute("DELETE FROM portal_user_resets WHERE id=?", (row[0],))
-            continue
-        records.append(
-            {
-                "id": row[0],
-                "token": row[1],
-                "expires_at": expires,
-                "rfc": row[3],
-            }
-        )
-    if rows:
-        conn.commit()
+    with _portal_cursor(conn, write=True) as (_, cur):
+        cur.execute(_portal_sql(query), (rfc, rfc))
+        rows = cur.fetchall()
+        for row in rows:
+            expires_raw = row[2]
+            if isinstance(expires_raw, datetime):
+                expires = expires_raw
+            else:
+                try:
+                    expires = datetime.fromisoformat(expires_raw)
+                except Exception:
+                    expires = None
+            if expires and expires < now:
+                cur.execute(
+                    _portal_sql("DELETE FROM portal_user_resets WHERE id=?"),
+                    (row[0],),
+                )
+                continue
+            records.append(
+                {
+                    "id": row[0],
+                    "token": row[1],
+                    "expires_at": expires,
+                    "rfc": row[3],
+                }
+            )
     return records
 
 
@@ -1104,35 +1248,41 @@ def portal_revoke_reset_tokens(
     rfc: str | None = None,
     tokens: Sequence[str] | None = None,
 ) -> None:
-    if tokens:
-        prepared = [t for t in tokens if t]
-        if prepared:
-            conn.executemany(
-                "DELETE FROM portal_user_resets WHERE token=?",
-                ((token,) for token in prepared),
+    with _portal_cursor(conn, write=True) as (_, cur):
+        if tokens:
+            prepared = [t for t in tokens if t]
+            if prepared:
+                cur.executemany(
+                    _portal_sql("DELETE FROM portal_user_resets WHERE token=?"),
+                    [(token,) for token in prepared],
+                )
+        elif rfc:
+            norm_rfc = _normalize_rfc(rfc)
+            cur.execute(
+                _portal_sql(
+                    """
+                    DELETE FROM portal_user_resets
+                    WHERE user_id = (SELECT id FROM portal_users WHERE rfc=?)
+                    """
+                ),
+                (norm_rfc,),
             )
-    elif rfc:
-        norm_rfc = _normalize_rfc(rfc)
-        conn.execute(
-            """
-            DELETE FROM portal_user_resets
-            WHERE user_id = (SELECT id FROM portal_users WHERE rfc=?)
-            """,
-            (norm_rfc,),
-        )
-    conn.commit()
 
 
 def authenticate_portal_user(conn: sqlite3.Connection, rfc: str, password: str):
     norm_rfc = _normalize_rfc(rfc)
-    row = conn.execute(
-        """
-        SELECT id, rfc, password_hash, permisos, must_change_password
-        FROM portal_users
-        WHERE rfc=?
-        """,
-        (norm_rfc,),
-    ).fetchone()
+    with _portal_cursor(conn) as (_, cur):
+        cur.execute(
+            _portal_sql(
+                """
+                SELECT id, rfc, password_hash, permisos, must_change_password
+                FROM portal_users
+                WHERE rfc=?
+                """
+            ),
+            (norm_rfc,),
+        )
+        row = cur.fetchone()
     if not row:
         return None
     is_valid, needs_rehash = _verify_password(password, row[2])
@@ -1141,13 +1291,15 @@ def authenticate_portal_user(conn: sqlite3.Connection, rfc: str, password: str):
     if needs_rehash:
         new_hash = _hash_password(password)
         try:
-            conn.execute(
-                "UPDATE portal_users SET password_hash=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                (new_hash, row[0]),
-            )
-            conn.commit()
+            with _portal_cursor(conn, write=True) as (_, cur):
+                cur.execute(
+                    _portal_sql(
+                        "UPDATE portal_users SET password_hash=?, updated_at=CURRENT_TIMESTAMP WHERE id=?"
+                    ),
+                    (new_hash, row[0]),
+                )
         except Exception:
-            conn.rollback()
+            pass
     permisos = _permisos_from_text(row[3])
     return {
         "id": row[0],

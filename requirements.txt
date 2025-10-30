@@ -3,4 +3,5 @@ pandas
 reportlab
 openpyxl
 requests
+psycopg[binary]
 xlsxwriter

@@ -18,6 +18,24 @@ GOOGLE_MAPS_API_KEY = "tu_api_key_de_google_maps"
 
 La clave debe habilitar **Maps JavaScript**, **Places**, **Directions** y **Geocoding** para que el autocompletado y las rutas funcionen.
 
+- Para persistir los usuarios del portal en un servicio administrado, define `PORTAL_DATABASE_URL` (o `DATABASE_URL`) con una cadena de conexión PostgreSQL, por ejemplo:
+
+  ```bash
+  export PORTAL_DATABASE_URL="postgresql://usuario:contraseña@host:5432/nombre_db"
+  ```
+
+  Si la variable no está presente, el portal seguirá utilizando el archivo SQLite local indicado por `DB_PATH`, lo que significa que Render u otros contenedores efímeros perderán las cuentas en cada reinicio.
+
+### Migrar los usuarios existentes a PostgreSQL
+
+1. Provisiona la base de datos (Render PostgreSQL, Neon, Supabase, etc.) y toma la URL de conexión.
+2. Define `PORTAL_DATABASE_URL` (o `DATABASE_URL`) en tu entorno local y en Render.
+3. Instala los requisitos (`pip install -r requirements.txt`), que ahora incluyen `psycopg[binary]`.
+4. Ejecuta una primera vez la aplicación o corre `python tools/migrate_portal_users.py` para copiar los usuarios registrados en `db/tolls.db` hacia la nueva instancia de PostgreSQL.
+5. Despliega; el seed del superusuario se ejecuta automáticamente solo si no encuentra el RFC configurado.
+
+> El resto de la información (rutas, tarifas, parámetros, etc.) continúa almacenándose en SQLite dentro de `db/tolls.db`. Solo las tablas `portal_users` y `portal_user_resets` se mueven a PostgreSQL.
+
 ## Dependencias
 
 Instala los requisitos con:
