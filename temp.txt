@@ -386,20 +386,15 @@ def section(title: str, total_value: float | None, body_fn=None) -> SectionOutpu
 
     toggle_key = f"section_toggle_{normalize_name(title)}"
     show_details = bool(st.session_state.get(toggle_key, False))
-    icon_char = "▲" if show_details else "▼"
+    icon_char = "" if show_details else ""
 
     header_cols = st.columns([0.75, 0.1, 0.15], gap="small")
     with header_cols[0]:
         st.markdown(f"**{title}**")
     with header_cols[1]:
-        if st.button(
-            icon_char,
-            key=f"{toggle_key}_btn",
-            help="Mostrar u ocultar desglose",
-            use_container_width=True,
-        ):
+        if st.button(icon_char, key=f"{toggle_key}_btn", help="Mostrar u ocultar desglose"):
             st.session_state[toggle_key] = not show_details
-            rerun()
+            show_details = not show_details
     total_placeholder = header_cols[2].empty()
 
     computed_total = float(total_value) if total_value is not None else 0.0
@@ -642,20 +637,10 @@ def _swap_point_data(role_a: str, role_b: str) -> None:
     if not prefix_a or not prefix_b:
         return
 
-    snapshot: dict[str, dict[str, Any]] = {
-        role: _capture_point_state(prefix) for role, prefix in role_prefix.items()
-    }
-    snapshot[role_a], snapshot[role_b] = snapshot.get(role_b, {}), snapshot.get(role_a, {})
-
-    pending: dict[str, dict[str, Any]] = {}
-    for role, prefix in role_prefix.items():
-        pending[prefix] = snapshot.get(role, {})
-
-    stop_active_now = bool(st.session_state.get(stop_state_key))
-    stop_has_data = bool(snapshot.get("stop", {}).get("_data"))
-    pending["_stop_state"] = stop_active_now or stop_has_data
-
-    st.session_state[pending_swap_key] = pending
+    pending = st.session_state.setdefault(pending_swap_key, {})
+    pending[prefix_a] = _capture_point_state(prefix_b)
+    pending[prefix_b] = _capture_point_state(prefix_a)
+    pending["_stop_state"] = bool(st.session_state.get("top_parada_data"))
 
 with st.container():
     st.markdown("<div class='top-form'>", unsafe_allow_html=True)
@@ -690,39 +675,20 @@ with st.container():
         st.markdown("<div class='address-stack'>", unsafe_allow_html=True)
 
         show_stop = bool(st.session_state.get(stop_state_key)) and not MANUAL_MODE
-        stored_roles = st.session_state.get("route_roles", ["origin", "destination"])
-        allowed_roles = ("origin", "stop", "destination")
-        route_roles = [r for r in stored_roles if r in allowed_roles]
-
-        def _ensure_role(order: list[str], role: str, *, position: int | None = None) -> None:
-            if role in order:
-                return
-            if position is None or position >= len(order):
-                order.append(role)
-                return
-            order.insert(position, role)
+        route_roles = st.session_state.get("route_roles", ["origin", "destination"])
+        allowed_roles = ["origin", "destination", "stop"]
+        route_roles = [r for r in route_roles if r in allowed_roles]
 
         if show_stop:
-            if not route_roles:
-                route_roles = ["origin", "stop", "destination"]
-            else:
-                _ensure_role(route_roles, "origin", position=0)
-                stop_position = 1 if "origin" in route_roles else 0
-                _ensure_role(route_roles, "stop", position=stop_position)
-                _ensure_role(route_roles, "destination")
+            route_roles = ["origin", "stop", "destination"]
             st.session_state.setdefault("top_parada_data", None)
             st.session_state.setdefault("top_parada_query", "")
         else:
-            route_roles = [r for r in route_roles if r in ("origin", "destination")]
-            if not route_roles:
-                route_roles = ["origin", "destination"]
-            else:
-                _ensure_role(route_roles, "origin", position=0)
-                _ensure_role(route_roles, "destination")
+            route_roles = ["origin", "destination"]
             for suffix in ("_query", "_options", "_selection", "_data"):
                 st.session_state.pop(f"top_parada{suffix}", None)
 
-        st.session_state["route_roles"] = list(route_roles)
+        st.session_state["route_roles"] = route_roles
 
         if show_stop:
             role_labels = {
@@ -758,7 +724,7 @@ with st.container():
                             upper_role = route_roles[idx - 1]
                             _swap_point_data(role, upper_role)
                             route_roles[idx - 1], route_roles[idx] = route_roles[idx], route_roles[idx - 1]
-                            st.session_state["route_roles"] = list(route_roles)
+                            st.session_state["route_roles"] = route_roles
                             rerun()
                             st.stop()
                     if down_available:
@@ -766,7 +732,7 @@ with st.container():
                             lower_role = route_roles[idx + 1]
                             _swap_point_data(role, lower_role)
                             route_roles[idx + 1], route_roles[idx] = route_roles[idx], route_roles[idx + 1]
-                            st.session_state["route_roles"] = list(route_roles)
+                            st.session_state["route_roles"] = route_roles
                             rerun()
                             st.stop()
                 st.markdown("</div>", unsafe_allow_html=True)
