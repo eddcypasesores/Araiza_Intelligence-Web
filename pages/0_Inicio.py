@@ -98,6 +98,10 @@ IMG_TRASLADO = image_src_for((
     Path("assets/traslado_inteligente_card.png"),
     Path(__file__).resolve().parent / "assets" / "traslado_inteligente_card.png",
 ))
+IMG_DIOT = image_src_for((
+    Path("assets/diot_card.png"),
+    Path(__file__).resolve().parent / "assets" / "diot_card.png",
+))
 IMG_EFOS = image_src_for((
     Path("assets/efos_card.png"),
     Path(__file__).resolve().parent / "assets" / "efos_card.png",
@@ -325,6 +329,18 @@ PRODUCTS = [
         "img": IMG_ESTADOS_CTA,
         "page": "pages/Convertidor_Estados.py",
         "key": "go_estados",
+    },
+    {
+        "title": "DIOT",
+        "desc": (
+            "Presenta tu Declaracion Informativa de Operaciones con Terceros en segundos. "
+            "Administra tarifas, trabajadores y parametria desde un solo punto y genera el TXT oficial sin errores."
+        ),
+        "bullets": [],
+        "img": IMG_DIOT,
+        "page": "pages/22_DIOT_excel_txt.py",
+        "key": "go_diot",
+        "force_logout": True,
     },
     {
         "title": "Traslado inteligente",

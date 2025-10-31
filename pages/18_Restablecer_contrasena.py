@@ -142,7 +142,7 @@ def main() -> None:
             "Ingresa tu RFC tal como esta registrado en el portal."
         )
         with st.form("reset_by_rfc_form", clear_on_submit=False):
-            rfc_input = st.text_input("RFC", value=initial_rfc, placeholder="ej. ZELE990823E20")
+            rfc_input = st.text_input("RFC", value=initial_rfc, placeholder="ej. ABCD800101XXX")
             rfc_submitted = st.form_submit_button(
                 "Restablecer al valor del RFC",
                 use_container_width=True,

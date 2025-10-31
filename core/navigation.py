@@ -1,4 +1,4 @@
-﻿"""Reusable sticky navigation bar with dropdown actions for admin sections."""
+"""Reusable sticky navigation bar with dropdown actions for admin sections."""
 
 from __future__ import annotations
 
@@ -312,6 +312,8 @@ PAGE_PARAM_NAMES: dict[str, str] = {
     "pages/18_Restablecer_contrasena.py": "Recuperar contrasena",
     "pages/19_Admin_portal.py": "Administracion del portal",
     "pages/20_Admin_login.py": "Acceso super administrador",
+    "pages/22_DIOT_excel_txt.py": "DIOT",
+    "pages/23_DIOT_login.py": "DIOT - Acceso",
 }
 
 
@@ -327,11 +329,13 @@ class DropdownAction:
 
 
 LANDING_TOPS: set[str] = {"inicio", "acerca"}
-TRASLADOS_TOPS: set[str] = {"calculadora", "tarifas", "trabajadores", "parametros"}
+TRASLADOS_TOPS: set[str] = {"calculadora"}
+DIOT_TOPS: set[str] = {"diot", "tarifas", "trabajadores", "parametros"}
 RIESGO_TOPS: set[str] = {"riesgo", "riesgo_firmes"}
 
 PRODUCT_ACTIONS: tuple[DropdownAction, ...] = (
     DropdownAction("Traslado Inteligente", "producto_traslados", "pages/1_Calculadora.py"),
+    DropdownAction("DIOT", "producto_diot", "pages/22_DIOT_excel_txt.py"),
     DropdownAction("Riesgo Fiscal", "producto_riesgo", "pages/14_Riesgo_fiscal.py"),
     DropdownAction("Lista Negra SAT", "producto_lista", "pages/14_Riesgo_fiscal.py"),
     DropdownAction("EFOS", "producto_efos", "pages/14_Riesgo_fiscal.py"),
@@ -344,6 +348,22 @@ PRODUCT_ACTIONS: tuple[DropdownAction, ...] = (
 ABOUT_ACTIONS: tuple[DropdownAction, ...] = (
     DropdownAction("Acerca de Nosotros", "acerca_resumen", "pages/16_Acerca_de_nosotros.py"),
     DropdownAction("Administrar", "acerca_admin", "pages/20_Admin_login.py"),
+)
+
+DIOT_ACTIONS: tuple[DropdownAction, ...] = (
+    DropdownAction("Tarifas - Consultar", "tarifas_consultar", "pages/2_Tarifas_consultar.py"),
+    DropdownAction("Tarifas - Agregar", "tarifas_agregar", "pages/3_Tarifas_agregar.py"),
+    DropdownAction("Tarifas - Modificar", "tarifas_modificar", "pages/4_Tarifas_modificar.py"),
+    DropdownAction("Tarifas - Eliminar", "tarifas_eliminar", "pages/5_Tarifas_eliminar.py"),
+    DropdownAction("Trabajadores - Consultar", "trabajadores_consultar", "pages/6_Usuarios_consultar.py"),
+    DropdownAction("Trabajadores - Agregar", "trabajadores_agregar", "pages/7_Usuarios_agregar.py"),
+    DropdownAction("Trabajadores - Modificar", "trabajadores_modificar", "pages/8_Usuarios_modificar.py"),
+    DropdownAction("Trabajadores - Eliminar", "trabajadores_eliminar", "pages/9_Usuarios_eliminar.py"),
+    DropdownAction("Parametros - Consultar", "parametros_consultar", "pages/10_Parametros_consultar.py"),
+    DropdownAction("Parametros - Agregar", "parametros_agregar", "pages/11_Parametros_agregar.py"),
+    DropdownAction("Parametros - Modificar", "parametros_modificar", "pages/12_Parametros_modificar.py"),
+    DropdownAction("Parametros - Eliminar", "parametros_eliminar", "pages/13_Parametros_eliminar.py"),
+    DropdownAction("Excel -> TXT (DIOT)", "diot_excel_txt", "pages/22_DIOT_excel_txt.py"),
 )
 
 
@@ -476,6 +496,8 @@ def _resolve_nav_mode(active_top: str | None) -> str:
         return "landing"
     if active_top in TRASLADOS_TOPS:
         return "traslados"
+    if active_top in DIOT_TOPS:
+        return "diot"
     if active_top in RIESGO_TOPS:
         return "riesgo"
     if active_top == "admin_portal":
@@ -484,6 +506,8 @@ def _resolve_nav_mode(active_top: str | None) -> str:
     logged_in = bool(st.session_state.get("usuario"))
     permisos = set(st.session_state.get("permisos") or [])
 
+    if logged_in and "diot" in permisos:
+        return "diot"
     if logged_in and "traslados" in permisos:
         return "traslados"
     if logged_in and "riesgos" in permisos:
@@ -520,42 +544,29 @@ def _build_nav_items(
         ]
 
     if mode == "traslados":
+        normalized_top = active_top
+        normalized_child = active_child
+        if active_top in {"tarifas", "trabajadores", "parametros"}:
+            normalized_top = "diot"
+            normalized_child = (
+                f"{active_top}_{active_child}"
+                if active_child
+                else f"{active_top}_consultar"
+            )
+
         items: list[str] = [
-            _dropdown_html(
-                label="Tarifas",
-                actions=[
-                    DropdownAction("Consultar", "consultar", "pages/2_Tarifas_consultar.py"),
-                    DropdownAction("Agregar", "agregar", "pages/3_Tarifas_agregar.py"),
-                    DropdownAction("Modificar", "modificar", "pages/4_Tarifas_modificar.py"),
-                    DropdownAction("Eliminar", "eliminar", "pages/5_Tarifas_eliminar.py"),
-                ],
-                active_top=active_top,
-                active_child=active_child,
-                top_key="tarifas",
+            _root_link_html(
+                label="Calculadora",
+                target_page="pages/1_Calculadora.py",
+                top_key="calculadora",
+                active_top=normalized_top,
             ),
             _dropdown_html(
-                label="Trabajadores",
-                actions=[
-                    DropdownAction("Consultar", "consultar", "pages/6_Usuarios_consultar.py"),
-                    DropdownAction("Agregar", "agregar", "pages/7_Usuarios_agregar.py"),
-                    DropdownAction("Modificar", "modificar", "pages/8_Usuarios_modificar.py"),
-                    DropdownAction("Eliminar", "eliminar", "pages/9_Usuarios_eliminar.py"),
-                ],
-                active_top=active_top,
-                active_child=active_child,
-                top_key="trabajadores",
-            ),
-            _dropdown_html(
-                label="Parametros",
-                actions=[
-                    DropdownAction("Consultar", "consultar", "pages/10_Parametros_consultar.py"),
-                    DropdownAction("Agregar", "agregar", "pages/11_Parametros_agregar.py"),
-                    DropdownAction("Modificar", "modificar", "pages/12_Parametros_modificar.py"),
-                    DropdownAction("Eliminar", "eliminar", "pages/13_Parametros_eliminar.py"),
-                ],
-                active_top=active_top,
-                active_child=active_child,
-                top_key="parametros",
+                label="DIOT",
+                actions=DIOT_ACTIONS,
+                active_top=normalized_top,
+                active_child=normalized_child,
+                top_key="diot",
             ),
         ]
         items.append(
@@ -563,7 +574,7 @@ def _build_nav_items(
                 label="Cerrar sesion",
                 target_page="pages/0_Inicio.py",
                 top_key="logout",
-                active_top=active_top,
+                active_top=normalized_top,
                 extra={"logout": "1"},
             )
         )
@@ -672,3 +683,5 @@ def render_nav(
     )
 
     st.markdown(markup, unsafe_allow_html=True)
+
+

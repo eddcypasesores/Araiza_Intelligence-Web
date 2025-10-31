@@ -33,7 +33,7 @@ def _page_lookup() -> Mapping[str, str]:
 
 
 def _resolve_target(label: str | None) -> str:
-    """Resolve the script path to render given the ``page`` label."""
+    """Resolve the script path to render given the `page` label."""
 
     if label:
         reverse = _page_lookup()

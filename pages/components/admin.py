@@ -11,7 +11,8 @@ import streamlit as st
 
 from core.auth import ensure_session_from_token
 from core.db import ensure_schema, get_conn
-from core.navigation import RIESGO_TOPS, TRASLADOS_TOPS, render_nav
+from core.navigation import DIOT_TOPS, RIESGO_TOPS, TRASLADOS_TOPS, render_nav
+from core.streamlit_compat import set_query_params
 
 
 def _redirect_to_login(target_page: str | None = None, switch_to_page: str = "pages/1_Calculadora.py") -> None:
@@ -33,7 +34,7 @@ def _redirect_to_login(target_page: str | None = None, switch_to_page: str = "pa
 
 
 def _ensure_permission(
-    required_permission: str,
+    required_permissions: tuple[str, ...],
     *,
     redirect_to: str | None,
     fallback_page: str,
@@ -46,7 +47,7 @@ def _ensure_permission(
         _redirect_to_login(redirect_to, switch_to_page=fallback_page)
 
     permisos = set(st.session_state.get("permisos") or [])
-    if required_permission not in permisos:
+    if not any(required in permisos for required in required_permissions):
         st.error(" No tienes permiso para acceder a esta pagina.")
         st.stop()
 
@@ -97,21 +98,38 @@ def init_admin_section(
         except ValueError:
             redirect_target = Path(caller_file).name
 
+    if active_top in DIOT_TOPS:
+        ensure_session_from_token()
+        permisos = set(st.session_state.get("permisos") or [])
+        if "diot" not in permisos:
+            params = {k: v for k, v in st.query_params.items() if k not in {"logout", "next"}}
+            if redirect_target:
+                params["next"] = redirect_target
+            try:
+                set_query_params(params)
+            except Exception:
+                pass
+            try:
+                st.switch_page("pages/23_DIOT_login.py")
+            except Exception:
+                st.page_link("pages/23_DIOT_login.py", label="Ir al login DIOT")
+            st.stop()
+
     if active_top in RIESGO_TOPS:
         _ensure_permission(
-            "riesgos",
+            ("riesgos",),
             redirect_to=redirect_target,
             fallback_page="pages/14_Riesgo_fiscal.py",
         )
     elif active_top in TRASLADOS_TOPS or active_top is None:
         _ensure_permission(
-            "traslados",
+            ("traslados",),
             redirect_to=redirect_target,
             fallback_page="pages/1_Calculadora.py",
         )
     else:
         _ensure_permission(
-            "admin",
+            ("admin",),
             redirect_to=redirect_target,
             fallback_page="pages/19_Admin_portal.py",
         )
@@ -124,5 +142,16 @@ def init_admin_section(
         except Exception:
             pass
 
-    render_nav(active_top=active_top, active_child=active_child, show_inicio=show_inicio)
+    render_top = active_top
+    render_child = active_child
+    if active_top in {"tarifas", "trabajadores", "parametros"}:
+        base = active_top or "tarifas"
+        render_top = "diot"
+        render_child = f"{base}_{active_child}" if active_child else f"{base}_consultar"
+    elif active_top == "diot" and not render_child:
+        render_child = "diot_excel_txt"
+
+    render_nav(active_top=render_top, active_child=render_child, show_inicio=show_inicio)
     return conn
+
+

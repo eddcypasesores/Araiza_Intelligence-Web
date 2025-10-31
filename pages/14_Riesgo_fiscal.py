@@ -30,7 +30,7 @@ def _render_login() -> None:
     st.caption("Valida tus credenciales para consultar el cruce de RFC con la lista negra del SAT.")
 
     with st.form("riesgo_login", clear_on_submit=False):
-        username = st.text_input("RFC", placeholder="ej. ZELE990823E20")
+        username = st.text_input("RFC", placeholder="ej. ABCD800101XXX")
         password = st.text_input("Contrasena", type="password", placeholder="********")
         col_login, col_cancel = st.columns(2)
         submitted = col_login.form_submit_button("Iniciar sesion", use_container_width=True)

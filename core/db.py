@@ -723,7 +723,7 @@ def ensure_portal_schema(conn):
 
 
 # ---------- Portal Users (nueva autenticacion global) ----------
-PORTAL_ALLOWED_MODULES: tuple[str, ...] = ("traslados", "riesgos", "admin")
+PORTAL_ALLOWED_MODULES: tuple[str, ...] = ("traslados", "riesgos", "diot", "admin")
 DEFAULT_RESET_TOKEN_TTL_MINUTES = 60
 
 SUPERADMIN_SEED: dict[str, str | bool | list[str]] = {
@@ -736,7 +736,7 @@ SUPERADMIN_SEED: dict[str, str | bool | list[str]] = {
     "municipio": "CHICOLOAPAN",
     "email": "werzl330@gmail.com",
     "telefono": "5549386304",
-    "permisos": ["admin", "traslados", "riesgos"],
+    "permisos": ["admin", "traslados", "riesgos", "diot"],
     "must_change_password": True,
 }
 

@@ -121,6 +121,31 @@ st.markdown(
       .top-form .meta-row { display:flex; gap:1rem; }
       .top-form .meta-row > div[data-testid="column"] { display:flex; }
       .top-form .meta-row > div[data-testid="column"] > div { flex:1; }
+      .calc-card__header {
+        padding:26px 32px;
+        background:linear-gradient(135deg,#3730a3,#6366f1);
+        color:#f8fafc;
+        border-radius:26px 26px 0 0;
+      }
+      .calc-card__title {
+        font-size:1.7rem;
+        font-weight:900;
+        letter-spacing:.18em;
+        text-transform:uppercase;
+        margin:0;
+      }
+      div[data-testid="stVerticalBlock"]:has(> .calc-card__header) {
+        margin-top:1.4rem;
+        border:1px solid rgba(148,163,184,0.25);
+        border-radius:26px;
+        background:#ffffff;
+        box-shadow:0 20px 44px rgba(15,23,42,0.12);
+        overflow:hidden;
+      }
+      div[data-testid="stVerticalBlock"]:has(> .calc-card__header)
+        > div[data-testid="stVerticalBlock"] {
+        padding:32px 36px 36px;
+      }
     </style>
     """,
     unsafe_allow_html=True,
@@ -151,7 +176,7 @@ def _render_login() -> None:
     st.caption("Valida tus credenciales para calcular costos, rutas y parametros de traslado.")
 
     with st.form("traslados_login", clear_on_submit=False):
-        username = st.text_input("RFC", placeholder="ej. ZELE990823E20")
+        username = st.text_input("RFC", placeholder="ej. ABCD800101XXX")
         password = st.text_input("Contrasena", type="password", placeholder="********")
         col_login, col_cancel = st.columns(2)
         submitted = col_login.form_submit_button("Iniciar sesion", use_container_width=True)
@@ -580,7 +605,10 @@ def _calculate_route(
 # ===============================
 # Encabezado + Selecciones TOP (orden solicitado)
 # ===============================
-st.markdown("<div class='hero-title'>COSTOS DE TRASLADO</div>", unsafe_allow_html=True)
+st.markdown(
+    "<div class='calc-card__header'><span class='calc-card__title'>COSTOS DE TRASLADO</span></div>",
+    unsafe_allow_html=True,
+)
 
 clases = ["MOTO", "AUTOMOVIL", "B2", "B3", "B4", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9"]
 default_idx = clases.index("T5")
@@ -830,7 +858,6 @@ with st.container():
 
         st.markdown("</div>", unsafe_allow_html=True)
 
-    st.markdown("</div>", unsafe_allow_html=True)
 total_banner = st.container()
 
 usar_parada = bool(st.session_state.get(stop_state_key)) and not MANUAL_MODE

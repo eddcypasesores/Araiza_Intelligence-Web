@@ -25,12 +25,13 @@ from core.db import (
     portal_update_user,
 )
 from core.navigation import render_nav
-from core.streamlit_compat import rerun
+from core.streamlit_compat import rerun, set_query_params
 
 _MODULE_LABEL_OVERRIDES = {
     "traslados": "Traslados",
     "riesgos": "Riesgo Fiscal",
     "admin": "Administracion",
+    "diot": "DIOT",
 }
 
 
@@ -79,6 +80,13 @@ def _display_users_table(conn: sqlite3.Connection) -> None:
     if df.empty:
         st.info("No hay usuarios registrados.")
         return
+    toast = st.session_state.pop("_admin_toast", None)
+    if toast:
+        level, message = toast
+        if level == "success":
+            st.success(message)
+        else:
+            st.error(message)
     df = df.copy()
     df["permisos"] = df["permisos"].apply(
         lambda raw: ", ".join(LABEL_BY_VALUE.get(p, p) for p in _parse_permissions(raw)) or "-"
@@ -106,7 +114,7 @@ def _display_users_table(conn: sqlite3.Connection) -> None:
 def _create_user(conn: sqlite3.Connection) -> None:
     st.subheader("Crear usuario")
     with st.form("create_portal_user", clear_on_submit=False):
-        rfc = st.text_input("RFC*", placeholder="ej. ZELE990823E20")
+        rfc = st.text_input("RFC*", placeholder="ej. ABCD800101XXX")
         regimen = st.text_input("Regimen fiscal")
         calle = st.text_input("Calle")
         colonia = st.text_input("Colonia")
@@ -142,10 +150,18 @@ def _create_user(conn: sqlite3.Connection) -> None:
             permisos=permisos,
             must_change_password=True,
         )
-        st.success("Usuario creado. La contrasena inicial es el mismo RFC (mayusculas).")
+        st.session_state["_admin_toast"] = (
+            "success",
+            "Usuario creado. La contrasena inicial es el mismo RFC (mayusculas).",
+        )
+        st.query_params.clear()
+        st.query_params["view"] = "consultar"
         rerun()
     except Exception as exc:
-        st.error(f"No fue posible crear el usuario: {exc}")
+        st.session_state["_admin_toast"] = ("error", f"No fue posible crear el usuario: {exc}")
+        st.query_params.clear()
+        st.query_params["view"] = "consultar"
+        rerun()
 
 
 def _select_existing_user(conn: sqlite3.Connection):
@@ -202,10 +218,15 @@ def _edit_user(conn: sqlite3.Connection) -> None:
         nueva_contrasena = nueva_contrasena.strip()
         if nueva_contrasena:
             portal_set_password(conn, record["rfc"], nueva_contrasena, require_change=must_change)
-        st.success("Usuario actualizado correctamente.")
+        st.session_state["_admin_toast"] = ("success", "Usuario actualizado correctamente.")
+        st.query_params.clear()
+        st.query_params["view"] = "consultar"
         rerun()
     except Exception as exc:
-        st.error(f"No fue posible actualizar el usuario: {exc}")
+        st.session_state["_admin_toast"] = ("error", f"No fue posible actualizar el usuario: {exc}")
+        st.query_params.clear()
+        st.query_params["view"] = "consultar"
+        rerun()
 
 
 def _delete_users(conn: sqlite3.Connection) -> None:
@@ -221,10 +242,15 @@ def _delete_users(conn: sqlite3.Connection) -> None:
     if st.button("Eliminar seleccionados", type="primary", use_container_width=True):
         try:
             portal_delete_users(conn, seleccion)
-            st.success("Usuarios eliminados.")
+            st.session_state["_admin_toast"] = ("success", "Usuarios eliminados.")
+            st.query_params.clear()
+            st.query_params["view"] = "consultar"
             rerun()
         except Exception as exc:
-            st.error(f"No fue posible eliminar usuarios: {exc}")
+            st.session_state["_admin_toast"] = ("error", f"No fue posible eliminar usuarios: {exc}")
+            st.query_params.clear()
+            st.query_params["view"] = "consultar"
+            rerun()
 
 
 def _reset_passwords(conn: sqlite3.Connection) -> None:
@@ -241,11 +267,18 @@ def _reset_passwords(conn: sqlite3.Connection) -> None:
         try:
             for rfc in seleccion:
                 portal_set_password(conn, rfc, rfc.strip().upper(), require_change=True)
-            st.success(
-                "Contrasenas restablecidas. El RFC es la contrasena temporal y deberan cambiarla en el siguiente ingreso."
+            st.session_state["_admin_toast"] = (
+                "success",
+                "Contrasenas restablecidas. El RFC es la contrasena temporal y deberan cambiarla en el siguiente ingreso.",
             )
+            st.query_params.clear()
+            st.query_params["view"] = "consultar"
+            rerun()
         except Exception as exc:
-            st.error(f"No fue posible restablecer contrasenas: {exc}")
+            st.session_state["_admin_toast"] = ("error", f"No fue posible restablecer contrasenas: {exc}")
+            st.query_params.clear()
+            st.query_params["view"] = "consultar"
+            rerun()
 
 
 def _manage_recovery_tokens(conn: sqlite3.Connection) -> None:
@@ -401,3 +434,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

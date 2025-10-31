@@ -128,8 +128,8 @@ _LOGIN_CSS = """
 def _inject_login_css() -> None:
     """Ensure the shared login CSS is loaded once per run."""
 
-    if st.session_state.get(_CSS_KEY):
-        return
+    # Reapply the CSS on every rerun; Streamlit rebuilds the DOM, so skipping
+    # this step would leave the page with the default theme after form actions.
     st.session_state[_CSS_KEY] = True
     st.markdown(_LOGIN_CSS, unsafe_allow_html=True)
 

@@ -59,7 +59,7 @@ if view not in VALID_VIEWS:
     view = "consultar"
     st.session_state[VIEW_KEY] = view
 
-render_nav(active_top="parametros", active_child=view)
+render_nav(active_top="diot", active_child=f"parametros_{view}")
 
 VIEW_TITLES = {
     "consultar": "📊 Consultar versiones de parámetros",

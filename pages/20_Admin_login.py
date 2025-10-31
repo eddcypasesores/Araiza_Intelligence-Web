@@ -34,7 +34,7 @@ st.caption(
 )
 
 with st.form("super_admin_login", clear_on_submit=False):
-    admin_rfc = st.text_input("RFC", placeholder="ej. ADMINISTRADOR")
+    admin_rfc = st.text_input("RFC", placeholder="ej. ABCD800101XXX")
     admin_password = st.text_input("Contrasena", type="password", placeholder="********")
     col_login, col_cancel = st.columns(2)
     submitted = col_login.form_submit_button("Iniciar sesion", use_container_width=True)
