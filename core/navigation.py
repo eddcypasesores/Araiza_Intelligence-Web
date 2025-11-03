@@ -305,10 +305,13 @@ PAGE_PARAM_NAMES: dict[str, str] = {
     "pages/11_Parametros_agregar.py": "Parametros - Agregar",
     "pages/12_Parametros_modificar.py": "Parametros - Modificar",
     "pages/13_Parametros_eliminar.py": "Parametros - Eliminar",
-    "pages/14_Riesgo_fiscal.py": "Riesgo fiscal",
-    "pages/15_Lista_negra_Sat.py": "Lista negra SAT - Cruce de RFC",
+    "pages/14_Riesgo_fiscal.py": "Monitoreo EFOS - Acceso",
+    "pages/15_Lista_negra_Sat.py": "Monitoreo EFOS - Cruce de RFC",
     "pages/16_Acerca_de_nosotros.py": "Acerca de Nosotros",
-    "pages/17_Archivo_firmes.py": "Archivo Firmes",
+    "pages/17_Archivo_firmes.py": "Monitoreo EFOS - Archivo Firmes",
+    "pages/Cedula_Impuestos.py": "Cedula de impuestos - Acceso",
+    "pages/Cedula_Impuestos_inicio.py": "Cedula de impuestos - Inicio",
+    "pages/Cedula_Actualizacion_perdidas.py": "Cedula - Actualizacion y Amortizacion de perdidas",
     "pages/18_Restablecer_contrasena.py": "Recuperar contrasena",
     "pages/19_Admin_portal.py": "Administracion del portal",
     "pages/20_Admin_login.py": "Acceso super administrador",
@@ -329,20 +332,21 @@ class DropdownAction:
 
 
 LANDING_TOPS: set[str] = {"inicio", "acerca"}
-TRASLADOS_TOPS: set[str] = {"calculadora"}
+TRASLADOS_TOPS: set[str] = {"calculadora", "trabajadores", "tarifas", "parametros"}
 DIOT_TOPS: set[str] = {"diot", "tarifas", "trabajadores", "parametros"}
-RIESGO_TOPS: set[str] = {"riesgo", "riesgo_firmes"}
+MONITOREO_TOPS: set[str] = {"monitoreo", "monitoreo_firmes"}
+CEDULA_TOPS: set[str] = {"cedula"}
 
 PRODUCT_ACTIONS: tuple[DropdownAction, ...] = (
     DropdownAction("Traslado Inteligente", "producto_traslados", "pages/1_Calculadora.py"),
     DropdownAction("DIOT", "producto_diot", "pages/22_DIOT_excel_txt.py"),
-    DropdownAction("Riesgo Fiscal", "producto_riesgo", "pages/14_Riesgo_fiscal.py"),
-    DropdownAction("Lista Negra SAT", "producto_lista", "pages/14_Riesgo_fiscal.py"),
-    DropdownAction("EFOS", "producto_efos", "pages/14_Riesgo_fiscal.py"),
+    DropdownAction("Monitoreo especializado de EFOS", "producto_monitoreo", "pages/14_Riesgo_fiscal.py"),
+    DropdownAction("Cedula de impuestos", "producto_cedula", "pages/Cedula_Impuestos.py"),
+    DropdownAction("Lista Negra SAT", "producto_lista", "pages/15_Lista_negra_Sat.py"),
+    DropdownAction("Archivo Firmes", "producto_firmes", "pages/17_Archivo_firmes.py"),
     DropdownAction("Descarga masiva de XML", "producto_xml", "pages/14_Riesgo_fiscal.py"),
     DropdownAction("Generador de Polizas", "producto_polizas", "pages/XX_Generador_polizas.py"),
     DropdownAction("Convertidor de Estados de Cuenta", "producto_estados", "pages/XX_Convertidor_estados.py"),
-    DropdownAction("Cedula de Impuestos", "producto_cedula", "pages/XX_Cedula_impuestos.py"),
 )
 
 ABOUT_ACTIONS: tuple[DropdownAction, ...] = (
@@ -509,8 +513,10 @@ def _resolve_nav_mode(active_top: str | None) -> str:
         return "traslados"
     if active_top in DIOT_TOPS:
         return "diot"
-    if active_top in RIESGO_TOPS:
-        return "riesgo"
+    if active_top in MONITOREO_TOPS:
+        return "monitoreo"
+    if active_top in CEDULA_TOPS:
+        return "cedula"
     if active_top == "admin_portal":
         return "portal_admin"
 
@@ -522,7 +528,9 @@ def _resolve_nav_mode(active_top: str | None) -> str:
     if logged_in and "traslados" in permisos:
         return "traslados"
     if logged_in and "riesgos" in permisos:
-        return "riesgo"
+        return "monitoreo"
+    if logged_in and "cedula" in permisos:
+        return "cedula"
     if logged_in and "admin" in permisos:
         return "portal_admin"
     return "publico"
@@ -556,7 +564,7 @@ def _build_nav_items(
 
     if mode == "traslados":
         current_child: str | None = None
-        if active_top in {"tarifas", "trabajadores", "parametros"}:
+        if active_top in {"trabajadores", "tarifas", "parametros"}:
             current_child = (
                 f"{active_top}_{active_child}"
                 if active_child
@@ -564,8 +572,14 @@ def _build_nav_items(
             )
 
         items: list[str] = [
+            _root_link_html(
+                label="Calculadora",
+                target_page="pages/1_Calculadora.py",
+                top_key="calculadora",
+                active_top=active_top,
+            ),
             _dropdown_html(
-                label="Traslados",
+                label="Trabajadores",
                 actions=TRASLADOS_ACTIONS,
                 active_top=active_top,
                 active_child=current_child,
@@ -585,12 +599,6 @@ def _build_nav_items(
                 active_child=current_child,
                 top_key="parametros",
             ),
-            _root_link_html(
-                label="Calculadora",
-                target_page="pages/1_Calculadora.py",
-                top_key="calculadora",
-                active_top=active_top,
-            ),
         ]
         items.append(
             _root_link_html(
@@ -603,23 +611,40 @@ def _build_nav_items(
         )
         return items
 
-    if mode == "riesgo":
+    if mode == "monitoreo":
         return [
             _root_link_html(
-                label="Lista negra SAT",
+                label="Monitoreo EFOS",
                 target_page="pages/15_Lista_negra_Sat.py",
-                top_key="riesgo",
+                top_key="monitoreo",
                 active_top=active_top,
             ),
             _root_link_html(
                 label="Archivo Firmes",
                 target_page="pages/17_Archivo_firmes.py",
-                top_key="riesgo_firmes",
+                top_key="monitoreo_firmes",
                 active_top=active_top,
             ),
             _root_link_html(
                 label="Cerrar sesion",
                 target_page="pages/14_Riesgo_fiscal.py",
+                top_key="logout",
+                active_top=active_top,
+                extra={"logout": "1"},
+            ),
+        ]
+
+    if mode == "cedula":
+        return [
+            _root_link_html(
+                label="Cédula de impuestos",
+                target_page="pages/Cedula_Impuestos_inicio.py",
+                top_key="cedula",
+                active_top=active_top,
+            ),
+            _root_link_html(
+                label="Cerrar sesion",
+                target_page="pages/Cedula_Impuestos.py",
                 top_key="logout",
                 active_top=active_top,
                 extra={"logout": "1"},
@@ -706,5 +731,3 @@ def render_nav(
     )
 
     st.markdown(markup, unsafe_allow_html=True)
-
-

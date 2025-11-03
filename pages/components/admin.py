@@ -11,23 +11,29 @@ import streamlit as st
 
 from core.auth import ensure_session_from_token
 from core.db import ensure_schema, get_conn
-from core.navigation import DIOT_TOPS, RIESGO_TOPS, TRASLADOS_TOPS, render_nav
-from core.streamlit_compat import set_query_params
+from core.navigation import CEDULA_TOPS, DIOT_TOPS, MONITOREO_TOPS, TRASLADOS_TOPS, render_nav
+from core.streamlit_compat import set_query_params, normalize_page_path
 
 
-def _redirect_to_login(target_page: str | None = None, switch_to_page: str = "pages/1_Calculadora.py") -> None:
+def _redirect_to_login(
+    target_page: str | None = None,
+    switch_to_page: str = "pages/1_Calculadora.py",
+    *,
+    remember_target: bool = True,
+) -> None:
     """Redirige al login en caso de que la sesion no sea valida."""
 
     st.warning(" Debes iniciar sesion primero.")
+    target_page = normalize_page_path(target_page)
     params = {k: v for k, v in st.query_params.items() if k not in {"logout", "next"}}
-    if target_page:
+    if remember_target and target_page:
         params["next"] = target_page
     try:
         st.experimental_set_query_params(**params)
     except Exception:
         pass
     try:
-        st.switch_page(switch_to_page)
+        st.switch_page(normalize_page_path(switch_to_page) or switch_to_page)
     except Exception:
         st.stop()
     st.stop()
@@ -38,13 +44,18 @@ def _ensure_permission(
     *,
     redirect_to: str | None,
     fallback_page: str,
+    remember_target: bool = True,
 ) -> None:
     """Ensure the logged-in user has the required permission for the module."""
 
     ensure_session_from_token()
 
     if "usuario" not in st.session_state:
-        _redirect_to_login(redirect_to, switch_to_page=fallback_page)
+        _redirect_to_login(
+            redirect_to,
+            switch_to_page=fallback_page,
+            remember_target=remember_target,
+        )
 
     permisos = set(st.session_state.get("permisos") or [])
     if not any(required in permisos for required in required_permissions):
@@ -94,11 +105,12 @@ def init_admin_section(
     caller_file = inspect.stack()[1].frame.f_globals.get("__file__")
     if caller_file:
         try:
-            redirect_target = str(Path(caller_file).resolve().relative_to(Path.cwd()))
+            redirect_target = Path(caller_file).resolve().relative_to(Path.cwd()).as_posix()
         except ValueError:
             redirect_target = Path(caller_file).name
+        redirect_target = normalize_page_path(redirect_target)
 
-    if active_top in DIOT_TOPS:
+    if active_top == "diot":
         ensure_session_from_token()
         permisos = set(st.session_state.get("permisos") or [])
         if "diot" not in permisos:
@@ -115,18 +127,29 @@ def init_admin_section(
                 st.page_link("pages/23_DIOT_login.py", label="Ir al login DIOT")
             st.stop()
 
-    if active_top in RIESGO_TOPS:
+    if active_top in MONITOREO_TOPS:
+        if active_top != "monitoreo_firmes":
+            _ensure_permission(
+                ("riesgos",),
+                redirect_to=redirect_target,
+                fallback_page="pages/14_Riesgo_fiscal.py",
+                remember_target=False,
+            )
+    elif active_top in CEDULA_TOPS:
         _ensure_permission(
-            ("riesgos",),
+            ("cedula",),
             redirect_to=redirect_target,
-            fallback_page="pages/14_Riesgo_fiscal.py",
+            fallback_page="pages/Cedula_Impuestos.py",
+            remember_target=False,
         )
-    elif active_top in TRASLADOS_TOPS or active_top is None:
-        _ensure_permission(
-            ("traslados",),
-            redirect_to=redirect_target,
-            fallback_page="pages/1_Calculadora.py",
-        )
+    elif active_top in TRASLADOS_TOPS or active_top is None or active_top in {"tarifas", "trabajadores", "parametros"}:
+        if active_top not in {"tarifas", "trabajadores", "parametros"}:
+            _ensure_permission(
+                ("traslados",),
+                redirect_to=redirect_target,
+                fallback_page="pages/1_Calculadora.py",
+                remember_target=False,
+            )
     else:
         _ensure_permission(
             ("admin",),
@@ -146,12 +169,9 @@ def init_admin_section(
     render_child = active_child
     if active_top in {"tarifas", "trabajadores", "parametros"}:
         base = active_top or "tarifas"
-        render_top = "diot"
         render_child = f"{base}_{active_child}" if active_child else f"{base}_consultar"
-    elif active_top == "diot" and not render_child:
+    if active_top == "diot" and not render_child:
         render_child = "diot_excel_txt"
 
     render_nav(active_top=render_top, active_child=render_child, show_inicio=show_inicio)
     return conn
-
-

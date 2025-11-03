@@ -1,4 +1,4 @@
-"""Gestion del archivo Firmes para el modulo de Riesgo Fiscal."""
+"""Gestion del archivo Firmes para el modulo de Monitoreo especializado de EFOS."""
 
 from __future__ import annotations
 
@@ -57,8 +57,8 @@ def _enforce_password_change(conn) -> None:
         st.stop()
 
 conn = init_admin_section(
-    page_title="Archivo Firmes - Riesgo Fiscal",
-    active_top="riesgo_firmes",
+    page_title="Archivo Firmes - Monitoreo especializado de EFOS",
+    active_top="monitoreo_firmes",
     layout="wide",
     show_inicio=False,
     enable_foreign_keys=False,

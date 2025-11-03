@@ -723,7 +723,7 @@ def ensure_portal_schema(conn):
 
 
 # ---------- Portal Users (nueva autenticacion global) ----------
-PORTAL_ALLOWED_MODULES: tuple[str, ...] = ("traslados", "riesgos", "diot", "admin")
+PORTAL_ALLOWED_MODULES: tuple[str, ...] = ("traslados", "riesgos", "diot", "cedula", "admin")
 DEFAULT_RESET_TOKEN_TTL_MINUTES = 60
 
 SUPERADMIN_SEED: dict[str, str | bool | list[str]] = {
@@ -736,7 +736,7 @@ SUPERADMIN_SEED: dict[str, str | bool | list[str]] = {
     "municipio": "CHICOLOAPAN",
     "email": "werzl330@gmail.com",
     "telefono": "5549386304",
-    "permisos": ["admin", "traslados", "riesgos", "diot"],
+    "permisos": ["admin", "traslados", "riesgos", "diot", "cedula"],
     "must_change_password": True,
 }
 
@@ -825,7 +825,7 @@ def ensure_portal_admin(conn: sqlite3.Connection) -> None:
         if cur.fetchone():
             return
 
-        permisos = SUPERADMIN_SEED.get("permisos") or ["admin", "traslados", "riesgos"]
+        permisos = SUPERADMIN_SEED.get("permisos") or ["admin", "traslados", "riesgos", "diot", "cedula"]
         permisos_text = _permisos_to_text(permisos)
         must_change_password = bool(SUPERADMIN_SEED.get("must_change_password", True))
         password_hash = _hash_password(str(SUPERADMIN_SEED.get("password_raw") or seed_rfc))

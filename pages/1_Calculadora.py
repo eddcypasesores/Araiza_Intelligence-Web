@@ -36,7 +36,7 @@ from core.maps import GoogleMapsClient, GoogleMapsError
 from core.navigation import render_nav
 from core.flash import consume_flash, set_flash
 from core.login_ui import render_login_header, render_token_reset_section
-from core.streamlit_compat import rerun, set_query_params
+from core.streamlit_compat import rerun, set_query_params, normalize_page_path
 
 # ===============================
 # Configuracion de pagina + CSS
@@ -170,6 +170,7 @@ def _render_login() -> None:
         redirect_target = raw_next or None
     else:
         redirect_target = None
+    redirect_target = normalize_page_path(redirect_target)
 
     render_login_header("Iniciar sesion", subtitle="Acceso Traslado Inteligente")
 

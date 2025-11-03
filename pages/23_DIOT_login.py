@@ -8,7 +8,7 @@ from core.auth import ensure_session_from_token, persist_login
 from core.db import ensure_schema, get_conn, authenticate_portal_user
 from core.flash import consume_flash, set_flash
 from core.login_ui import render_login_header, render_token_reset_section
-from core.streamlit_compat import rerun, set_query_params
+from core.streamlit_compat import rerun, set_query_params, normalize_page_path
 
 def _redirect_if_authenticated() -> None:
     permisos = set(st.session_state.get("permisos") or [])
@@ -33,6 +33,7 @@ def main() -> None:
         redirect_target = raw_next or None
     else:
         redirect_target = None
+    redirect_target = normalize_page_path(redirect_target)
 
     render_login_header("Acceso DIOT", subtitle="Inicia sesion para utilizar las herramientas DIOT")
 

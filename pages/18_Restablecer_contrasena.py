@@ -120,7 +120,7 @@ def main() -> None:
                         st.error("El token es invalido o ya fue utilizado.")
                     else:
                         st.success("Tu contrasena se actualizo correctamente. Usa la nueva contrasena al ingresar.")
-                        st.info("Regresa al modulo correspondiente (Traslados o Riesgo Fiscal) para iniciar sesion.")
+                        st.info("Regresa al modulo correspondiente (Traslados o Monitoreo especializado de EFOS) para iniciar sesion.")
                         remaining = {
                             k: v
                             for k, v in st.query_params.items()

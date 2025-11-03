@@ -54,4 +54,4 @@ pip install -r requirements.txt
 
 - Desde `pages/19_Admin_portal.py` (pestaña **Recuperacion**) un super administrador puede generar enlaces temporales (token) y revocar los que sigan activos.
 - El formulario publico `pages/18_Restablecer_contrasena.py` permite capturar el token y definir una nueva contrasena valida.
-- Las pantallas de ingreso de Traslados y Riesgos ofrecen un acceso directo a dicho formulario y un restablecimiento rapido al RFC como alternativa de emergencia.
+- Las pantallas de ingreso de Traslados y Monitoreo EFOS ofrecen un acceso directo a dicho formulario y un restablecimiento rapido al RFC como alternativa de emergencia.

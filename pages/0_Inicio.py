@@ -1,4 +1,4 @@
-﻿# pages/0_Inicio.py — Tarjetas alternadas (zigzag) 100% clickeables con verificación de páginas (imágenes 16:9)
+# pages/0_Inicio.py - Tarjetas alternadas (zigzag) 100% clickeables con verificacion de paginas (imagenes 16:9)
 from __future__ import annotations
 from pathlib import Path
 from urllib.parse import urlencode
@@ -6,13 +6,13 @@ import html
 
 import streamlit as st
 
-# --- dependencias del proyecto (ajusta si tu módulo se llama distinto) ---
+# --- dependencias del proyecto (ajusta si tu mdulo se llama distinto) ---
 from core.auth import ensure_session_from_token
 from core.navigation import PAGE_PARAM_NAMES, render_nav
 from pages.components.hero import first_image_base64, inject_hero_css
 
 # -------------------------------------------------------------------------
-# Configuración de página
+# Configuracin de p!gina
 # -------------------------------------------------------------------------
 st.set_page_config(
     page_title="Inicio - Araiza Intelligence",
@@ -21,36 +21,36 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
-# --- Sesión / estilos base ---
+# --- Sesin / estilos base ---
 ensure_session_from_token()
 inject_hero_css()
 
-ROOT = Path(__file__).resolve().parent.parent     # carpeta raíz del proyecto (donde está app.py)
+ROOT = Path(__file__).resolve().parent.parent     # carpeta raz del proyecto (donde est! app.py)
 PAGES_DIR = ROOT / "pages"
 
 # -------------------------------------------------------------------------
-# Helpers de imágenes y páginas
+# Helpers de im!genes y p!ginas
 # -------------------------------------------------------------------------
 def image_src_for(candidates: tuple[Path, ...]) -> str | None:
-    """Devuelve una data URI base64 válida para <img src="..."> o None."""
+    """Devuelve una data URI base64 v!lida para <img src="..."> o None."""
     return first_image_base64(candidates)
 
 def page_exists(rel_page: str) -> bool:
     """
-    Verifica que el archivo exista respecto a la raíz del proyecto.
+    Verifica que el archivo exista respecto a la raz del proyecto.
     Acepta valores como 'app.py' o 'pages/1_Calculadora.py'.
     """
     p = (ROOT / rel_page).resolve()
     try:
-        # Evita salirte del proyecto con rutas extrañas
+        # Evita salirte del proyecto con rutas extraas
         p.relative_to(ROOT)
     except Exception:
         return False
     return p.is_file()
 
-def _product_href(script_path: str, *, force_logout: bool = False) -> str:
+def _product_href(script_path: str, *, force_logout: bool = False, label_override: str | None = None) -> str:
     """Construye un href absoluto para el multipage actual."""
-    label = PAGE_PARAM_NAMES.get(script_path)
+    label = label_override or PAGE_PARAM_NAMES.get(script_path)
     if label is None:
         label = script_path.replace("pages/", "").replace(".py", "").strip()
     params: dict[str, str] = {"page": label or script_path}
@@ -64,8 +64,8 @@ def _product_href(script_path: str, *, force_logout: bool = False) -> str:
 def as_html_desc(text: str) -> str:
     """
     Convierte texto 'plano' de Word a HTML simple:
-    - Respeta párrafos (doble salto = <br><br>, salto simple = espacio)
-    - Detecta viñetas que empiezan con '• ' y arma un <ul><li>...</li></ul>
+    - Respeta p!rrafos (doble salto = <br><br>, salto simple = espacio)
+    - Detecta vietas que empiezan con ' ' y arma un <ul><li>...</li></ul>
     - Escapa cualquier '<' '>' que viniera del clipboard
     """
     if not text:
@@ -74,12 +74,12 @@ def as_html_desc(text: str) -> str:
     t = text.replace("\r\n", "\n").replace("\r", "\n").strip()
 
     lines = [ln.strip() for ln in t.split("\n")]
-    bullet_lines = [ln[2:].strip() for ln in lines if ln.startswith("• ")]
-    non_bullet = [ln for ln in lines if not ln.startswith("• ") and ln != ""]
+    bullet_lines = [ln[2:].strip() for ln in lines if ln.startswith(" ")]
+    non_bullet = [ln for ln in lines if not ln.startswith(" ") and ln != ""]
 
     parts = []
     if non_bullet:
-        # Une líneas en párrafos simples
+        # Une lneas en p!rrafos simples
         para = html.escape("\n".join(non_bullet)).replace("\n\n", "<br><br>").replace("\n", " ")
         parts.append(f'<p class="card-desc">{para}</p>')
     if bullet_lines:
@@ -88,7 +88,7 @@ def as_html_desc(text: str) -> str:
     return "".join(parts)
 
 # -------------------------------------------------------------------------
-# Imágenes (candidatos en /assets; ajusta nombres si usas otros)
+# Im!genes (candidatos en /assets; ajusta nombres si usas otros)
 # -------------------------------------------------------------------------
 IMG_RIESGO = image_src_for((
     Path("assets/riesgo_cover.png"),
@@ -140,7 +140,7 @@ st.markdown("""
   max-width: 1200px !important; margin:0 auto !important;
 }
 
-/* Título GRANDE */
+/* Ttulo GRANDE */
 .landing-title{
   font-weight:900; 
   font-size: clamp(32px, 3.6vw, 44px); 
@@ -150,7 +150,7 @@ st.markdown("""
   margin: 0 0 18px;
 }
 
-/* GRID: más aire entre tarjetas */
+/* GRID: m!s aire entre tarjetas */
 .cards-grid{
   display:grid;
   grid-template-columns: repeat(2, minmax(0,1fr));
@@ -236,7 +236,7 @@ st.markdown("""
   cursor:pointer;
 }
 
-/* Estado deshabilitado (página no existe) */
+/* Estado deshabilitado (p!gina no existe) */
 .card-split.is-disabled{ cursor:not-allowed; }
 .card-split.is-disabled:hover{ transform:none; box-shadow:0 8px 24px rgba(2,6,23,.06); }
 .badge{
@@ -248,7 +248,7 @@ st.markdown("""
 /* Responsive */
 @media (max-width: 720px){
   .card-split, .card-split.rev{ flex-direction:column; }
-  .card-media{ flex: none; }  /* ancho = 100% => altura automática según 16:9 */
+  .card-media{ flex: none; }  /* ancho = 100% => altura autom!tica segn 16:9 */
 }
 </style>
 """, unsafe_allow_html=True)
@@ -258,60 +258,60 @@ st.markdown("""
 # -------------------------------------------------------------------------
 PRODUCTS = [
     {
-        "title": "Cédula de impuestos para cierre anual",
+        "title": "Cedula de impuestos para cierre anual",
         "desc": (
-            "Optimiza la preparación de la declaración anual de tu empresa con nuestro Papel de Trabajo para Personas Morales en el Régimen General.\n\n"
-            "Facilita el cálculo y la conciliación de ingresos, deducciones, coeficiente de utilidad, PTU y otros aspectos fiscales clave como:\n"
-            "• Formatos estructurados en Excel.\n"
-            "• Ahorrar tiempo\n"
-            "• Minimiza errores\n"
-            "• Y cumple con tus obligaciones fiscales de manera eficiente."
+            "Optimiza la preparacion de la declaracion anual de tu empresa con nuestro Papel de Trabajo para Personas Morales en el Regimen General.\n\n"
+            "Facilita el calculo y la conciliacion de ingresos, deducciones, coeficiente de utilidad, PTU y otros aspectos fiscales clave como:\n"
+            "- Formatos estructurados en Excel.\n"
+            "- Ahorrar tiempo\n"
+            "- Minimiza errores\n"
+            "- Y cumple con tus obligaciones fiscales de manera eficiente."
         ),
-        "bullets": [],  # no pintamos <ul> vacío
+        "bullets": [],  # no pintamos <ul> vacio
         "img": IMG_CEDULA,
         "page": "pages/Cedula_Impuestos.py",
+        "page_label": "Cedula de impuestos - Acceso",
         "key": "go_cedula",
-        "force_logout": True,
-    },
-    {
-        "title": "Riesgo fiscal sin sobresaltos",
-        "desc": (
-            "Evita multas y sanciones ante el SAT analizando automáticamente tus CFDI's para identificar inconsistencias, errores "
-            "y otros factores en el timbrado que podrían generar problemas fiscales.\n\n"
-            "Riesgos de ISR\n"
-            "Riesgos de PTU\n"
-            "Riesgos de Impuestos Trasladados\n"
-            "Riesgos de Multa\n"
-            "Riesgos de Auditoría"
-        ),
-        "bullets": [],
-        "img": IMG_RIESGO,
-        "page": "pages/14_Riesgo_fiscal.py",
-        "key": "go_riesgo",
         "force_logout": True,
     },
     {
         "title": "Monitoreo especializado de EFOS",
         "desc": (
-            "¿Sabes si la empresa con la que trabajas aparece como EFOS?\n\n"
-            "¡No pongas en riesgo tu negocio! Trabajar con una empresa incluida en la lista de EFOS puede generar sanciones y problemas fiscales. "
-            "Consulta aquí el listado oficial del SAT y verifica a tus proveedores antes de realizar operaciones y evita:\n"
-            "• Multas y recargos\n"
-            "• Pérdida de deducciones fiscales\n"
-            "• Auditorías y revisiones fiscales\n"
-            "• Problemas legales en casos graves, pueden derivar en responsabilidades penales."
+            "?Sabes si la empresa con la que trabajas aparece como EFOS?\n\n"
+            "!No pongas en riesgo tu negocio! Trabajar con una empresa incluida en la lista de EFOS puede generar sanciones y problemas fiscales. "
+            "Consulta aqui el listado oficial del SAT y verifica a tus proveedores antes de realizar operaciones y evita:\n"
+            "- Multas y recargos\n"
+            "- Perdida de deducciones fiscales\n"
+            "- Auditorias y revisiones fiscales\n"
+            "- Problemas legales; en casos graves, pueden derivar en responsabilidades penales."
         ),
         "bullets": [],
         "img": IMG_EFOS,
-        "page": "pages/EFOS.py",
-        "key": "go_efos",
+        "page": "pages/14_Riesgo_fiscal.py",
+        "key": "go_monitoreo",
+        "force_logout": True,
+    },
+    {
+        "title": "Riesgo fiscal sin sobresaltos",
+        "desc": (
+            "Ayudamos a identificar riesgos fiscales clave antes de que se conviertan en contingencias. "
+            "Analisis automatizado de CFDI, conciliaciones y senales de alerta para ISR, PTU e impuestos trasladados."
+        ),
+        "bullets": [
+            "Monitoreo continuo de inconsistencias",
+            "Alertas preventivas para auditorias",
+            "Panel ejecutivo con metricas fiscales"
+        ],
+        "img": IMG_RIESGO,
+        "page": "pages/riesgo_fiscal_proximamente.py",
+        "key": "go_riesgo_proximamente",
     },
     {
         "title": "Descarga masiva de XML",
         "desc": (
             "Asegura la veracidad y autenticidad de los comprobantes.\n\n"
-            "Optimiza la gestión documental y el cumplimiento fiscal.\n\n"
-            "Permite procesos automatizados de conciliación y análisis financiero."
+            "Optimiza la gestin documental y el cumplimiento fiscal.\n\n"
+            "Permite procesos automatizados de conciliacin y an!lisis financiero."
         ),
         "bullets": [],
         "img": IMG_XML,
@@ -322,8 +322,8 @@ PRODUCTS = [
     {
         "title": "Convertidor de estados de cuenta",
         "desc": (
-            "Convierte tus estados de cuenta en información clara y lista para analizar, automatiza la lectura y descarga de archivos bancarios "
-            "en formato Excel, organizando cargos, abonos, fechas y saldos en segundos. ¡Ahorra tiempo y toma decisiones con datos precisos al instante!"
+            "Convierte tus estados de cuenta en informacin clara y lista para analizar, automatiza la lectura y descarga de archivos bancarios "
+            "en formato Excel, organizando cargos, abonos, fechas y saldos en segundos. !Ahorra tiempo y toma decisiones con datos precisos al instante!"
         ),
         "bullets": [],
         "img": IMG_ESTADOS_CTA,
@@ -345,10 +345,10 @@ PRODUCTS = [
     {
         "title": "Traslado inteligente",
         "desc": (
-            "Potencia la eficiencia operativa con una solución digital que transforma el cálculo de los costos de traslado. "
-            "Nuestra plataforma integra un monitoreo de consumo de diésel y cálculo automatizado de costos (casetas, gastos operativos y administrativos, "
-            "mantenimiento, viáticos, sueldos, multas, seguros, estadías, etc.). Mediante inteligencia artificial y analítica avanzada, "
-            "convierte la información en estrategias de innovación, precisión y control en cada kilómetro."
+            "Potencia la eficiencia operativa con una solucin digital que transforma el c!lculo de los costos de traslado. "
+            "Nuestra plataforma integra un monitoreo de consumo de disel y c!lculo automatizado de costos (casetas, gastos operativos y administrativos, "
+            "mantenimiento, vi!ticos, sueldos, multas, seguros, estadas, etc.). Mediante inteligencia artificial y analtica avanzada, "
+            "convierte la informacin en estrategias de innovacin, precisin y control en cada kilmetro."
         ),
         "bullets": [],
         "img": IMG_TRASLADO,
@@ -357,11 +357,11 @@ PRODUCTS = [
         "force_logout": True,
     },
     {
-        "title": "Generador de pólizas contables",
+        "title": "Generador de plizas contables",
         "desc": (
-            "El Generador de Pólizas es una herramienta diseñada para optimizar el trabajo contable mediante la automatización del registro "
-            "de movimientos financieros como ingresos, egresos y provisiones. Su principal función es convertir y subir archivos Excel (.xlsx) "
-            "a programas contables como COI, entre otros sistemas, de manera masiva, rápida y precisa."
+            "El Generador de Plizas es una herramienta diseada para optimizar el trabajo contable mediante la automatizacin del registro "
+            "de movimientos financieros como ingresos, egresos y provisiones. Su principal funcin es convertir y subir archivos Excel (.xlsx) "
+            "a programas contables como COI, entre otros sistemas, de manera masiva, r!pida y precisa."
         ),
         "bullets": [],
         "img": IMG_POLIZAS,
@@ -376,7 +376,7 @@ PRODUCTS = [
 st.markdown('<div class="landing-title">Bienvenido a Araiza Intelligence</div>', unsafe_allow_html=True)
 
 # -------------------------------------------------------------------------
-# Render (idéntico layout, con formateo de desc + sin <ul> vacío)
+# Render (idntico layout, con formateo de desc + sin <ul> vaco)
 # -------------------------------------------------------------------------
 st.markdown('<div class="cards-grid">', unsafe_allow_html=True)
 for i, p in enumerate(PRODUCTS):
@@ -385,15 +385,15 @@ for i, p in enumerate(PRODUCTS):
     dis_cls = " is-disabled" if not exists else ""
     cls = f"card-split {alt_cls}{dis_cls}".strip()
 
-    # Overlay clickeable solo si la página existe
+    # Overlay clickeable solo si la p!gina existe
     overlay_html = ""
     if exists:
-        href = _product_href(p["page"], force_logout=bool(p.get("force_logout")))
+        href = _product_href(p["page"], force_logout=bool(p.get("force_logout")), label_override=p.get("page_label"))
         overlay_html = f'<div class="overlay-link"><a href="{href}" target="_self"></a></div>'
 
-    badge_html = '<div class="badge">Próximamente</div>' if not exists else ""
+    badge_html = '<div class="badge">Prximamente</div>' if not exists else ""
 
-    # Descripción formateada (párrafos + viñetas si las hay)
+    # Descripcin formateada (p!rrafos + vietas si las hay)
     desc_html = as_html_desc(p.get("desc", ""))
 
     # Bullets adicionales (opcional, si tu dict los trae)

@@ -6,6 +6,7 @@ This module provides small wrappers so code can call a consistent API
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Mapping, Any
 
 import streamlit as st
@@ -66,4 +67,44 @@ def set_query_params(params: Mapping[str, Any] | None) -> None:
     except Exception:
         # Last resort: no-op
         pass
+
+
+def normalize_page_path(raw: str | None) -> str | None:
+    """Return a Streamlit-friendly ``pages/...`` path from various inputs.
+
+    Handles Windows backslashes, absolute paths inside the workspace and
+    bare filenames (prefixed with ``pages/`` when they exist in the pages dir).
+    """
+
+    if raw is None:
+        return None
+
+    candidate = str(raw).strip()
+    if not candidate:
+        return None
+
+    normalized: str | None = None
+    try:
+        path = Path(candidate)
+        if path.is_absolute():
+            try:
+                path = path.resolve().relative_to(Path.cwd())
+            except Exception:
+                # Keep absolute path if it cannot be relativized
+                pass
+        normalized = path.as_posix()
+    except Exception:
+        normalized = candidate.replace("\\", "/")
+
+    if not normalized:
+        return None
+
+    normalized = normalized.replace("\\", "/").lstrip("./")
+
+    if normalized.endswith(".py") and not normalized.startswith("pages/"):
+        potential = Path("pages") / normalized
+        if potential.exists():
+            normalized = potential.as_posix()
+
+    return normalized or None
 

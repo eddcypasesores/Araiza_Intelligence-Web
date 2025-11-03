@@ -29,7 +29,7 @@ from core.streamlit_compat import rerun, set_query_params
 
 _MODULE_LABEL_OVERRIDES = {
     "traslados": "Traslados",
-    "riesgos": "Riesgo Fiscal",
+    "riesgos": "Monitoreo especializado de EFOS",
     "admin": "Administracion",
     "diot": "DIOT",
 }

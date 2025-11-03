@@ -90,7 +90,7 @@ def persist_login(
 
     if isinstance(permisos_or_rol, str):
         rol = permisos_or_rol
-        permisos = ["traslados", "riesgos", "admin"] if rol == "admin" else ["traslados"]
+        permisos = ["traslados", "riesgos", "diot", "cedula", "admin"] if rol == "admin" else ["traslados"]
     else:
         permisos = sorted({p.strip().lower() for p in permisos_or_rol if p})
         rol = "admin" if "admin" in permisos else "operador"

@@ -1,4 +1,4 @@
-"""Cruce de RFC contra Lista Negra SAT.
+"""Monitoreo especializado de EFOS - Cruce de RFC contra Lista Negra SAT.
 
 Proceso guiado en espanol con:
 - Carga de CFDI en XML y parseo inmediato.
@@ -9,12 +9,15 @@ Proceso guiado en espanol con:
 
 from __future__ import annotations
 
+import html
 import io
 import json
 from pathlib import Path
 import xml.etree.ElementTree as ET
+import textwrap
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 from core.auth import persist_login
 from core.db import portal_set_password
@@ -27,7 +30,7 @@ def _enforce_password_change(conn) -> None:
         return
 
     st.warning('Debes actualizar tu contrasena antes de continuar.')
-    with st.form('riesgo_force_password_change', clear_on_submit=False):
+    with st.form('monitoreo_force_password_change', clear_on_submit=False):
         new_password = st.text_input('Nueva contrasena', type='password')
         confirm_password = st.text_input('Confirmar contrasena', type='password')
         submitted = st.form_submit_button('Actualizar contrasena', use_container_width=True)
@@ -77,19 +80,18 @@ FIRMES_DIR.mkdir(parents=True, exist_ok=True)  # aseguramos carpeta
 # Inicializacion de sesion / navegacion
 # ---------------------------------------------------------------------------
 conn = init_admin_section(
-    page_title="Lista negra SAT - Cruce de RFC",
-    active_top="riesgo",
+    page_title="Monitoreo EFOS - Cruce de RFC",
+    active_top="monitoreo",
     layout="wide",
     show_inicio=False,
 )
-
 _enforce_password_change(conn)
 
 # ---------------------------------------------------------------------------
 # CSS
 # ---------------------------------------------------------------------------
 st.markdown(
-    """
+    '''
     <style>
     .main .block-container {
         padding-top: 2rem;
@@ -195,7 +197,7 @@ st.markdown(
         border: 1px solid #000000;
     }
     </style>
-    """,
+    ''',
     unsafe_allow_html=True,
 )
 
@@ -383,7 +385,230 @@ if not tengo_xml:
         type=["xml"],
         accept_multiple_files=True,
         key="xml_files_uploader",
+        label_visibility="collapsed",
     )
+
+    xml_names = [file.name for file in (uploaded_xml_files or [])]
+    escaped_names = [html.escape(name) for name in xml_names]
+    if not escaped_names:
+        summary_html = "Ningún archivo seleccionado"
+        selected_class = " empty"
+    elif len(escaped_names) == 1:
+        summary_html = escaped_names[0]
+        selected_class = ""
+    else:
+        bullets = "<br>".join(f"&bull; {name}" for name in escaped_names)
+        summary_html = f"{len(escaped_names)} archivos seleccionados<br>{bullets}"
+        selected_class = ""
+
+    uploader_html = textwrap.dedent(
+        f"""\
+<div class="upload-wrapper monitoreo-upload" data-uploader="monitoreo-xml">
+  <div class="upload-dropzone" id="monitoreo-xml-dropzone">
+    <div class="upload-left">
+      <div class="upload-icon">📁</div>
+      <div class="upload-text">
+        <p class="upload-title">Arrastra y suelta tus CFDI en XML aquí</p>
+        <p class="upload-subtitle">Límite de 200 MB por archivo - XML</p>
+      </div>
+    </div>
+    <button class="upload-button" type="button" id="monitoreo-xml-trigger">Seleccionar archivo</button>
+  </div>
+  <p class="upload-selected{selected_class}" id="monitoreo-xml-selected">{summary_html}</p>
+</div>
+<style>
+:root {{
+  --upload-primary: #4a5cff;
+  --upload-primary-dark: #3e50f5;
+  --upload-border: rgba(90, 94, 154, 0.25);
+  --upload-background: rgba(226, 229, 255, 0.45);
+}}
+.upload-wrapper {{
+  font-family: "Segoe UI", sans-serif;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}}
+.upload-dropzone {{
+  border: 1px solid var(--upload-border);
+  border-radius: 14px;
+  padding: 1.2rem 1.6rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--upload-background);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  cursor: pointer;
+  gap: 1rem;
+}}
+.upload-dropzone--active {{
+  border-color: var(--upload-primary);
+  background: rgba(226, 229, 255, 0.8);
+  box-shadow: 0 0 0 3px rgba(74, 92, 255, 0.18);
+}}
+.upload-left {{
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}}
+.upload-icon {{
+  font-size: 2.25rem;
+  line-height: 1;
+}}
+.upload-text {{
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}}
+.upload-title {{
+  margin: 0;
+  font-weight: 600;
+  color: #1f1f2d;
+  font-size: 1rem;
+}}
+.upload-subtitle {{
+  margin: 0;
+  font-size: 0.85rem;
+  color: #5c6070;
+}}
+.upload-button {{
+  background: var(--upload-primary);
+  color: #fff;
+  font-weight: 600;
+  border: none;
+  border-radius: 10px;
+  padding: 0.7rem 1.4rem;
+  cursor: pointer;
+  transition: background 0.2s ease, transform 0.2s ease;
+}}
+.upload-button:hover {{
+  background: var(--upload-primary-dark);
+  transform: translateY(-1px);
+}}
+.upload-selected {{
+  margin: 0;
+  font-size: 0.9rem;
+  color: #3f4254;
+  padding-left: 0.25rem;
+}}
+.upload-selected.empty {{
+  color: #888b9c;
+}}
+@media (max-width: 640px) {{
+  .upload-dropzone {{
+    flex-direction: column;
+    align-items: stretch;
+  }}
+  .upload-button {{
+    width: 100%;
+  }}
+}}
+</style>
+<script>
+(function() {{
+  const frameDoc = window.parent.document;
+  const escapeMap = {{"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}};
+  function escapeHtml(value) {{ return String(value || "").replace(/[&<>"']/g, s => escapeMap[s] || s); }}
+  function buildSummary(names) {{
+    if (!names || !names.length) {{ return "Ningún archivo seleccionado"; }}
+    if (names.length === 1) {{ return names[0]; }}
+    const bullets = names.map(name => `&bull; ${{name}}`).join("<br>");
+    return `${{names.length}} archivos seleccionados<br>${{bullets}}`;
+  }}
+  function setLabel(names) {{
+    const label = document.getElementById("monitoreo-xml-selected");
+    if (!label) return;
+    label.innerHTML = buildSummary(names);
+    if (names && names.length) {{ label.classList.remove("empty"); }}
+    else {{ label.classList.add("empty"); }}
+  }}
+  function findInput() {{
+    const inputs = Array.from(frameDoc.querySelectorAll("div[data-testid='stFileUploader'] input[type='file']"));
+    return inputs.find(node => {{
+      const accept = (node.getAttribute("accept") || "").toLowerCase();
+      return accept.includes("xml");
+    }});
+  }}
+  function waitForInput(retries = 0) {{
+    const input = findInput();
+    if (!input) {{
+      if (retries < 50) {{ setTimeout(() => waitForInput(retries + 1), 100); }}
+      return;
+    }}
+    setup(input);
+  }}
+  function setup(input) {{
+    const dropzone = document.getElementById("monitoreo-xml-dropzone");
+    const trigger = document.getElementById("monitoreo-xml-trigger");
+    if (!dropzone || !trigger) return;
+
+    const root = input.closest("div[data-testid='stFileUploader']");
+    if (root) {{
+      root.style.position = "absolute";
+      root.style.opacity = "0";
+      root.style.pointerEvents = "none";
+      root.style.width = "1px";
+      root.style.height = "1px";
+      root.style.overflow = "hidden";
+      root.style.margin = "0";
+      root.style.padding = "0";
+    }}
+
+    function openDialog(event) {{
+      event.preventDefault();
+      input.click();
+    }}
+
+    trigger.addEventListener("click", openDialog);
+    dropzone.addEventListener("click", openDialog);
+
+    ["dragenter", "dragover"].forEach(evt => {{
+      dropzone.addEventListener(evt, event => {{
+        event.preventDefault();
+        event.stopPropagation();
+        dropzone.classList.add("upload-dropzone--active");
+      }});
+    }});
+
+    ["dragleave", "dragend"].forEach(evt => {{
+      dropzone.addEventListener(evt, event => {{
+        event.preventDefault();
+        event.stopPropagation();
+        dropzone.classList.remove("upload-dropzone--active");
+      }});
+    }});
+
+    dropzone.addEventListener("drop", event => {{
+      event.preventDefault();
+      event.stopPropagation();
+      dropzone.classList.remove("upload-dropzone--active");
+
+      if (!event.dataTransfer || !event.dataTransfer.files || !event.dataTransfer.files.length) {{
+        return;
+      }}
+
+      const dt = new DataTransfer();
+      Array.from(event.dataTransfer.files).forEach(file => dt.items.add(file));
+      input.files = dt.files;
+      input.dispatchEvent(new Event("change", {{ bubbles: true }}));
+      const names = Array.from(dt.files).map(file => escapeHtml(file.name));
+      setLabel(names);
+    }});
+
+    input.addEventListener("change", () => {{
+      const names = Array.from(input.files || []).map(file => escapeHtml(file.name));
+      setLabel(names);
+    }});
+
+    setLabel({json.dumps(escaped_names)});
+  }}
+
+  waitForInput();
+}})();
+</script>
+"""
+    )
+    components.html(uploader_html, height=280)
 
     if uploaded_xml_files:
         rows = []
