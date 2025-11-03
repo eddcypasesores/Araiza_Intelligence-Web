@@ -6,7 +6,7 @@ import streamlit as st
 
 from core.auth import ensure_session_from_token, persist_login
 from core.db import ensure_schema, get_conn, authenticate_portal_user
-from core.streamlit_compat import set_query_params
+from core.streamlit_compat import rerun, set_query_params
 from core.flash import consume_flash, set_flash
 from core.login_ui import render_login_header, render_token_reset_section
 
@@ -18,6 +18,15 @@ ensure_session_from_token()
 def _has_permission(module: str) -> bool:
     permisos = st.session_state.get("permisos") or []
     return module in permisos
+
+
+def _resolve_redirect_target() -> str | None:
+    raw_next = st.query_params.get("next")
+    if isinstance(raw_next, list):
+        return raw_next[-1] if raw_next else None
+    if isinstance(raw_next, str):
+        return raw_next or None
+    return None
 
 
 def _render_login() -> None:
@@ -78,6 +87,21 @@ def _render_login() -> None:
         user_id=record.get("id"),
     )
     set_flash("Inicio de sesion exitoso")
+    redirect_target = _resolve_redirect_target()
+
+    if redirect_target:
+        remaining = {k: v for k, v in st.query_params.items() if k != "next"}
+        remaining["auth"] = token
+        try:
+            set_query_params(remaining)
+        except Exception:
+            pass
+        try:
+            st.switch_page(redirect_target)
+        except Exception:
+            rerun()
+        return
+
     try:
         params = {k: v for k, v in st.query_params.items() if k != "auth"}
         params["auth"] = token

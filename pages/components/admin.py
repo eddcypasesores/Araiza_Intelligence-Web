@@ -98,7 +98,7 @@ def init_admin_section(
         except ValueError:
             redirect_target = Path(caller_file).name
 
-    if active_top in DIOT_TOPS:
+    if active_top == "diot":
         ensure_session_from_token()
         permisos = set(st.session_state.get("permisos") or [])
         if "diot" not in permisos:
@@ -121,7 +121,7 @@ def init_admin_section(
             redirect_to=redirect_target,
             fallback_page="pages/14_Riesgo_fiscal.py",
         )
-    elif active_top in TRASLADOS_TOPS or active_top is None:
+    elif active_top in TRASLADOS_TOPS or active_top is None or active_top in {"tarifas", "trabajadores", "parametros"}:
         _ensure_permission(
             ("traslados",),
             redirect_to=redirect_target,
