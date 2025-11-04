@@ -6,6 +6,8 @@ from typing import Iterable
 
 import streamlit as st
 
+from .streamlit_compat import set_query_params
+
 # Keys that should be removed from ``st.session_state`` when logging out.
 _LOGOUT_SESSION_KEYS: tuple[str, ...] = (
     "usuario",
@@ -55,14 +57,7 @@ def process_logout_flag() -> bool:
     clear_session_state()
 
     remaining_params = {k: v for k, v in params.items() if k != "logout"}
-    try:
-        st.experimental_set_query_params(**remaining_params)
-    except Exception:
-        try:
-            params.clear()
-        except Exception:
-            # ``st.query_params`` may not support ``clear`` on older Streamlit versions.
-            pass
+    set_query_params(remaining_params if remaining_params else None)
 
     st.session_state["_logout_processed"] = logout_flag
 

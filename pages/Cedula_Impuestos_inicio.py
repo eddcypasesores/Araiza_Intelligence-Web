@@ -5,11 +5,13 @@ from __future__ import annotations
 import streamlit as st
 
 import base64
+import html
 from pathlib import Path
 from urllib.parse import quote, urlencode
 
 from core.auth import forget_session
 from core.session import process_logout_flag
+from core.streamlit_compat import set_query_params
 
 
 NAV_LOGO_CANDIDATES = (
@@ -125,7 +127,6 @@ div[data-testid="stToolbar"],
 }
 .hero-copy p{display:none;}
 .hero-media{
-  order:-1;
   flex:0 0 320px;
   max-width:420px;
 }
@@ -233,7 +234,7 @@ COMPONENTS = [
     ("Calculo de PTU", None),
     ("Coeficiente de utilidad", None),
     ("Actualizacion y Amortizacion de Perdidas", "pages/Cedula_Actualizacion_perdidas.py"),
-    ("Riesgos fiscales", None),
+    ("Riesgos fiscales", "pages/Cedula_Riesgos_fiscales.py"),
 ]
 
 DEFAULT_NAV_LOGO = ("data:image/png;base64,/9j/4AAQSkZJRgABAgEBLAEsAAD/7QAsUGhvdG9zaG9wIDMuMAA4QklNA+0AAAAAABABLAAAAAEAAQEsAAAAAQAB/+E00Gh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC8APD94cGFja2V0IGJlZ2luPSLvu78iIGlkPSJXNU0wTXBDZWhpSHpyZVN6TlRjemtjOWQiPz4KPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iQWRvYmUgWE1QIENvcmUgNS42LWMxNDggNzkuMTY0MDUwLCAyMDE5LzEwLzAxLTE4OjAzOjE2ICAgICAgICAiPgogICA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPgogICAgICA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIgogICAgICAgICAgICB4bWxuczpkYz0iaHR0cDovL3B1cmwub3JnL2RjL2VsZW1lbnRzLzEuMS8iCiAgICAgICAgICAgIHhtbG5zOnhtcD0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wLyIKICAgICAgICAgICAgeG1sbnM6eG1wR0ltZz0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL2cvaW1nLyIKICAgICAgICAgICAgeG1sbnM6eG1wTU09Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC9tbS8iCiAgICAgICAgICAgIHhtbG5zOnN0UmVmPSJodHRwOi8vbnMuYWRvYmUuY29tL3hhcC8xLjAvc1R5cGUvUmVzb3VyY2VSZWYjIgogICAgICAgICAgICB4bWxuczpzdEV2dD0iaHR0cDovL25zLmFkb2JlLmNvbS94YXAvMS4wL3NUeXBlL1Jlc291cmNlRXZlbnQjIgogICAgICAgICAgICB4bWxuczppbGx1c3RyYXRvcj0iaHR0cDovL25zLmFkb2JlLmNvbS9pbGx1c3RyYXRvci8xLjAvIgogICAgICAgICAgICB4bWxuczpwZGY9Imh0dHA6Ly9ucy5hZG9iZS5jb20vcGRmLzEuMy8iPgogICAgICAgICA8ZGM6Zm9ybWF0PmltYWdlL2pwZWc8L2RjOmZvcm1hdD4KICAgICAgICAgPGRjOnRpdGxlPgogICAgICAgICAgICA8cmRmOkFsdD4KICAgICAgICAgICAgICAgPHJkZjpsaSB4bWw6bGFuZz0ieC1kZWZhdWx0Ij5JbXByaW1pcjwvcmRmOmxpPgogICAgICAgICAgICA8L3JkZjpBbHQ+CiAgICAgICAgIDwvZGM6dGl0bGU+CiAgICAgICAgIDx4bXA6TWV0YWRhdGFEYXRlPjIwMjQtMTItMTdUMTU6NTg6MzctMDY6MDA8L3htcDpNZXRhZGF0YURhdGU+CiAgICAgICAgIDx4bXA6TW9kaWZ5RGF0ZT4yMDI0LTEyLTE3VDIxOjU4OjQ0WjwveG1wOk1vZGlmeURhdGU+CiAgICAgICAgIDx4bXA6Q3JlYXRlRGF0ZT4yMDI0LTEyLTE3VDE1OjU4OjM3LTA2OjAwPC94bXA6Q3JlYXRlRGF0ZT4KICAgICAgICAgPHhtcDpDcmVhdG9yVG9vbD5BZG9iZSBJbGx1c3RyYXRvciAyNC4xIChXaW5kb3dzKTwveG1wOkNyZWF0b3JUb29sPgogICAgICAgICA8eG1wOlRodW1ibmFpbHM+CiAgICAgICAgICAgIDxyZGY6QWx0PgogICAgICAgICAgICAgICA8cmRmOmxpIHJkZjpwYXJzZVR5cGU9IlJlc291cmNlIj4KICAgICAgICAgICAgICAgICAgPHhtcEdJbWc6d2lkdGg+MjU2PC94bXBHSW1nOndpZHRoPgogICAgICAgICAgICAgICAgICA8eG1wR0ltZzp"
@@ -298,12 +299,12 @@ def _handle_logout_request() -> None:
 
 def render_fixed_nav() -> None:
     logo_src = _navbar_logo_data()
-    logout_href = _logout_href()
+    logout_href = html.escape(_logout_href(), quote=True)
     nav_html = (
         f'<div class="custom-nav">'
         f'<div class="nav-brand"><img src="{logo_src}" alt="Araiza logo"><span>Araiza Intelligence</span></div>'
-        f'<div class="nav-actions"><a href="{logout_href}">Cerrar sesi&oacute;n</a></div>'
-        f"</div><div class=\"nav-spacer\"></div>"
+        f'<div class="nav-actions"><a href="{logout_href}" target="_self">Cerrar sesi&oacute;n</a></div>'
+        f'</div><div class="nav-spacer"></div>'
     )
     st.markdown(nav_html, unsafe_allow_html=True)
 
@@ -317,11 +318,8 @@ def _handle_pending_navigation() -> None:
     elif isinstance(raw, str):
         goto = raw
     if goto:
-        try:
-            cleaned = {k: v for k, v in params.items() if k != "goto"}
-            st.query_params = cleaned
-        except Exception:
-            pass
+        cleaned = {k: v for k, v in params.items() if k != "goto"}
+        set_query_params(cleaned)
         try:
             st.switch_page(goto)
         except Exception:
@@ -346,12 +344,12 @@ def main() -> None:
         f"""
         <div class="cedulas-wrapper">
           <section class="hero">
+            <div class="hero-media">
+              <img src="{hero_image_src}" alt="Papeles de trabajo y declaracion anual">
+            </div>
             <div class="hero-copy">
               <h1>Cedulas fiscales - Personas Morales</h1>
               <p>(Regimen General)</p>
-            </div>
-            <div class="hero-media">
-              <img src="{hero_image_src}" alt="Papeles de trabajo y declaracion anual">
             </div>
           </section>
           <section class="components components-flex">

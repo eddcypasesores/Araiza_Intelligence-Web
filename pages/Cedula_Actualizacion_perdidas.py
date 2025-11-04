@@ -5,6 +5,7 @@ from __future__ import annotations
 import io
 from copy import copy  # clonar estilos (evitar StyleProxy)
 from pathlib import Path
+from textwrap import dedent
 from typing import Dict, List
 
 import pandas as pd
@@ -18,6 +19,7 @@ import base64
 from urllib.parse import quote
 
 from core.auth import ensure_session_from_token
+from core.streamlit_compat import set_query_params
 
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
@@ -46,15 +48,16 @@ NAV_CSS = """
     transform: translateX(-50%);
     width: min(1100px, 100%);
     z-index: 1000;
-    background: #0d3c74;
-    color: #fff;
-    padding: 10px 18px;
+    background: #ffffff;
+    color: #0f172a;
+    padding: 10px 22px;
     border-radius: 999px;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
-    box-shadow: 0 15px 30px rgba(5, 8, 20, 0.25);
+    box-shadow: 0 18px 32px rgba(15, 23, 42, 0.18);
+    border: 1px solid rgba(148, 163, 184, 0.25);
   }
   .nav-brand {
     display: inline-flex;
@@ -64,25 +67,30 @@ NAV_CSS = """
     font-size: 1rem;
     text-transform: uppercase;
     letter-spacing: 0.05em;
+    color: inherit;
   }
   .nav-brand img {
     height: 28px;
     width: auto;
+    display: block;
   }
   .nav-actions a {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 6px 18px;
+    padding: 6px 20px;
     border-radius: 999px;
-    background: #fff;
-    color: #0d3c74;
+    background: #0d3c74;
+    color: #fff;
     font-weight: 600;
     text-decoration: none;
     box-shadow: 0 6px 16px rgba(13, 60, 116, 0.25);
   }
+  .nav-actions a:hover {
+    filter: brightness(0.95);
+  }
   .nav-spacer {
-    height: 75px;
+    height: 70px;
   }
 </style>
 """
@@ -116,22 +124,21 @@ def render_fixed_nav() -> None:
     if auth:
         href += f"&auth={quote(auth)}"
     brand_img = f'<img src="{logo_src}" alt="Araiza logo">' if logo_src else ""
-    nav_html = (
-        NAV_CSS
-        + f"""
+    nav_markup = dedent(
+        f"""
         <div class="custom-nav">
           <div class="nav-brand">
             {brand_img}
-            <span>Araiza Intelligence</span>
+            <span>Araiza</span>
           </div>
           <div class="nav-actions">
-            <a href="{href}">&larr; Atr&aacute;s</a>
+            <a href="{href}" target="_self">&larr; Atr&aacute;s</a>
           </div>
         </div>
         <div class="nav-spacer"></div>
         """
-    )
-    st.markdown(nav_html, unsafe_allow_html=True)
+    ).strip()
+    st.markdown(f"{NAV_CSS}{nav_markup}", unsafe_allow_html=True)
 
 
 def _handle_pending_navigation() -> None:
@@ -143,11 +150,8 @@ def _handle_pending_navigation() -> None:
     elif isinstance(raw, str):
         goto = raw
     if goto:
-        try:
-            cleaned = {k: v for k, v in params.items() if k != "goto"}
-            st.query_params = cleaned
-        except Exception:
-            pass
+        cleaned = {k: v for k, v in params.items() if k != "goto"}
+        set_query_params(cleaned)
         try:
             st.switch_page(goto)
         except Exception:

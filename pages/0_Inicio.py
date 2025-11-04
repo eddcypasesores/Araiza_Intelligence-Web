@@ -391,7 +391,7 @@ for i, p in enumerate(PRODUCTS):
         href = _product_href(p["page"], force_logout=bool(p.get("force_logout")), label_override=p.get("page_label"))
         overlay_html = f'<div class="overlay-link"><a href="{href}" target="_self"></a></div>'
 
-    badge_html = '<div class="badge">Prximamente</div>' if not exists else ""
+    badge_html = '<div class="badge">Proximamente</div>' if not exists else ""
 
     # Descripcin formateada (p!rrafos + vietas si las hay)
     desc_html = as_html_desc(p.get("desc", ""))

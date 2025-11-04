@@ -1,4 +1,7 @@
 {
   "filename": "Firmes.csv",
-  "stored_as": "firmes_Firmes.csv"
+  "stored_as": "firmes_latest.csv",
+  "suffix": ".csv",
+  "updated_at": "2025-11-04T16:34:30.973543+00:00",
+  "size_bytes": "18574543"
 }
