@@ -24,8 +24,79 @@ from core.db import (
     portal_set_password,
     portal_update_user,
 )
+import streamlit.components.v1 as components
 from core.navigation import render_nav
 from core.streamlit_compat import rerun, set_query_params
+
+
+def _render_feedback_modal(level: str, message: str) -> None:
+    _render_feedback_toast(level, message)
+
+def _render_feedback_toast(level: str, message: str) -> None:
+    bg_color = "#0f766e" if level == "success" else "#b91c1c"
+    icon = "&#10003;" if level == "success" else "&#9888;"
+    title = "Movimiento exitoso" if level == "success" else "Error al procesar"
+    components.html(
+        f"""
+        <style>
+        #admin-toast {{
+            position: fixed;
+            top: 96px;
+            right: 32px;
+            background: #ffffff;
+            border-radius: 18px;
+            min-width: 280px;
+            max-width: 360px;
+            padding: 18px 22px;
+            box-shadow: 0 18px 40px rgba(15, 23, 42, 0.25);
+            font-family: "Inter","Segoe UI",sans-serif;
+            border: 1px solid rgba(15, 23, 42, 0.12);
+            z-index: 9999;
+            opacity: 1;
+            transition: opacity 0.4s ease, transform 0.4s ease;
+        }}
+        #admin-toast.hide {{
+            opacity: 0;
+            transform: translateY(-16px);
+        }}
+        #admin-toast h3 {{
+            margin: 0 0 8px;
+            font-size: 1rem;
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }}
+        #admin-toast p {{
+            margin: 0;
+            color: #475569;
+            font-size: 0.92rem;
+            line-height: 1.4;
+        }}
+        </style>
+        <div id="admin-toast">
+          <h3><span style="font-size:1.2rem;">{icon}</span> {title}</h3>
+          <p>{message}</p>
+        </div>
+        <script>
+        (function() {{
+          const toast = document.getElementById("admin-toast");
+          if (toast) {{
+            toast.style.borderTop = "4px solid {bg_color}";
+          }}
+          setTimeout(function() {{
+            const node = document.getElementById("admin-toast");
+            if (node) {{
+              node.classList.add("hide");
+              setTimeout(function() {{ node.remove(); }}, 500);
+            }}
+          }}, 3200);
+        }})();
+        </script>
+        """,
+        height=120,
+        scrolling=False,
+    )
 
 _MODULE_LABEL_OVERRIDES = {
     "traslados": "Traslados",
@@ -80,13 +151,10 @@ def _display_users_table(conn: sqlite3.Connection) -> None:
     if df.empty:
         st.info("No hay usuarios registrados.")
         return
-    toast = st.session_state.pop("_admin_toast", None)
-    if toast:
-        level, message = toast
-        if level == "success":
-            st.success(message)
-        else:
-            st.error(message)
+    modal_payload = st.session_state.pop("_admin_modal", None)
+    if modal_payload:
+        level, message = modal_payload
+        _render_feedback_modal(level, message)
     df = df.copy()
     df["permisos"] = df["permisos"].apply(
         lambda raw: ", ".join(LABEL_BY_VALUE.get(p, p) for p in _parse_permissions(raw)) or "-"
@@ -150,17 +218,25 @@ def _create_user(conn: sqlite3.Connection) -> None:
             permisos=permisos,
             must_change_password=True,
         )
-        st.session_state["_admin_toast"] = (
+        st.session_state["_admin_modal"] = (
             "success",
             "Usuario creado. La contrasena inicial es el mismo RFC (mayusculas).",
         )
-        st.query_params.clear()
-        st.query_params["view"] = "consultar"
+        st.session_state["admin_portal_view"] = "Consultar"
+        try:
+            st.query_params.clear()
+            st.query_params["view"] = "consultar"
+        except Exception:
+            set_query_params({"view": "consultar"})
         rerun()
     except Exception as exc:
-        st.session_state["_admin_toast"] = ("error", f"No fue posible crear el usuario: {exc}")
-        st.query_params.clear()
-        st.query_params["view"] = "consultar"
+        st.session_state["_admin_modal"] = ("error", f"No fue posible crear el usuario: {exc}")
+        st.session_state["admin_portal_view"] = "Consultar"
+        try:
+            st.query_params.clear()
+            st.query_params["view"] = "consultar"
+        except Exception:
+            set_query_params({"view": "consultar"})
         rerun()
 
 
@@ -218,14 +294,22 @@ def _edit_user(conn: sqlite3.Connection) -> None:
         nueva_contrasena = nueva_contrasena.strip()
         if nueva_contrasena:
             portal_set_password(conn, record["rfc"], nueva_contrasena, require_change=must_change)
-        st.session_state["_admin_toast"] = ("success", "Usuario actualizado correctamente.")
-        st.query_params.clear()
-        st.query_params["view"] = "consultar"
+        st.session_state["_admin_modal"] = ("success", "Usuario actualizado correctamente.")
+        st.session_state["admin_portal_view"] = "Consultar"
+        try:
+            st.query_params.clear()
+            st.query_params["view"] = "consultar"
+        except Exception:
+            set_query_params({"view": "consultar"})
         rerun()
     except Exception as exc:
-        st.session_state["_admin_toast"] = ("error", f"No fue posible actualizar el usuario: {exc}")
-        st.query_params.clear()
-        st.query_params["view"] = "consultar"
+        st.session_state["_admin_modal"] = ("error", f"No fue posible actualizar el usuario: {exc}")
+        st.session_state["admin_portal_view"] = "Consultar"
+        try:
+            st.query_params.clear()
+            st.query_params["view"] = "consultar"
+        except Exception:
+            set_query_params({"view": "consultar"})
         rerun()
 
 
@@ -242,14 +326,22 @@ def _delete_users(conn: sqlite3.Connection) -> None:
     if st.button("Eliminar seleccionados", type="primary", use_container_width=True):
         try:
             portal_delete_users(conn, seleccion)
-            st.session_state["_admin_toast"] = ("success", "Usuarios eliminados.")
-            st.query_params.clear()
-            st.query_params["view"] = "consultar"
+            st.session_state["_admin_modal"] = ("success", "Usuarios eliminados.")
+            st.session_state["admin_portal_view"] = "Consultar"
+            try:
+                st.query_params.clear()
+                st.query_params["view"] = "consultar"
+            except Exception:
+                set_query_params({"view": "consultar"})
             rerun()
         except Exception as exc:
-            st.session_state["_admin_toast"] = ("error", f"No fue posible eliminar usuarios: {exc}")
-            st.query_params.clear()
-            st.query_params["view"] = "consultar"
+            st.session_state["_admin_modal"] = ("error", f"No fue posible eliminar usuarios: {exc}")
+            st.session_state["admin_portal_view"] = "Consultar"
+            try:
+                st.query_params.clear()
+                st.query_params["view"] = "consultar"
+            except Exception:
+                set_query_params({"view": "consultar"})
             rerun()
 
 
@@ -267,17 +359,25 @@ def _reset_passwords(conn: sqlite3.Connection) -> None:
         try:
             for rfc in seleccion:
                 portal_set_password(conn, rfc, rfc.strip().upper(), require_change=True)
-            st.session_state["_admin_toast"] = (
+            st.session_state["_admin_modal"] = (
                 "success",
                 "Contrasenas restablecidas. El RFC es la contrasena temporal y deberan cambiarla en el siguiente ingreso.",
             )
-            st.query_params.clear()
-            st.query_params["view"] = "consultar"
+            st.session_state["admin_portal_view"] = "Consultar"
+            try:
+                st.query_params.clear()
+                st.query_params["view"] = "consultar"
+            except Exception:
+                set_query_params({"view": "consultar"})
             rerun()
         except Exception as exc:
-            st.session_state["_admin_toast"] = ("error", f"No fue posible restablecer contrasenas: {exc}")
-            st.query_params.clear()
-            st.query_params["view"] = "consultar"
+            st.session_state["_admin_modal"] = ("error", f"No fue posible restablecer contrasenas: {exc}")
+            st.session_state["admin_portal_view"] = "Consultar"
+            try:
+                st.query_params.clear()
+                st.query_params["view"] = "consultar"
+            except Exception:
+                set_query_params({"view": "consultar"})
             rerun()
 
 
@@ -412,11 +512,43 @@ def main() -> None:
         ensure_schema(conn)
         _enforce_password_change(conn)
 
+        view_options = ["Consultar", "Crear", "Modificar", "Eliminar", "Restablecer contrasena", "Recuperacion"]
+        raw_view = st.query_params.get("view")
+        if isinstance(raw_view, list):
+            raw_view = raw_view[-1] if raw_view else None
+
+        current_choice = st.session_state.get("admin_portal_view")
+        if current_choice not in view_options:
+            current_choice = None
+
+        if current_choice is None and isinstance(raw_view, str):
+            for opt in view_options:
+                if opt.lower().startswith(raw_view.lower()):
+                    current_choice = opt
+                    break
+
+        if current_choice is None:
+            current_choice = view_options[0]
+
+        st.session_state.setdefault("admin_portal_view", current_choice)
+
         choice = st.radio(
             "Accion",
-            options=["Consultar", "Crear", "Modificar", "Eliminar", "Restablecer contrasena", "Recuperacion"],
+            options=view_options,
             horizontal=True,
+            index=view_options.index(st.session_state["admin_portal_view"]),
+            key="admin_portal_view",
         )
+        choice = st.session_state["admin_portal_view"]
+        try:
+            st.query_params["view"] = choice.lower()
+        except Exception:
+            try:
+                params = dict(st.query_params)
+                params["view"] = choice.lower()
+                set_query_params(params)
+            except Exception:
+                pass
 
         if choice == "Consultar":
             _display_users_table(conn)

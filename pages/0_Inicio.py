@@ -258,13 +258,13 @@ st.markdown("""
 # -------------------------------------------------------------------------
 PRODUCTS = [
     {
-        "title": "Cedula de impuestos para cierre anual",
+        "title": "Cédula de impuestos para cierre anual",
         "desc": (
-            "Optimiza la preparacion de la declaracion anual de tu empresa con nuestro Papel de Trabajo para Personas Morales en el Regimen General.\n\n"
-            "Facilita el calculo y la conciliacion de ingresos, deducciones, coeficiente de utilidad, PTU y otros aspectos fiscales clave como:\n"
+            "Optimiza la preparación de la declaración anual de tu empresa con nuestro Papel de Trabajo para Personas Morales en el Régimen General.\n\n"
+            "Facilita el cálculo y la conciliación de ingresos, deducciones, coeficiente de utilidad, PTU y otros aspectos fiscales clave como:\n"
             "- Formatos estructurados en Excel.\n"
-            "- Ahorrar tiempo\n"
-            "- Minimiza errores\n"
+            "- Ahorra tiempo.\n"
+            "- Minimiza errores.\n"
             "- Y cumple con tus obligaciones fiscales de manera eficiente."
         ),
         "bullets": [],  # no pintamos <ul> vacio
@@ -277,12 +277,12 @@ PRODUCTS = [
     {
         "title": "Monitoreo especializado de EFOS",
         "desc": (
-            "?Sabes si la empresa con la que trabajas aparece como EFOS?\n\n"
-            "!No pongas en riesgo tu negocio! Trabajar con una empresa incluida en la lista de EFOS puede generar sanciones y problemas fiscales. "
-            "Consulta aqui el listado oficial del SAT y verifica a tus proveedores antes de realizar operaciones y evita:\n"
-            "- Multas y recargos\n"
-            "- Perdida de deducciones fiscales\n"
-            "- Auditorias y revisiones fiscales\n"
+            "¿Sabes si la empresa con la que trabajas aparece como EFOS?\n\n"
+            "¡No pongas en riesgo tu negocio! Trabajar con una empresa incluida en la lista de EFOS puede generar sanciones y problemas fiscales. "
+            "Consulta aquí el listado oficial del SAT y verifica a tus proveedores antes de realizar operaciones y evita:\n"
+            "- Multas y recargos.\n"
+            "- Pérdida de deducciones fiscales.\n"
+            "- Auditorías y revisiones fiscales.\n"
             "- Problemas legales; en casos graves, pueden derivar en responsabilidades penales."
         ),
         "bullets": [],
@@ -295,12 +295,12 @@ PRODUCTS = [
         "title": "Riesgo fiscal sin sobresaltos",
         "desc": (
             "Ayudamos a identificar riesgos fiscales clave antes de que se conviertan en contingencias. "
-            "Analisis automatizado de CFDI, conciliaciones y senales de alerta para ISR, PTU e impuestos trasladados."
+            "Análisis automatizado de CFDI, conciliaciones y señales de alerta para ISR, PTU e impuestos trasladados."
         ),
         "bullets": [
             "Monitoreo continuo de inconsistencias",
-            "Alertas preventivas para auditorias",
-            "Panel ejecutivo con metricas fiscales"
+            "Alertas preventivas para auditorías",
+            "Panel ejecutivo con métricas fiscales"
         ],
         "img": IMG_RIESGO,
         "page": "pages/riesgo_fiscal_proximamente.py",
@@ -310,8 +310,8 @@ PRODUCTS = [
         "title": "Descarga masiva de XML",
         "desc": (
             "Asegura la veracidad y autenticidad de los comprobantes.\n\n"
-            "Optimiza la gestin documental y el cumplimiento fiscal.\n\n"
-            "Permite procesos automatizados de conciliacin y an!lisis financiero."
+            "Optimiza la gestión documental y el cumplimiento fiscal.\n\n"
+            "Permite procesos automatizados de conciliación y análisis financiero."
         ),
         "bullets": [],
         "img": IMG_XML,
@@ -322,8 +322,8 @@ PRODUCTS = [
     {
         "title": "Convertidor de estados de cuenta",
         "desc": (
-            "Convierte tus estados de cuenta en informacin clara y lista para analizar, automatiza la lectura y descarga de archivos bancarios "
-            "en formato Excel, organizando cargos, abonos, fechas y saldos en segundos. !Ahorra tiempo y toma decisiones con datos precisos al instante!"
+            "Convierte tus estados de cuenta en información clara y lista para analizar, automatiza la lectura y descarga de archivos bancarios "
+            "en formato Excel, organizando cargos, abonos, fechas y saldos en segundos. ¡Ahorra tiempo y toma decisiones con datos precisos al instante!"
         ),
         "bullets": [],
         "img": IMG_ESTADOS_CTA,
@@ -333,8 +333,8 @@ PRODUCTS = [
     {
         "title": "DIOT",
         "desc": (
-            "Presenta tu Declaracion Informativa de Operaciones con Terceros en segundos. "
-            "Administra tarifas, trabajadores y parametria desde un solo punto y genera el TXT oficial sin errores."
+            "Presenta tu Declaración Informativa de Operaciones con Terceros en segundos. "
+            "Administra tarifas, trabajadores y parámetros desde un solo punto y genera el TXT oficial sin errores."
         ),
         "bullets": [],
         "img": IMG_DIOT,
@@ -345,10 +345,10 @@ PRODUCTS = [
     {
         "title": "Traslado inteligente",
         "desc": (
-            "Potencia la eficiencia operativa con una solucin digital que transforma el c!lculo de los costos de traslado. "
-            "Nuestra plataforma integra un monitoreo de consumo de disel y c!lculo automatizado de costos (casetas, gastos operativos y administrativos, "
-            "mantenimiento, vi!ticos, sueldos, multas, seguros, estadas, etc.). Mediante inteligencia artificial y analtica avanzada, "
-            "convierte la informacin en estrategias de innovacin, precisin y control en cada kilmetro."
+            "Potencia la eficiencia operativa con una solución digital que transforma el cálculo de los costos de traslado. "
+            "Nuestra plataforma integra un monitoreo de consumo de diésel y cálculo automatizado de costos (casetas, gastos operativos y administrativos, "
+            "mantenimiento, viáticos, sueldos, seguros, etc.). Mediante inteligencia artificial y analítica avanzada, "
+            "convierte la información en estrategias de innovación, precisión y control en cada kilómetro."
         ),
         "bullets": [],
         "img": IMG_TRASLADO,
@@ -357,11 +357,11 @@ PRODUCTS = [
         "force_logout": True,
     },
     {
-        "title": "Generador de plizas contables",
+        "title": "Generador de Pólizas contables",
         "desc": (
-            "El Generador de Plizas es una herramienta diseada para optimizar el trabajo contable mediante la automatizacin del registro "
-            "de movimientos financieros como ingresos, egresos y provisiones. Su principal funcin es convertir y subir archivos Excel (.xlsx) "
-            "a programas contables como COI, entre otros sistemas, de manera masiva, r!pida y precisa."
+            "El Generador de Pólizas es una herramienta diseñada para optimizar el trabajo contable mediante la automatización del registro "
+            "de movimientos financieros como ingresos, egresos y provisiones. Su principal función es convertir y subir archivos Excel (.xlsx) "
+            "a programas contables como COI, entre otros sistemas, de manera masiva, rápida y precisa."
         ),
         "bullets": [],
         "img": IMG_POLIZAS,

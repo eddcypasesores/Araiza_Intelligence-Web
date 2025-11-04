@@ -726,13 +726,21 @@ def _read_tc_series(path: Path) -> pd.Series | None:
         st.error("No se encontro el archivo de tipo de cambio en data/Tipo Cambio.xls.")
         return None
     try:
-        df = pd.read_excel(path, sheet_name=0, engine="xlrd")
+        df = pd.read_excel(path, sheet_name=0, engine="openpyxl")
     except Exception:
         try:
-            df = pd.read_excel(path, sheet_name=0)
-        except Exception as exc:
-            st.error(f"No se pudo leer {path}: {exc}")
-            return None
+            import xlrd  # noqa: F401
+            df = pd.read_excel(path, sheet_name=0, engine="xlrd")
+        except Exception:
+            try:
+                df = pd.read_excel(path, sheet_name=0)
+            except Exception as exc:
+                st.warning(
+                    "No fue posible cargar 'Tipo Cambio.xls'. "
+                    "Verifica que el archivo exista y que el paquete xlrd este instalado."
+                )
+                print(exc)
+                return None
 
     df.columns = _flatten_cols(df.columns)
 

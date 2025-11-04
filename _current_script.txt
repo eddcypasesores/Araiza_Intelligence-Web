@@ -1,0 +1,146 @@
+<script>
+(function() {{
+  const frameDoc = window.parent.document;
+  const initialSummary = {json.dumps(initial_summary_text)};
+  const initialHasFiles = {str(initial_has_files).lower()};
+  const escapeMap = {{"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"}};
+  function escapeHtml(value) {{ return String(value || "").replace(/[&<>"']/g, s => escapeMap[s] || s); }}
+  function buildSummary(files) {{
+    if (!files || !files.length) {{ return "Selecciona una carpeta o archivos XML."; }}
+    const count = files.length;
+    const folders = files
+      .map(file => (file.webkitRelativePath || file.name || "").split(/[\\\/]/).slice(0, -1).join("/"))
+      .filter(Boolean);
+    const uniqueFolders = Array.from(new Set(folders));
+    const folderCount = uniqueFolders.length;
+    const folderText = folderCount ? ` en ${{folderCount}} carpeta${{folderCount === 1 ? "" : "s"}}` : "";
+    return `${{count}} archivo${{count === 1 ? "" : "s"}} XML detectado${{count === 1 ? "" : "s"}}${{folderText}}.`;
+  }}
+  function setLabelText(summary, hasFiles) {{
+    const label = document.getElementById("monitoreo-xml-selected");
+    if (!label) return;
+    label.innerHTML = escapeHtml(summary);
+    if (hasFiles) {{ label.classList.remove("empty"); }}
+    else {{ label.classList.add("empty"); }}
+  }}
+  function setLabelFromFiles(files) {{
+    setLabelText(buildSummary(files), files && files.length);
+  }}
+  function findInput() {{
+    const inputs = Array.from(frameDoc.querySelectorAll("div[data-testid='stFileUploader'] input[type='file']"));
+    return inputs.find(node => {{
+      const accept = (node.getAttribute("accept") || "").toLowerCase();
+      return accept.includes("xml");
+    }});
+  }}
+  function filterXmlFiles(list) {{
+    return Array.from(list || []).filter(file => {{
+      const name = (file && file.name) ? file.name.toLowerCase() : "";
+      return name.endsWith(".xml");
+    }});
+  }}
+  function buildDisplayNames(files) {{
+    return files.map(file => {{
+      const label = file.webkitRelativePath || file.name || "";
+      return escapeHtml(label);
+    }});
+  }}
+  function toFileList(files) {{
+    const dt = new DataTransfer();
+    files.forEach(file => dt.items.add(file));
+    return dt.files;
+  }}
+  function waitForInput(retries = 0) {{
+    const input = findInput();
+    if (!input) {{
+      if (retries < 50) {{ setTimeout(() => waitForInput(retries + 1), 100); }}
+      return;
+    }}
+    setup(input);
+  }}
+  function setup(input) {{
+    const dropzone = document.getElementById("monitoreo-xml-dropzone");
+    const trigger = document.getElementById("monitoreo-xml-trigger");
+    if (!dropzone || !trigger) return;
+
+    input.setAttribute("multiple", "multiple");
+    input.setAttribute("accept", ".xml");
+    input.setAttribute("webkitdirectory", "");
+    input.setAttribute("directory", "");
+
+    const root = input.closest("div[data-testid='stFileUploader']");
+    if (root) {{
+      root.style.position = "absolute";
+      root.style.opacity = "0";
+      root.style.pointerEvents = "none";
+      root.style.width = "1px";
+      root.style.height = "1px";
+      root.style.overflow = "hidden";
+      root.style.margin = "0";
+      root.style.padding = "0";
+    }}
+
+    function openDialog(event) {{
+      event.preventDefault();
+      input.click();
+    }}
+
+    trigger.addEventListener("click", openDialog);
+    dropzone.addEventListener("click", openDialog);
+
+    ["dragenter", "dragover"].forEach(evt => {{
+      dropzone.addEventListener(evt, event => {{
+        event.preventDefault();
+        event.stopPropagation();
+        dropzone.classList.add("upload-dropzone--active");
+      }});
+    }});
+
+    ["dragleave", "dragend"].forEach(evt => {{
+      dropzone.addEventListener(evt, event => {{
+        event.preventDefault();
+        event.stopPropagation();
+        dropzone.classList.remove("upload-dropzone--active");
+      }});
+    }});
+
+    dropzone.addEventListener("drop", event => {{
+      event.preventDefault();
+      event.stopPropagation();
+      dropzone.classList.remove("upload-dropzone--active");
+
+      if (!event.dataTransfer || !event.dataTransfer.files || !event.dataTransfer.files.length) {{
+        setLabelText("Selecciona una carpeta o archivos XML.", false);
+        return;
+      }}
+
+      const xmlFiles = filterXmlFiles(event.dataTransfer.files);
+      if (!xmlFiles.length) {{
+        input.value = "";
+        setLabelText("No se detectaron archivos XML validos.", false);
+        return;
+      }}
+
+      input.files = toFileList(xmlFiles);
+      input.dispatchEvent(new Event("change", {{ bubbles: true }}));
+      setLabelFromFiles(xmlFiles);
+    }});
+
+    input.addEventListener("change", () => {{
+      const xmlFiles = filterXmlFiles(input.files);
+      if (xmlFiles.length !== (input.files ? input.files.length : 0)) {{
+        input.files = toFileList(xmlFiles);
+      }}
+      if (!xmlFiles.length) {{
+        setLabelText("No se detectaron archivos XML validos.", false);
+        return;
+      }}
+      setLabelFromFiles(xmlFiles);
+    }});
+
+    setLabelText(initialSummary, initialHasFiles);
+  }}
+
+  waitForInput();
+}})();
+</script>
