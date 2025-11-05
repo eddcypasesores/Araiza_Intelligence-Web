@@ -10,8 +10,6 @@ import streamlit as st
 from core.navigation import PAGE_PARAM_NAMES
 
 st.set_page_config(page_title="Araiza Intelligence", layout="wide")
-# Allow larger EFOS ZIP uploads (MB).
-st.set_option("server.maxUploadSize", 600)
 
 
 def _normalize(value) -> str | None:
