@@ -128,13 +128,7 @@ def init_admin_section(
             st.stop()
 
     if active_top in MONITOREO_TOPS:
-        if active_top != "monitoreo_firmes":
-            _ensure_permission(
-                ("riesgos",),
-                redirect_to=redirect_target,
-                fallback_page="pages/14_Riesgo_fiscal.py",
-                remember_target=False,
-            )
+        pass
     elif active_top in CEDULA_TOPS:
         _ensure_permission(
             ("cedula",),

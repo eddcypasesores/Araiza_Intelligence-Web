@@ -309,6 +309,8 @@ PAGE_PARAM_NAMES: dict[str, str] = {
     "pages/15_Lista_negra_Sat.py": "Monitoreo EFOS - Cruce de RFC",
     "pages/16_Acerca_de_nosotros.py": "Acerca de Nosotros",
     "pages/17_Archivo_firmes.py": "Monitoreo EFOS - Archivo Firmes",
+    "pages/21_Archivo_exigibles.py": "Monitoreo EFOS - Archivo Exigibles",
+    "pages/Riesgos_fiscales.py": "Riesgos fiscales",
     "pages/Cedula_Impuestos.py": "Cedula de impuestos - Acceso",
     "pages/Cedula_Impuestos_inicio.py": "Cedula de impuestos - Inicio",
     "pages/Cedula_Actualizacion_perdidas.py": "Cedula - Actualizacion y Amortizacion de perdidas",
@@ -334,7 +336,7 @@ class DropdownAction:
 LANDING_TOPS: set[str] = {"inicio", "acerca"}
 TRASLADOS_TOPS: set[str] = {"calculadora", "trabajadores", "tarifas", "parametros"}
 DIOT_TOPS: set[str] = {"diot", "tarifas", "trabajadores", "parametros"}
-MONITOREO_TOPS: set[str] = {"monitoreo", "monitoreo_firmes"}
+MONITOREO_TOPS: set[str] = {"monitoreo", "monitoreo_firmes", "monitoreo_exigibles"}
 CEDULA_TOPS: set[str] = {"cedula"}
 
 PRODUCT_ACTIONS: tuple[DropdownAction, ...] = (
@@ -623,6 +625,12 @@ def _build_nav_items(
                 label="Archivo Firmes",
                 target_page="pages/17_Archivo_firmes.py",
                 top_key="monitoreo_firmes",
+                active_top=active_top,
+            ),
+            _root_link_html(
+                label="Archivo Exigibles",
+                target_page="pages/21_Archivo_exigibles.py",
+                top_key="monitoreo_exigibles",
                 active_top=active_top,
             ),
             _root_link_html(
