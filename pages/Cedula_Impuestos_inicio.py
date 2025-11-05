@@ -235,7 +235,7 @@ COMPONENTS = [
     ("Catalogos de cuentas", None),
     ("Estados financieros", None),
     ("Costo de ventas", None),
-    ("Depreciacion contable vs fiscal", None),
+    ("Depreciacion contable vs fiscal", "pages/Depreciacion_contable_vs_fiscal.py"),
     ("Resultado contable / fiscal", None),
     ("Conciliacion contable vs fiscal", None),
     ("Ajuste anual por inflacion", None),
