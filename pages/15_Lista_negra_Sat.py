@@ -22,8 +22,7 @@ st.set_page_config(
 )
 
 # -----------------------------------------------------------------------------
-# Barra de menú fija superior
-# Usa tu barra si existe; si no, un fallback sticky
+# Barra de menú fija superior (usa tu render_nav si existe; si no, fallback)
 # -----------------------------------------------------------------------------
 def _inject_sticky_nav_css():
     st.markdown(
@@ -58,7 +57,6 @@ def render_sticky_nav_fallback():
     )
 
 try:
-    # Si tienes tu barra, se usa primero
     from core.navigation import render_nav as _render_nav  # type: ignore
     try:
         _render_nav(st)
@@ -70,18 +68,15 @@ except Exception:
 # -----------------------------------------------------------------------------
 # Rutas de trabajo (Railway-ready: usa Volume si existe APP_DATA_DIR)
 # -----------------------------------------------------------------------------
-ROOT_FROM_ENV = os.getenv("APP_DATA_DIR")  # por ej. /data/ais_lista_negra_sat
-if ROOT_FROM_ENV:
-    BASE_ROOT = Path(ROOT_FROM_ENV)
-else:
-    BASE_ROOT = Path(tempfile.gettempdir()) / "ais_lista_negra_sat"
+ROOT_FROM_ENV = os.getenv("APP_DATA_DIR")  # ej: /data/ais_lista_negra_sat
+BASE_ROOT = Path(ROOT_FROM_ENV) if ROOT_FROM_ENV else Path(tempfile.gettempdir()) / "ais_lista_negra_sat"
 
 DATA_DIR = BASE_ROOT
 FIRMES_DIR = DATA_DIR / "firmes"
 EXIGIBLES_DIR = DATA_DIR / "exigibles"
 ZIP_UPLOAD_DIR = DATA_DIR / "zip_uploads"
 EXPORT_DIR = DATA_DIR / "exports"
-JOBS_DIR = DATA_DIR / "jobs"  # (si quisieras persistir JSON de jobs a disco en el futuro)
+JOBS_DIR = DATA_DIR / "jobs"
 
 for d in (DATA_DIR, FIRMES_DIR, EXIGIBLES_DIR, ZIP_UPLOAD_DIR, EXPORT_DIR, JOBS_DIR):
     d.mkdir(parents=True, exist_ok=True)
@@ -91,13 +86,13 @@ FIRMES_MANIFEST_PATH = FIRMES_DIR / "manifest.json"
 EXIGIBLES_MANIFEST_PATH = EXIGIBLES_DIR / "manifest.json"
 
 # Parametrización
-MAX_MB = 600           # ligado a --server.maxUploadSize que definiste en railway.toml
-DEFAULT_BATCH = 150    # tamaño de lote (baja picos)
-POLL_INTERVAL = 0.7    # segundos
+MAX_MB = 600           # ligado a --server.maxUploadSize del deploy
+DEFAULT_BATCH = 150    # tamaño de lote (baja picos de RAM/CPU)
+POLL_INTERVAL = 0.7    # segundos para polling UI
 HEARTBEAT_MAX_AGE = 10 # s sin latido => relanzar worker
 
 # -----------------------------------------------------------------------------
-# Estilos locales extra
+# Estilos locales
 # -----------------------------------------------------------------------------
 st.markdown("""
 <style>
@@ -111,7 +106,7 @@ h1.titulo{font:700 1.9rem/1.2 ui-sans-serif;text-align:center;margin:.5rem 0 .75
 st.markdown('<h1 class="titulo">Cruce de RFC con Lista Negra del SAT</h1>', unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# Utilidades XML / normalización (tomadas y adaptadas de tu primer archivo)
+# Utilidades XML / normalización
 # -----------------------------------------------------------------------------
 def _local_tag(tag: str) -> str:
     return tag.split("}", 1)[1] if "}" in tag else tag
@@ -141,9 +136,7 @@ def _normalize_status(value: str | None) -> str:
     return txt
 
 def parse_emisor_from_xml_stream(fp) -> tuple[str | None, str | None, str | None, float | None, str]:
-    """
-    Streaming: extrae Emisor RFC/Nombre, Fecha, Total y Estatus sin cargar todo el XML en memoria.
-    """
+    """Extrae Emisor RFC/Nombre, Fecha, Total y Estatus sin cargar todo el XML en memoria."""
     try:
         fecha = None
         total = None
@@ -175,9 +168,7 @@ def parse_emisor_from_xml_stream(fp) -> tuple[str | None, str | None, str | None
         return None, None, None, None, "Activo"
 
 # -----------------------------------------------------------------------------
-# Excel builder (tomado de tu primer archivo)
-#   - Usa SQLite como fuente (XML_DB_PATH) + DataFrame con lista negra
-#   - Genera hojas: Coincidencias y Desglose
+# Excel builder (Coincidencias / Desglose) — formato funcional original
 # -----------------------------------------------------------------------------
 def _chunked(iterable, size: int = 500):
     bucket: list[str] = []
@@ -213,7 +204,7 @@ def _load_xml_matches_from_db(db_path: Path, rfcs: list[str]) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 def build_excel_bytes(xml_source: pd.DataFrame | Path | str, df_black: pd.DataFrame) -> bytes:
-    # Estructura igual a tu versión original (Coincidencias/Desglose)
+    # Hojas: Coincidencias / Desglose
     resumen_columns = ["RFC", "PROVEEDOR", "FECHA (FIRMES)", "IMPORTE"]
     desglose_columns = ["Situacion", "Fecha Timbrado", "RFC Emisor", "Razon Social Emisor", "Total", "Estatus"]
 
@@ -307,7 +298,7 @@ def build_excel_bytes(xml_source: pd.DataFrame | Path | str, df_black: pd.DataFr
     return out.getvalue()
 
 # -----------------------------------------------------------------------------
-# Referencias SAT (Firmes/Exigibles) desde manifest.json (igual que tu archivo)
+# Firmes/Exigibles — Autodetección + manifest (PARCHE solicitado)
 # -----------------------------------------------------------------------------
 def _read_manifest(manifest_path: Path) -> dict | None:
     if manifest_path.exists():
@@ -317,30 +308,71 @@ def _read_manifest(manifest_path: Path) -> dict | None:
             return None
     return None
 
-def _load_sat_reference(manifest_path: Path, base_dir: Path) -> pd.DataFrame:
-    manifest = _read_manifest(manifest_path)
-    if not manifest:
-        return pd.DataFrame()
-    stored_name = manifest.get("stored_as", "")
-    if not stored_name:
-        return pd.DataFrame()
-    p = base_dir / stored_name
-    if not p.exists():
-        return pd.DataFrame()
+def _write_manifest(manifest_path: Path, stored_as: str) -> None:
     try:
-        name_lower = p.name.lower()
-        if name_lower.endswith(".csv"):
-            df = pd.read_csv(p, encoding="latin-1")
-        elif name_lower.endswith((".xlsx", ".xls")):
-            df = pd.read_excel(p)
-        else:
-            df = pd.read_csv(p, encoding="latin-1")
+        manifest_path.write_text(json.dumps({"stored_as": stored_as}, ensure_ascii=False, indent=2), encoding="utf-8")
     except Exception:
+        pass
+
+def _looks_like_sat_file(path: Path) -> bool:
+    """Heurística: debe tener columna RFC (lee primeras filas)."""
+    try:
+        n = path.name.lower()
+        if n.endswith(".csv"):
+            df = pd.read_csv(path, nrows=50, encoding="latin-1")
+        elif n.endswith((".xlsx", ".xls")):
+            df = pd.read_excel(path, nrows=50)
+        else:
+            return False
+        return isinstance(df, pd.DataFrame) and ("RFC" in df.columns)
+    except Exception:
+        return False
+
+def _find_best_sat_file(base_dir: Path, manifest_path: Path) -> Path | None:
+    # 1) if manifest válido → úsalo
+    m = _read_manifest(manifest_path)
+    if m and m.get("stored_as"):
+        cand = base_dir / m["stored_as"]
+        if cand.exists() and _looks_like_sat_file(cand):
+            return cand
+    # 2) buscar candidatos por nombre/fecha
+    files = list(base_dir.glob("*.csv")) + list(base_dir.glob("*.xlsx")) + list(base_dir.glob("*.xls"))
+    if not files:
+        return None
+
+    def score(p: Path) -> tuple[int, float]:
+        n = p.name.lower()
+        kw = 2 if ("firmes" in n or "firme" in n or "exigible" in n or "exigibles" in n) else 1
+        return (kw, p.stat().st_mtime)
+
+    files.sort(key=score, reverse=True)
+    for f in files:
+        if _looks_like_sat_file(f):
+            _write_manifest(manifest_path, f.name)
+            return f
+    return None
+
+def _load_sat_reference_from_path(path: Path) -> pd.DataFrame:
+    n = path.name.lower()
+    if n.endswith(".csv"):
+        df = pd.read_csv(path, encoding="latin-1")
+    elif n.endswith((".xlsx", ".xls")):
+        df = pd.read_excel(path)
+    else:
         return pd.DataFrame()
     if df.empty or "RFC" not in df.columns:
         return pd.DataFrame()
     df["RFC"] = df["RFC"].astype(str).str.strip()
     return df
+
+def _load_sat_reference(manifest_path: Path, base_dir: Path) -> pd.DataFrame:
+    best = _find_best_sat_file(base_dir, manifest_path)
+    if not best:
+        return pd.DataFrame()
+    try:
+        return _load_sat_reference_from_path(best)
+    except Exception:
+        return pd.DataFrame()
 
 def load_firmes_from_disk() -> pd.DataFrame:
     return _load_sat_reference(FIRMES_MANIFEST_PATH, FIRMES_DIR)
@@ -363,7 +395,7 @@ def _combine_blacklists(*dfs: pd.DataFrame) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True)
 
 # -----------------------------------------------------------------------------
-# SQLite / Indexación ZIP (idéntico a tu lógica, con INSERT OR IGNORE)
+# SQLite / Indexación de XML (streaming, INSERT OR IGNORE)
 # -----------------------------------------------------------------------------
 def _db_init(db_path: Path):
     with closing(sqlite3.connect(str(db_path))) as con:
@@ -377,7 +409,7 @@ def _db_init(db_path: Path):
             estatus TEXT,
             PRIMARY KEY(sha1))""")
         con.execute("CREATE INDEX IF NOT EXISTS idx_rfc ON xml_emisores(rfc)")
-        # Migraciones defensivas por si venías de una versión previa
+        # Migraciones defensivas
         for col, ddl in (
             ("fecha", "ALTER TABLE xml_emisores ADD COLUMN fecha TEXT"),
             ("total", "ALTER TABLE xml_emisores ADD COLUMN total REAL"),
@@ -395,14 +427,9 @@ def _db_init(db_path: Path):
 def _sha1(b: bytes) -> str:
     h = hashlib.sha1(); h.update(b); return h.hexdigest()
 
-def bulk_index_zip(
-    zip_source: bytes | str | Path | BinaryIO,
-    db_path: Path,
-    *, progress_cb=None, batch: int = 200,
-) -> tuple[int, int, float]:
+def bulk_index_zip(zip_source: bytes | str | Path | BinaryIO, db_path: Path, *, progress_cb=None, batch: int = 200) -> tuple[int, int, float]:
     _db_init(db_path)
     t0 = time.time()
-
     stream: BinaryIO
     close_stream = False
     if isinstance(zip_source, (str, Path)):
@@ -477,9 +504,7 @@ def index_doc_count(db_path: Path) -> int:
 def index_rfc_count(db_path: Path) -> int:
     if not db_path.exists(): return 0
     with closing(sqlite3.connect(str(db_path))) as con:
-        n = con.execute(
-            "SELECT COUNT(DISTINCT rfc) FROM xml_emisores WHERE rfc IS NOT NULL AND rfc<>''"
-        ).fetchone()[0]
+        n = con.execute("SELECT COUNT(DISTINCT rfc) FROM xml_emisores WHERE rfc IS NOT NULL AND rfc<>''").fetchone()[0]
     return int(n or 0)
 
 def index_as_df(db_path: Path, limit: int | None = None) -> pd.DataFrame:
@@ -563,7 +588,6 @@ def _zip_supervise_and_autoretry(job_id: str) -> None:
     if rec.get("status") not in {"queued", "running"}: return
     hb = int(rec.get("heartbeat") or 0)
     if hb and (int(time.time()) - hb) > HEARTBEAT_MAX_AGE:
-        # Sin latido reciente: relanzar
         _zip_job_restart(job_id)
 
 def _zip_job_worker(job_id: str, zip_path: Path, batch: int) -> None:
@@ -648,7 +672,7 @@ def _on_zip_selected():
         try: up.seek(0)
         except Exception: pass
         with dest.open("wb") as fh:
-            shutil.copyfileobj(up, fh, length=1024*1024)
+            shutil.copyfileobj(up, fh, length=1024*1024)  # 1MB chunks
         try: up.seek(0)
         except Exception: pass
     except Exception:
@@ -736,33 +760,35 @@ if show_metrics:
         st.caption(f"Última carga: {summary['procesados']:,} XML procesados, {summary['insertados']:,} nuevos, {summary['tiempo']:.1f}s.")
 
 # -----------------------------------------------------------------------------
-# Validación de referencias SAT y aviso con redirección si faltan
+# Firmes/Exigibles — Carga automática + botón de re-scan
 # -----------------------------------------------------------------------------
 firmes_df = ss.get("firmes_df")
 exigibles_df = ss.get("exigibles_df")
 black = ss.get("blacklist_df", pd.DataFrame())
-tengo_firmes = _has_rfc_column(firmes_df)
-tengo_exigibles = _has_rfc_column(exigibles_df)
+
+with st.expander("¿Problemas para detectar Firmes/Exigibles?"):
+    if st.button("Re-escanear archivos SAT (Firmes/Exigibles)", use_container_width=True):
+        ss["firmes_df"] = load_firmes_from_disk()
+        ss["exigibles_df"] = load_exigibles_from_disk()
+        ss["blacklist_df"] = _combine_blacklists(ss.get("firmes_df"), ss.get("exigibles_df"))
+        st.success("Listas recargadas desde disco (se actualizaron manifests si fue necesario).")
+        st.rerun()
+
+tengo_firmes = _has_rfc_column(ss.get("firmes_df"))
+tengo_exigibles = _has_rfc_column(ss.get("exigibles_df"))
+black = _combine_blacklists(ss.get("firmes_df"), ss.get("exigibles_df"))
+ss["blacklist_df"] = black
 tengo_blacklist = _has_rfc_column(black)
 
 warning_message = None; redirect_target = None; redirect_label = None
 if not tengo_firmes and not tengo_exigibles:
-    warning_message = "No existen los archivos **Firmes** ni **Exigibles**. Cárgalos antes de continuar."
-    redirect_target = "pages/17_Archivo_firmes.py"; redirect_label = "Ir a Archivo Firmes"
+    warning_message = "No existen los archivos **Firmes** ni **Exigibles** en disco. Colócalos en el volume."
 elif not tengo_firmes:
-    warning_message = "No existe el archivo **Firmes**. Cárgalo para habilitar el cruce."
-    redirect_target = "pages/17_Archivo_firmes.py"; redirect_label = "Ir a Archivo Firmes"
+    warning_message = "No existe el archivo **Firmes**. Colócalo en la carpeta /firmes del volume."
 elif not tengo_exigibles:
-    warning_message = "No existe el archivo **Exigibles**. Cárgalo para habilitar el cruce."
-    redirect_target = "pages/21_Archivo_exigibles.py"; redirect_label = "Ir a Archivo Exigibles"
-
+    warning_message = "No existe el archivo **Exigibles**. Colócalo en la carpeta /exigibles del volume."
 if warning_message:
     st.warning(warning_message)
-    if st.button(redirect_label, use_container_width=True, key="go_missing_sat_file"):
-        try:
-            st.switch_page(redirect_target); st.stop()
-        except Exception:
-            st.stop()
 
 # -----------------------------------------------------------------------------
 # Sección 3: Cruce y descarga de Excel + reset total tras descargar
