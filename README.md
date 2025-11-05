@@ -32,7 +32,8 @@ La clave debe habilitar **Maps JavaScript**, **Places**, **Directions** y **Geoc
 2. Define `PORTAL_DATABASE_URL` (o `DATABASE_URL`) en tu entorno local y en Render.
 3. Instala los requisitos (`pip install -r requirements.txt`), que ahora incluyen `psycopg[binary]`.
 4. Ejecuta una primera vez la aplicación o corre `python tools/migrate_portal_users.py` para copiar los usuarios registrados en `db/tolls.db` hacia la nueva instancia de PostgreSQL.
-5. Despliega; el seed del superusuario se ejecuta automáticamente solo si no encuentra el RFC configurado.
+5. Si los usuarios viven en otra instancia PostgreSQL (por ejemplo Render), define `PORTAL_SOURCE_DATABASE_URL` con la URL de origen y ejecuta `python -m tools.migrate_portal_users` para clonarlos a la base destino indicada por `PORTAL_DATABASE_URL`.
+6. Despliega; el seed del superusuario se ejecuta automáticamente solo si no encuentra el RFC configurado.
 
 > El resto de la información (rutas, tarifas, parámetros, etc.) continúa almacenándose en SQLite dentro de `db/tolls.db`. Solo las tablas `portal_users` y `portal_user_resets` se mueven a PostgreSQL.
 
@@ -42,7 +43,7 @@ La clave debe habilitar **Maps JavaScript**, **Places**, **Directions** y **Geoc
 2. **Crear el proyecto en Railway.** Desde https://railway.app inicia sesion, crea un proyecto nuevo y selecciona "Deploy from GitHub" (recomendado) o usa el CLI oficial (`npm i -g @railway/cli`, `railway login`, `railway init` dentro del repositorio).
 3. **Configurar variables de entorno.** Replica las variables que utilizabas en Render (por ejemplo `GOOGLE_MAPS_API_KEY`, `PORTAL_DATABASE_URL`, `DB_PATH`, etc.) desde la pestana **Variables** o con `railway variables set CLAVE=valor`. Railway inyecta automaticamente `PORT`, por lo que no debes definirla manualmente.
 4. **Ajustar el comando de inicio.** En **Settings -> Deployments -> Start Command** selecciona "Use Railway.toml" o, si prefieres, pega manualmente `streamlit run app.py --server.port=$PORT --server.address=0.0.0.0`.
-5. **Conectar la base de datos (opcional).** Si necesitas PostgreSQL administrado, anade el plugin correspondiente en Railway, copia la URL y guardala en `PORTAL_DATABASE_URL`. Opcionalmente ejecuta `railway connect` para migrar usuarios existentes con `python tools/migrate_portal_users.py`.
+5. **Conectar la base de datos (opcional).** Si necesitas PostgreSQL administrado, anade el plugin correspondiente en Railway, copia la URL y guardala en `PORTAL_DATABASE_URL`. Para trasladar usuarios desde SQLite local ejecuta `railway run python -m tools.migrate_portal_users`; si provienen de otro PostgreSQL (Render, etc.) exporta su cadena en `PORTAL_SOURCE_DATABASE_URL` antes de lanzar el comando.
 6. **Lanzar el despliegue.** Conecta la rama principal y habilita auto deploys o ejecuta `railway up`. Revisa `railway logs` ante cualquier error y valida la aplicacion en el dominio `<tu-servicio>.up.railway.app`.
 
 ## Dependencias
