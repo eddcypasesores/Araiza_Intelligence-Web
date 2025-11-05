@@ -1,150 +1,82 @@
-"""Gestion del archivo Firmes para el modulo de Monitoreo especializado de EFOS."""
-
+# pages/17_Archivo_firmes.py
 from __future__ import annotations
-
-import json
-from datetime import datetime, timezone
+import os, json, time, shutil, tempfile
 from pathlib import Path
-
+import pandas as pd
 import streamlit as st
 
-from core.auth import persist_login
-from core.db import portal_set_password
-from core.streamlit_compat import rerun
-from pages.components.admin import init_admin_section
+st.set_page_config(page_title="Cargar Firmes / Exigibles SAT", page_icon="📥", layout="centered")
 
+# --- Dónde guardar (mismo esquema de tu página principal) ---
+ROOT_FROM_ENV = os.getenv("APP_DATA_DIR")  # ej: /data/ais_lista_negra_sat
+BASE_ROOT = Path(ROOT_FROM_ENV) if ROOT_FROM_ENV else Path(tempfile.gettempdir()) / "ais_lista_negra_sat"
+DATA_DIR = BASE_ROOT
+FIRMES_DIR = DATA_DIR / "firmes"
+EXIGIBLES_DIR = DATA_DIR / "exigibles"
+for d in (FIRMES_DIR, EXIGIBLES_DIR):
+    d.mkdir(parents=True, exist_ok=True)
 
-def _enforce_password_change(conn) -> None:
-    if not st.session_state.get("must_change_password"):
-        return
+FIRMES_MANIFEST_PATH = FIRMES_DIR / "manifest.json"
+EXIGIBLES_MANIFEST_PATH = EXIGIBLES_DIR / "manifest.json"
 
-    st.warning("Debes actualizar tu contrasena antes de administrar el archivo Firmes.")
-    with st.form("firmes_force_password_change", clear_on_submit=False):
-        new_password = st.text_input("Nueva contrasena", type="password")
-        confirm_password = st.text_input("Confirmar contrasena", type="password")
-        submitted = st.form_submit_button("Actualizar contrasena", use_container_width=True)
-
-    if not submitted:
-        st.stop()
-
-    new_password = (new_password or "").strip()
-    confirm_password = (confirm_password or "").strip()
-    if len(new_password) < 8:
-        st.error("La contrasena debe tener al menos 8 caracteres.")
-        st.stop()
-    if new_password != confirm_password:
-        st.error("Las contrasenas no coinciden.")
-        st.stop()
-
+def _write_manifest(manifest_path: Path, stored_as: str) -> None:
     try:
-        portal_set_password(
-            conn,
-            st.session_state.get("usuario", "") or "",
-            new_password,
-            require_change=False,
-        )
-        permisos_actuales = st.session_state.get("permisos") or []
-        persist_login(
-            st.session_state.get("usuario", ""),
-            permisos_actuales,
-            must_change_password=False,
-            user_id=st.session_state.get("portal_user_id"),
-        )
-        st.success("Contrasena actualizada correctamente.")
-        rerun()
-    except Exception as exc:
-        st.error(f"No fue posible actualizar la contrasena: {exc}")
-        st.stop()
+        manifest_path.write_text(json.dumps({"stored_as": stored_as}, ensure_ascii=False, indent=2), encoding="utf-8")
+    except Exception:
+        pass
 
-conn = init_admin_section(
-    page_title="Archivo Firmes - Monitoreo especializado de EFOS",
-    active_top="monitoreo_firmes",
-    layout="wide",
-    show_inicio=False,
-    enable_foreign_keys=False,
-)
+def _has_rfc_column(uploaded_file) -> bool:
+    name = (uploaded_file.name or "").lower()
+    try:
+        if name.endswith(".csv"):
+            df = pd.read_csv(uploaded_file, nrows=50, encoding="latin-1")
+        elif name.endswith((".xlsx", ".xls")):
+            df = pd.read_excel(uploaded_file, nrows=50)
+        else:
+            return False
+        return isinstance(df, pd.DataFrame) and ("RFC" in df.columns)
+    except Exception:
+        return False
 
-_enforce_password_change(conn)
-conn.close()
+st.title("📥 Cargar archivos SAT: Firmes y Exigibles")
+st.caption(f"Destino en servidor: `{DATA_DIR}`")
 
-FIRMES_DIR = Path("data/firmes")
-FIRMES_DIR.mkdir(parents=True, exist_ok=True)
-MANIFEST_PATH = FIRMES_DIR / "manifest.json"
+st.markdown("---")
+col1, col2 = st.columns(2)
 
+with col1:
+    st.subheader("Firmes")
+    up_firmes = st.file_uploader("Selecciona archivo de Firmes (.csv/.xlsx/.xls)", type=["csv", "xlsx", "xls"], key="up_firmes")
+    if up_firmes is not None:
+        if not _has_rfc_column(up_firmes):
+            st.error("El archivo de Firmes no parece tener columna 'RFC'. Verifica e intenta de nuevo.")
+        else:
+            # guardar
+            safe_name = f"firmes_{int(time.time())}_{Path(up_firmes.name).name}"
+            dest = FIRMES_DIR / safe_name
+            up_firmes.seek(0)
+            with dest.open("wb") as fh:
+                shutil.copyfileobj(up_firmes, fh, length=1024*1024)
+            _write_manifest(FIRMES_MANIFEST_PATH, safe_name)
+            st.success(f"Firmes cargado como: {safe_name}")
+            st.caption(f"Guardado en: {dest}")
 
-def _load_manifest() -> dict[str, str] | None:
-    if MANIFEST_PATH.exists():
-        try:
-            return json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
-        except Exception:
-            return None
-    return None
+with col2:
+    st.subheader("Exigibles")
+    up_exig = st.file_uploader("Selecciona archivo de Exigibles (.csv/.xlsx/.xls)", type=["csv", "xlsx", "xls"], key="up_exigibles")
+    if up_exig is not None:
+        if not _has_rfc_column(up_exig):
+            st.error("El archivo de Exigibles no parece tener columna 'RFC'. Verifica e intenta de nuevo.")
+        else:
+            # guardar
+            safe_name = f"exigibles_{int(time.time())}_{Path(up_exig.name).name}"
+            dest = EXIGIBLES_DIR / safe_name
+            up_exig.seek(0)
+            with dest.open("wb") as fh:
+                shutil.copyfileobj(up_exig, fh, length=1024*1024)
+            _write_manifest(EXIGIBLES_MANIFEST_PATH, safe_name)
+            st.success(f"Exigibles cargado como: {safe_name}")
+            st.caption(f"Guardado en: {dest}")
 
-
-def _save_manifest(manifest: dict[str, str]) -> None:
-    MANIFEST_PATH.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
-
-
-def _clear_previous_versions(current_suffix: str) -> None:
-    for previous in FIRMES_DIR.glob("firmes_latest.*"):
-        if previous.suffix.lower() != current_suffix.lower():
-            try:
-                previous.unlink()
-            except Exception:
-                pass
-
-
-def _store_uploaded_file(upload) -> Path:
-    suffix = Path(upload.name).suffix.lower() or ".csv"
-    target = FIRMES_DIR / f"firmes_latest{suffix}"
-    target.write_bytes(upload.getvalue())
-    _clear_previous_versions(suffix)
-    manifest = {
-        "filename": upload.name,
-        "stored_as": target.name,
-        "suffix": suffix,
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-        "size_bytes": str(target.stat().st_size),
-    }
-    _save_manifest(manifest)
-    st.session_state["firmes_manifest"] = manifest
-    return target
-
-
-st.title("Actualizar archivo Firmes")
-st.caption(
-    "Carga el archivo publicado por el SAT (Firmes.csv o Excel) para que la consulta de lista negra "
-    "utilice la version mas reciente."
-)
-
-manifest = st.session_state.get("firmes_manifest") or _load_manifest()
-if manifest:
-    stored_path = FIRMES_DIR / manifest.get("stored_as", "")
-    updated = manifest.get("updated_at")
-    display_time = (
-        datetime.fromisoformat(updated).astimezone().strftime("%d/%m/%Y %H:%M")
-        if updated
-        else "Fecha desconocida"
-    )
-    st.success(
-        f"Archivo vigente: **{manifest.get('filename', 'Firmes')}** "
-        f"(actualizado {display_time}, {stored_path.stat().st_size if stored_path.exists() else 0} bytes)."
-    )
-else:
-    st.info("No hay un archivo Firmes registrado. Carga uno para habilitar los cruces automaticos.")
-
-uploaded = st.file_uploader(
-    "Selecciona un archivo CSV o Excel",
-    type=["csv", "xls", "xlsx"],
-    accept_multiple_files=False,
-)
-
-if uploaded is not None:
-    target_path = _store_uploaded_file(uploaded)
-    st.success(f"Archivo guardado correctamente en {target_path.name}.")
-
-st.divider()
-st.write(
-    "Una vez actualizado el archivo, regresa a `Lista negra SAT` desde el menu superior "
-    "para realizar los cruces de RFC."
-)
+st.markdown("---")
+st.info("Cuando termines de subir, vuelve a la página **EFOS / Lista Negra** y usa el botón **“Re-escanear archivos SAT (Firmes/Exigibles)”** si es necesario.")
