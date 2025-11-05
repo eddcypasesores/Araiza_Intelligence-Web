@@ -2,6 +2,6 @@
 builder = "NIXPACKS"
 
 [deploy]
-startCommand = "streamlit run app.py --server.port=$PORT --server.address=0.0.0.0 --server.maxUploadSize=600"
+startCommand = "streamlit run app.py --server.port=$PORT --server.address=0.0.0.0 --server.maxUploadSize=600 --server.runOnSave=false --server.fileWatcherType=none"
 healthcheckPath = "/"
 healthcheckTimeout = 120
