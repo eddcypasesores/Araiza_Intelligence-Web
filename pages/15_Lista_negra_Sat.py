@@ -1,10 +1,11 @@
-# 15_Lista_negra_Sat.py â€” ZIP XML automÃ¡tico + counters poscarga + reset total tras descarga
+# 15_Lista_negra_Sat.py - ZIP XML automatico + counters poscarga + reset total tras descarga
 from __future__ import annotations
 
-import io, json, time, hashlib, zipfile, sqlite3, shutil
+import io, json, time, hashlib, zipfile, sqlite3, shutil, threading
 from contextlib import closing
 from pathlib import Path
 from typing import BinaryIO
+from uuid import uuid4
 import xml.etree.ElementTree as ET
 
 import pandas as pd
@@ -19,8 +20,11 @@ FIRMES_DIR = DATA_DIR / "firmes"; FIRMES_DIR.mkdir(parents=True, exist_ok=True)
 FIRMES_MANIFEST_PATH = FIRMES_DIR / "manifest.json"
 EXIGIBLES_DIR = DATA_DIR / "exigibles"; EXIGIBLES_DIR.mkdir(parents=True, exist_ok=True)
 EXIGIBLES_MANIFEST_PATH = EXIGIBLES_DIR / "manifest.json"
-XML_DB_PATH = DATA_DIR / "xml_index.db"   # Ã­ndice SQLite
+XML_DB_PATH = DATA_DIR / "xml_index.db"   # indice SQLite
 ZIP_UPLOAD_DIR = DATA_DIR / "zip_uploads"; ZIP_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+_ZIP_JOBS: dict[str, dict[str, object]] = {}
+_ZIP_JOBS_LOCK = threading.Lock()
+_ZIP_JOB_RETENTION_SECONDS = 300.0
 
 # ------------------ Init Page ------------------
 init_admin_section(
@@ -263,7 +267,120 @@ def _combine_blacklists(*dfs: pd.DataFrame)->pd.DataFrame:
         return pd.DataFrame()
     return pd.concat(frames, ignore_index=True)
 
-# ---- SQLite Ã­ndice ZIP ----
+
+
+class _ZipJobCancelled(RuntimeError):
+    """Internal marker to abort ZIP processing in background threads."""
+    pass
+
+
+def _zip_job_prune(expire_after: float = _ZIP_JOB_RETENTION_SECONDS) -> None:
+    now = time.time()
+    with _ZIP_JOBS_LOCK:
+        stale = [
+            job_id
+            for job_id, record in _ZIP_JOBS.items()
+            if record.get("finished") and (now - float(record.get("finished", 0.0))) > expire_after
+        ]
+        for job_id in stale:
+            _ZIP_JOBS.pop(job_id, None)
+
+
+def _zip_job_update(job_id: str, **payload: object) -> None:
+    with _ZIP_JOBS_LOCK:
+        record = _ZIP_JOBS.get(job_id)
+        if record:
+            record.update(payload)
+
+
+def _zip_job_get(job_id: str | None) -> dict[str, object] | None:
+    if not job_id:
+        return None
+    with _ZIP_JOBS_LOCK:
+        record = _ZIP_JOBS.get(job_id)
+        if not record:
+            return None
+        return dict(record)
+
+
+def _zip_job_flag_cancel(job_id: str | None) -> None:
+    if not job_id:
+        return
+    _zip_job_update(job_id, cancel_requested=True)
+
+
+def _zip_job_should_cancel(job_id: str) -> bool:
+    with _ZIP_JOBS_LOCK:
+        record = _ZIP_JOBS.get(job_id)
+        return bool(record and record.get("cancel_requested"))
+
+
+def _zip_job_clear(job_id: str | None) -> None:
+    if not job_id:
+        return
+    with _ZIP_JOBS_LOCK:
+        _ZIP_JOBS.pop(job_id, None)
+
+
+def _zip_job_start(zip_path: Path, *, batch: int = 1000) -> str:
+    job_id = f"{int(time.time() * 1000)}_{uuid4().hex}"
+    record: dict[str, object] = {
+        "status": "queued",
+        "progress": 0.0,
+        "processed": 0,
+        "inserted": 0,
+        "total": 0,
+        "error": None,
+        "zip_path": str(zip_path),
+        "started": time.time(),
+        "finished": None,
+        "cancel_requested": False,
+        "batch": batch,
+    }
+    with _ZIP_JOBS_LOCK:
+        _ZIP_JOBS[job_id] = record
+    worker = threading.Thread(target=_zip_job_worker, args=(job_id, zip_path, batch), daemon=True)
+    worker.start()
+    return job_id
+
+
+def _zip_job_worker(job_id: str, zip_path: Path, batch: int) -> None:
+    def _progress(processed: int, total: int, inserted: int) -> None:
+        progress = 0.0
+        if total > 0:
+            progress = min(processed / max(total, 1), 1.0)
+        _zip_job_update(job_id, processed=processed, total=total, inserted=inserted, progress=progress)
+        if _zip_job_should_cancel(job_id):
+            raise _ZipJobCancelled()
+
+    try:
+        _zip_job_update(job_id, status="running")
+        total, inserted, secs = bulk_index_zip(zip_path, XML_DB_PATH, progress_cb=_progress, batch=batch)
+        _zip_job_update(
+            job_id,
+            status="done",
+            processed=total,
+            total=total,
+            inserted=inserted,
+            progress=1.0,
+            seconds=secs,
+            finished=time.time(),
+        )
+    except _ZipJobCancelled:
+        _zip_job_update(job_id, status="cancelled", finished=time.time())
+    except Exception as exc:  # pragma: no cover - defensive
+        _zip_job_update(job_id, status="error", error=str(exc), finished=time.time())
+    finally:
+        try:
+            zip_path.unlink(missing_ok=True)
+        except TypeError:
+            try:
+                if zip_path.exists():
+                    zip_path.unlink()
+            except Exception:
+                pass
+
+# ---- SQLite indice ZIP ----
 def _db_init(db_path:Path):
     with closing(sqlite3.connect(str(db_path))) as con:
         con.execute("""CREATE TABLE IF NOT EXISTS xml_emisores(
@@ -294,31 +411,47 @@ def _db_init(db_path:Path):
 def _sha1(b:bytes)->str:
     h=hashlib.sha1(); h.update(b); return h.hexdigest()
 
-def bulk_index_zip(zip_source:bytes|str|Path|BinaryIO, db_path:Path, prog=None, batch:int=200)->tuple[int,int,float]:
-    _db_init(db_path); t0=time.time()
-    stream:BinaryIO
-    close_stream=False
-    if isinstance(zip_source,(str,Path)):
-        stream=open(zip_source,"rb")
-        close_stream=True
-    elif isinstance(zip_source,bytes):
-        stream=io.BytesIO(zip_source)
+def bulk_index_zip(
+    zip_source: bytes | str | Path | BinaryIO,
+    db_path: Path,
+    *,
+    progress_cb=None,
+    batch: int = 200,
+) -> tuple[int, int, float]:
+    _db_init(db_path)
+    t0 = time.time()
+
+    stream: BinaryIO
+    close_stream = False
+    if isinstance(zip_source, (str, Path)):
+        stream = open(zip_source, "rb")
+        close_stream = True
+    elif isinstance(zip_source, bytes):
+        stream = io.BytesIO(zip_source)
     else:
-        stream=zip_source  # se asume tipo archivo
+        stream = zip_source  # se asume tipo archivo
+
+    processed = 0
+    inserted = 0
+    total_files = 0
+
     try:
         try:
             stream.seek(0)
         except Exception:
             pass
+
         with zipfile.ZipFile(stream) as zf, closing(sqlite3.connect(str(db_path))) as con:
-            cur=con.cursor()
-            files=[i for i in zf.infolist() if (not i.is_dir()) and i.filename.lower().endswith(".xml")]
-            total=len(files); ins=0; proc=0; buf=[]
-            for i,info in enumerate(files,1):
-                with zf.open(info,"r") as fp:
-                    raw=fp.read()
-                sha=_sha1(raw)
-                rfc, nom, fecha, total, estatus = parse_emisor_from_xml_stream(io.BytesIO(raw))
+            cur = con.cursor()
+            files = [i for i in zf.infolist() if (not i.is_dir()) and i.filename.lower().endswith(".xml")]
+            total_files = len(files)
+            buf: list[tuple[str, str, str, str, str | None, float | None, str]] = []
+
+            for info in files:
+                with zf.open(info, "r") as fp:
+                    raw = fp.read()
+                sha = _sha1(raw)
+                rfc, nom, fecha, total_xml, estatus = parse_emisor_from_xml_stream(io.BytesIO(raw))
                 buf.append(
                     (
                         info.filename,
@@ -326,31 +459,45 @@ def bulk_index_zip(zip_source:bytes|str|Path|BinaryIO, db_path:Path, prog=None, 
                         (rfc or "").strip(),
                         (nom or "").strip(),
                         fecha,
-                        total,
+                        total_xml,
                         estatus,
                     )
                 )
-                if len(buf)>=batch:
+
+                if len(buf) >= batch:
                     cur.executemany(
                         "INSERT OR IGNORE INTO xml_emisores(filename,sha1,rfc,nombre,fecha,total,estatus) VALUES(?,?,?,?,?,?,?)",
                         buf,
                     )
-                    con.commit(); ins += cur.rowcount or 0; proc += len(buf); buf.clear()
-                    if prog: prog.progress(min(proc/max(total,1),1.0))
+                    con.commit()
+                    inserted += cur.rowcount or 0
+                    processed += len(buf)
+                    buf.clear()
+                    if progress_cb:
+                        progress_cb(processed, total_files, inserted)
+
             if buf:
                 cur.executemany(
                     "INSERT OR IGNORE INTO xml_emisores(filename,sha1,rfc,nombre,fecha,total,estatus) VALUES(?,?,?,?,?,?,?)",
                     buf,
                 )
-                con.commit(); ins += cur.rowcount or 0; proc += len(buf); buf.clear()
-                if prog: prog.progress(1.0)
+                con.commit()
+                inserted += cur.rowcount or 0
+                processed += len(buf)
+                buf.clear()
+                if progress_cb:
+                    progress_cb(processed, total_files, inserted)
     finally:
         if close_stream:
             try:
                 stream.close()
             except Exception:
                 pass
-    return proc, ins, time.time()-t0
+
+    duration = time.time() - t0
+    if progress_cb:
+        progress_cb(processed, total_files or processed, inserted)
+    return processed, inserted, duration
 
 def index_as_df(db_path:Path, limit:int|None=None)->pd.DataFrame:
     if not db_path.exists(): 
@@ -397,20 +544,21 @@ def _clear_xml_index_file():
 def _reset_page_state(keep_reference_data: bool = True):
     """Reinicia buffers y widgets. Cambia el key del uploader para vaciarlo."""
     ss = st.session_state
-    # Flags y buffers ZIP
-    for k in ["zip_path", "zip_selected", "zip_indexing", "zip_done", "post_download_reset"]:
-        if k in ss:
-            if k == "zip_path":
-                try:
-                    Path(ss[k]).unlink()
-                except Exception:
-                    pass
-            del ss[k]
-    if "zip_bytes" in ss:
-        del ss["zip_bytes"]
-    # Data
+
+    job_id = ss.pop("zip_job_id", None)
+    if job_id:
+        _zip_job_flag_cancel(job_id)
+
+    for key in ["zip_selected", "zip_indexing", "zip_done", "post_download_reset"]:
+        ss.pop(key, None)
+
+    ss.pop("zip_last_summary", None)
+
+    # Compatibilidad con sesiones anteriores
+    ss.pop("zip_bytes", None)
+
     ss["parsed_df"] = pd.DataFrame(
-        columns=["Archivo XML","RFC Emisor","Nombre Emisor","Fecha Timbrado","Total","Estatus"]
+        columns=["Archivo XML", "RFC Emisor", "Nombre Emisor", "Fecha Timbrado", "Total", "Estatus"]
     )
     ss["archivos_xml_nombres"] = []
     if not keep_reference_data:
@@ -420,15 +568,18 @@ def _reset_page_state(keep_reference_data: bool = True):
         ss.get("firmes_df"),
         ss.get("exigibles_df"),
     )
-    # Forzar que el uploader quede vacÃ­o cambiando su key (nonce)
+
     ss["uploader_nonce"] = ss.get("uploader_nonce", 0) + 1
+
 
 # ------------------ Estado inicial ------------------
 ss = st.session_state
+_zip_job_prune()
+
 if "init_done" not in ss:
     ss["firmes_df"] = load_firmes_from_disk()
     ss["exigibles_df"] = load_exigibles_from_disk()
-    ss["uploader_nonce"] = 0              # base para key dinÃ¡mico del uploader
+    ss["uploader_nonce"] = 0              # base para key dinamico del uploader
     _clear_xml_index_file()               # contadores = 0; no residuos
     _reset_page_state(keep_reference_data=True)   # sin archivos ni contadores visibles
     ss["init_done"] = True
@@ -438,14 +589,13 @@ ss["blacklist_df"] = _combine_blacklists(
     ss.get("exigibles_df"),
 )
 
-# Si venimos de una descarga y se pidiÃ³ reset, ejecÃºtalo (y rerender)
 if ss.get("post_download_reset"):
     _clear_xml_index_file()
     _reset_page_state(keep_reference_data=True)
     ss["post_download_reset"] = False
     st.rerun()
 
-# ------------------ Callbacks ------------------
+
 def _on_zip_selected():
     key = f"zip_bulk_uploader_{ss['uploader_nonce']}"
     up = ss.get(key)
@@ -453,15 +603,16 @@ def _on_zip_selected():
         ss["zip_selected"] = False
         ss["zip_indexing"] = False
         ss["zip_done"] = False
-        ss.pop("zip_path", None)
+        previous_job = ss.pop("zip_job_id", None)
+        if previous_job:
+            _zip_job_flag_cancel(previous_job)
         return
 
-    previous = ss.pop("zip_path", None)
-    if previous:
-        try:
-            Path(previous).unlink()
-        except Exception:
-            pass
+    previous_job = ss.pop("zip_job_id", None)
+    if previous_job:
+        _zip_job_flag_cancel(previous_job)
+
+    ss.pop("zip_last_summary", None)
 
     safe_name = Path(getattr(up, "name", "upload.zip") or "upload.zip").name
     dest = ZIP_UPLOAD_DIR / f"{int(time.time() * 1000)}_{safe_name}"
@@ -472,7 +623,7 @@ def _on_zip_selected():
         except Exception:
             pass
         with dest.open("wb") as fh:
-            shutil.copyfileobj(up, fh)
+            shutil.copyfileobj(up, fh, length=1024 * 1024)
         try:
             up.seek(0)
         except Exception:
@@ -485,61 +636,96 @@ def _on_zip_selected():
         ss["zip_selected"] = False
         ss["zip_indexing"] = False
         ss["zip_done"] = False
-        ss.pop("zip_path", None)
+        st.error("No fue posible almacenar el ZIP seleccionado. Intenta de nuevo.")
         return
 
-    ss["zip_path"] = str(dest)
+    job_id = _zip_job_start(dest)
+    ss["zip_job_id"] = job_id
     ss["zip_selected"] = True
     ss["zip_indexing"] = True
     ss["zip_done"] = False
 
 def _after_download():
-    # Marcar reset total; el cuerpo principal lo harÃ¡ fuera del callback
+    # Marcar reset total; el cuerpo principal lo hara fuera del callback
     ss["post_download_reset"] = True
 
 # ------------------ UI: ZIP ------------------
 st.markdown('<div class="card">', unsafe_allow_html=True)
 st.markdown('<div class="hdr">1) Carga masiva (ZIP con miles de XML)</div>', unsafe_allow_html=True)
 
-# Key dinÃ¡mico para vaciar el uploader tras reset:
+# Key dinamico para vaciar el uploader tras reset:
 zip_uploader_key = f"zip_bulk_uploader_{ss['uploader_nonce']}"
 
 st.file_uploader(
-    "Sube tu .zip (se indexa automÃ¡ticamente)",
+    "Sube tu .zip (se indexa automaticamente)",
     type=["zip"], accept_multiple_files=False, key=zip_uploader_key,
     on_change=_on_zip_selected, label_visibility="collapsed"
 )
 
-# Ejecutar indexaciÃ³n silenciosa
-zip_path_value = ss.get("zip_path")
-if ss.get("zip_indexing") and ss.get("zip_selected") and zip_path_value:
-    current_zip_path = Path(zip_path_value)
-    ph = st.progress(0.0)
-    try:
-        total, nuevos, secs = bulk_index_zip(current_zip_path, XML_DB_PATH, prog=ph, batch=1000)
-        ss["zip_done"] = True
+job_id = ss.get("zip_job_id")
+job_info = _zip_job_get(job_id)
+if job_info:
+    progress_value = float(job_info.get("progress") or 0.0)
+    st.progress(progress_value)
+    processed = int(job_info.get("processed") or 0)
+    total = int(job_info.get("total") or 0)
+    status = str(job_info.get("status") or "queued")
+    inserted = int(job_info.get("inserted") or 0)
+
+    if total:
+        st.caption(f"Procesando XML {processed:,} de {total:,} (insertados {inserted:,})")
+    else:
+        st.caption(f"Procesando XML {processed:,} (insertados {inserted:,})")
+
+    if status in {"queued", "running"}:
+        ss["zip_indexing"] = True
+        time.sleep(0.3)
+        st.rerun()
+    elif status == "done":
+        if not ss.get("zip_done"):
+            ss["zip_done"] = True
+            ss["zip_indexing"] = False
+            ss["parsed_df"] = index_as_df(XML_DB_PATH, limit=None)
+            ss["archivos_xml_nombres"] = ss["parsed_df"]["Archivo XML"].tolist() if not ss["parsed_df"].empty else []
+            ss["zip_last_summary"] = {
+                "procesados": processed,
+                "insertados": inserted,
+                "tiempo": float(job_info.get("seconds") or 0.0),
+            }
+        _zip_job_clear(job_id)
+        ss.pop("zip_job_id", None)
+    elif status == "cancelled":
+        st.info("Procesamiento de ZIP cancelado.")
         ss["zip_indexing"] = False
-        ss["parsed_df"] = index_as_df(XML_DB_PATH, limit=None)
-        ss["archivos_xml_nombres"] = ss["parsed_df"]["Archivo XML"].tolist()
-    except Exception:
         ss["zip_done"] = False
+        _zip_job_clear(job_id)
+        ss.pop("zip_job_id", None)
+    elif status == "error":
+        detail = job_info.get("error") or "Error interno desconocido"
+        st.error(f"No fue posible procesar el ZIP. Detalle: {detail}")
         ss["zip_indexing"] = False
-    finally:
-        try:
-            current_zip_path.unlink()
-        except Exception:
-            pass
-        ss.pop("zip_path", None)
+        ss["zip_done"] = False
+        _zip_job_clear(job_id)
+        ss.pop("zip_job_id", None)
+else:
+    ss.setdefault("zip_indexing", False)
+
 st.markdown('</div>', unsafe_allow_html=True)
 
-# --- MÃ©tricas del Ã­ndice (solo visibles SI hay ZIP cargado e indexado) ---
+# --- Metricas del indice (solo visibles SI hay ZIP cargado e indexado) ---
 show_metrics = bool(ss.get("zip_done")) and not ss.get("parsed_df", pd.DataFrame()).empty
 if show_metrics:
     mcol1, mcol2 = st.columns(2)
     with mcol1:
         st.metric("XML indexados", f"{index_doc_count(XML_DB_PATH):,}")
     with mcol2:
-        st.metric("RFC Ãºnicos en Ã­ndice", f"{index_rfc_count(XML_DB_PATH):,}")
+        st.metric("RFC unicos en indice", f"{index_rfc_count(XML_DB_PATH):,}")
+
+    summary = ss.get("zip_last_summary")
+    if summary:
+        st.caption(
+            f"Ultima carga: {summary['procesados']:,} XML procesados, {summary['insertados']:,} nuevos, {summary['tiempo']:.1f}s."
+        )
 
 # ------------------ Archivos SAT ------------------
 tengo_xml = not ss.get("parsed_df", pd.DataFrame()).empty
@@ -555,15 +741,15 @@ redirect_target = None
 redirect_label = None
 
 if not tengo_firmes and not tengo_exigibles:
-    warning_message = "No existen los archivos Firmes ni Exigibles. CÃ¡rgalos antes de continuar."
+    warning_message = "No existen los archivos Firmes ni Exigibles. Cargalos antes de continuar."
     redirect_target = "pages/17_Archivo_firmes.py"
     redirect_label = "Ir a Archivo Firmes"
 elif not tengo_firmes:
-    warning_message = "No existe el archivo Firmes. CÃ¡rgalo para habilitar el cruce."
+    warning_message = "No existe el archivo Firmes. Cargalo para habilitar el cruce."
     redirect_target = "pages/17_Archivo_firmes.py"
     redirect_label = "Ir a Archivo Firmes"
 elif not tengo_exigibles:
-    warning_message = "No existe el archivo Exigibles. CÃ¡rgalo para habilitar el cruce."
+    warning_message = "No existe el archivo Exigibles. Cargalo para habilitar el cruce."
     redirect_target = "pages/21_Archivo_exigibles.py"
     redirect_label = "Ir a Archivo Exigibles"
 
@@ -575,7 +761,7 @@ if warning_message:
         except Exception:
             st.stop()
 
-# ------------------ Descarga (Ãºnico botÃ³n) + reset total tras clic ------------------
+# ------------------ Descarga (unico boton) + reset total tras clic ------------------
 if tengo_xml and tengo_blacklist:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     st.markdown('<div class="hdr">3) Cruce y descarga</div>', unsafe_allow_html=True)
@@ -589,7 +775,7 @@ if tengo_xml and tengo_blacklist:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             use_container_width=True,
             key="dl_xlsx",
-            on_click=_after_download,   # tras descargar, reset total + uploader vacÃ­o
+            on_click=_after_download,   # tras descargar, reset total + uploader vacio
         )
         st.markdown('</div>', unsafe_allow_html=True)
     except Exception:
