@@ -292,7 +292,7 @@ def _db_init(db_path:Path):
 def _sha1(b:bytes)->str:
     h=hashlib.sha1(); h.update(b); return h.hexdigest()
 
-def bulk_index_zip(zip_bytes:bytes, db_path:Path, prog=None, batch:int=1000)->tuple[int,int,float]:
+def bulk_index_zip(zip_bytes:bytes, db_path:Path, prog=None, batch:int=200)->tuple[int,int,float]:
     _db_init(db_path); t0=time.time()
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf, closing(sqlite3.connect(str(db_path))) as con:
         cur=con.cursor()

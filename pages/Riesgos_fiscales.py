@@ -363,13 +363,21 @@ def parse_cfdi_bytes(data: bytes) -> Dict[str, Any]:
     }
 
 
-def parse_cfdi_many(files: Iterable[Tuple[str, bytes]]) -> List[Dict[str, Any]]:
+def parse_cfdi_many(
+    files: Iterable[Tuple[str, bytes]], progress: Any | None = None
+) -> List[Dict[str, Any]]:
     rows: List[Dict[str, Any]] = []
-    for _, blob in files:
+    files_list = files if isinstance(files, list) else list(files)
+    total = len(files_list)
+    for idx, (_, blob) in enumerate(files_list, start=1):
         try:
             rows.append(parse_cfdi_bytes(blob))
         except Exception:
             continue
+        if progress and total:
+            progress.progress(min(idx / total, 1.0))
+    if progress:
+        progress.progress(1.0)
     return rows
 
 
@@ -959,6 +967,7 @@ bad_files: List[str] = []
 def _extract_xml_from_zip(blob: bytes, container_name: str) -> Tuple[List[Tuple[str, bytes]], List[str]]:
     ok: List[Tuple[str, bytes]] = []
     issues: List[str] = []
+    processed = 0
     try:
         with zipfile.ZipFile(io.BytesIO(blob)) as zf:
             members = [
@@ -971,12 +980,15 @@ def _extract_xml_from_zip(blob: bytes, container_name: str) -> Tuple[List[Tuple[
             for member in members:
                 try:
                     xml_bytes = zf.read(member)
-                    if not xml_bytes:
-                        raise ValueError("Archivo vacio")
-                    ET.fromstring(xml_bytes)
-                    ok.append((member.filename, xml_bytes))
-                except Exception:
-                    issues.append(f"{container_name}:{member.filename}")
+                if not xml_bytes:
+                    raise ValueError("Archivo vacio")
+                ET.fromstring(xml_bytes)
+                ok.append((member.filename, xml_bytes))
+                processed += 1
+                if processed % 500 == 0:
+                    st.info(f"{container_name}: {processed:,} XML procesados...", icon="ℹ️")
+            except Exception:
+                issues.append(f"{container_name}:{member.filename}")
     except zipfile.BadZipFile:
         issues.append(f"{container_name} (ZIP inválido)")
     return ok, issues
@@ -1009,15 +1021,19 @@ if uploaded:
         )
 
 files = valid_files
+files = files if isinstance(files, list) else list(files)
 
 if not files:
     st.info("Carga uno o mas CFDI (XML o ZIP) para analizar los riesgos fiscales.")
     st.stop()
 
+progress_bar = st.progress(0.0)
+with st.spinner("Procesando CFDI..."):
+    rows = parse_cfdi_many(files, progress=progress_bar)
+progress_bar.empty()
 
 # --- Construccion de DataFrame base ---------------------------------------
 
-rows = parse_cfdi_many(files)
 for row in rows or []:
     if "Fecha" in row:
         row["Fecha"] = _fecha_solo_dia(row["Fecha"])
