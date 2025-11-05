@@ -31,6 +31,52 @@ from core.streamlit_compat import rerun, set_query_params, normalize_page_path
 
 st.set_page_config(page_title="Riesgos Fiscales", layout="centered")
 
+ROOT = Path(__file__).resolve().parent.parent
+
+def load_tipo_cambio_local() -> pd.DataFrame:
+    """
+    Busca el archivo de tipo de cambio en /data y lo carga.
+    Soporta .xls (xlrd) y .xlsx (openpyxl).
+    """
+    # Prioriza .xlsx si existiera; si no, usa .xls
+    xlsx = ROOT / "data" / "Tipo Cambio.xlsx"
+    xls  = ROOT / "data" / "Tipo Cambio.xls"
+
+    try_paths = []
+    if xlsx.exists():
+        try_paths.append((xlsx, "openpyxl"))
+    if xls.exists():
+        try_paths.append((xls, "xlrd"))
+
+    if not try_paths:
+        st.error("❌ No se encontró 'Tipo Cambio.xlsx' ni 'Tipo Cambio.xls' en la carpeta /data.")
+        st.info(f"Ruta esperada: {ROOT / 'data'}")
+        raise FileNotFoundError("Tipo Cambio.* no existe en /data")
+
+    # Intenta con el motor indicado
+    last_err = None
+    for path, engine in try_paths:
+        try:
+            return pd.read_excel(path, engine=engine)
+        except ImportError:
+            st.error(
+                f"❌ Falta el paquete **{engine}** para leer '{path.name}'. "
+                "Agrégalo en requirements.txt y vuelve a desplegar."
+            )
+            last_err = None  # mostramos mensaje claro y cortamos
+            break
+        except Exception as e:
+            last_err = e
+            continue
+
+    if last_err:
+        st.error(f"❌ Error leyendo tipo de cambio: {last_err}")
+        raise last_err
+    else:
+        raise RuntimeError("Dependencia faltante para leer Tipo Cambio.")
+
+# Uso:
+# df_tc = load_tipo_cambio_local()
 
 def _handle_logout_request() -> None:
     if process_logout_flag():
@@ -965,32 +1011,54 @@ valid_files: List[Tuple[str, bytes]] = []
 bad_files: List[str] = []
 
 def _extract_xml_from_zip(blob: bytes, container_name: str) -> Tuple[List[Tuple[str, bytes]], List[str]]:
+    """
+    Extrae todos los XML válidos de un ZIP en memoria.
+    Devuelve (ok, issues):
+      - ok: lista de (nombre_archivo, xml_bytes)
+      - issues: lista de descripciones de archivos que no pudieron leerse/parsearse
+    """
     ok: List[Tuple[str, bytes]] = []
     issues: List[str] = []
     processed = 0
+
     try:
         with zipfile.ZipFile(io.BytesIO(blob)) as zf:
             members = [
                 m for m in zf.infolist()
                 if (not m.is_dir()) and m.filename.lower().endswith(".xml")
             ]
+
             if not members:
                 issues.append(f"{container_name} (sin XML)")
                 return ok, issues
+
             for member in members:
                 try:
                     xml_bytes = zf.read(member)
-                if not xml_bytes:
-                    raise ValueError("Archivo vacio")
-                ET.fromstring(xml_bytes)
-                ok.append((member.filename, xml_bytes))
-                processed += 1
-                if processed % 500 == 0:
-                    st.info(f"{container_name}: {processed:,} XML procesados...", icon="ℹ️")
-            except Exception:
-                issues.append(f"{container_name}:{member.filename}")
+
+                    if not xml_bytes:
+                        raise ValueError("Archivo vacio")
+
+                    # Valida que realmente sea XML parseable
+                    ET.fromstring(xml_bytes)
+
+                    ok.append((member.filename, xml_bytes))
+                    processed += 1
+
+                    # Mensaje de progreso cada 500 archivos para lotes grandes
+                    if processed % 500 == 0:
+                        st.info(f"{container_name}: {processed:,} XML procesados...", icon="ℹ️")
+
+                except Exception:
+                    # Guardamos el nombre problemático y seguimos con el resto
+                    issues.append(f"{container_name}:{member.filename}")
+
     except zipfile.BadZipFile:
         issues.append(f"{container_name} (ZIP inválido)")
+    except Exception as e:
+        # Cualquier otro error inesperado del ZIP
+        issues.append(f"{container_name} (error leyendo ZIP: {e})")
+
     return ok, issues
 
 

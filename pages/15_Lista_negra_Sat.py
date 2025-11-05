@@ -1,135 +1,89 @@
-# pages/15_Lista_negra_Sat.py
+# 15_Lista_negra_Sat.py - ZIP XML automatico + counters poscarga + reset total tras descarga
 from __future__ import annotations
 
-import os, io, json, time, hashlib, zipfile, sqlite3, shutil, threading, tempfile, traceback
+import io, json, time, hashlib, zipfile, sqlite3, shutil, threading
 from contextlib import closing
 from pathlib import Path
-from typing import BinaryIO, Dict, Any
+from typing import BinaryIO
 from uuid import uuid4
 import xml.etree.ElementTree as ET
 
 import pandas as pd
 import streamlit as st
 
-# =============================================================================
-# Config de página
-# =============================================================================
-st.set_page_config(
-    page_title="Lista Negra SAT — Flujo con pasos",
-    page_icon="🗂️",
+# Ajusta si tu proyecto no usa este helper:
+from pages.components.admin import init_admin_section
+
+# ------------------ Paths ------------------
+DATA_DIR = Path("data"); DATA_DIR.mkdir(parents=True, exist_ok=True)
+FIRMES_DIR = DATA_DIR / "firmes"; FIRMES_DIR.mkdir(parents=True, exist_ok=True)
+FIRMES_MANIFEST_PATH = FIRMES_DIR / "manifest.json"
+EXIGIBLES_DIR = DATA_DIR / "exigibles"; EXIGIBLES_DIR.mkdir(parents=True, exist_ok=True)
+EXIGIBLES_MANIFEST_PATH = EXIGIBLES_DIR / "manifest.json"
+XML_DB_PATH = DATA_DIR / "xml_index.db"   # indice SQLite
+ZIP_UPLOAD_DIR = DATA_DIR / "zip_uploads"; ZIP_UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+EXPORT_DIR = DATA_DIR / "exports"; EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+_ZIP_JOBS: dict[str, dict[str, object]] = {}
+_ZIP_JOBS_LOCK = threading.Lock()
+_ZIP_JOB_RETENTION_SECONDS = 300.0
+
+# ------------------ Init Page ------------------
+init_admin_section(
+    page_title="Monitoreo EFOS - Cruce de RFC",
+    active_top="monitoreo",
     layout="wide",
-    initial_sidebar_state="collapsed",
+    show_inicio=False,
 )
 
-# =============================================================================
-# Barra fija superior (usa tu render_nav si existe; si no, fallback)
-# =============================================================================
-def _inject_sticky_nav_css():
-    st.markdown(
-        """
-        <style>
-          .ai-sticky-nav {
-            position: sticky; top: 0; z-index: 1000;
-            background: #0f172a; border-bottom: 1px solid rgba(255,255,255,.08);
-            padding: 10px 14px;
-          }
-          .ai-sticky-nav .title { color:#fff; font-weight:700; letter-spacing:.3px; margin-right:18px; }
-          .ai-sticky-nav a { color:#e2e8f0; text-decoration:none; margin-right:14px; font-weight:500; }
-          .ai-sticky-nav a:hover { color:#fff; }
-          .main .block-container{padding-top:0!important}
-        </style>
-        """,
-        unsafe_allow_html=True,
-    )
-
-def render_sticky_nav_fallback():
-    _inject_sticky_nav_css()
-    st.markdown(
-        """
-        <div class="ai-sticky-nav">
-          <span class="title">Araiza Intelligence</span>
-          <a href="/">Inicio</a>
-          <a href="?p=calculadora">Calculadora</a>
-          <a href="?p=efos" style="font-weight:700">EFOS / Lista Negra</a>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
-
-try:
-    from core.navigation import render_nav as _render_nav  # type: ignore
-    try:
-        _render_nav(st)
-    except Exception:
-        render_sticky_nav_fallback()
-except Exception:
-    render_sticky_nav_fallback()
-
-# =============================================================================
-# Rutas de trabajo (Railway-ready)
-# =============================================================================
-ROOT_FROM_ENV = os.getenv("APP_DATA_DIR")  # p. ej. /data/ais_lista_negra_sat
-BASE_ROOT = Path(ROOT_FROM_ENV) if ROOT_FROM_ENV else Path(tempfile.gettempdir()) / "ais_lista_negra_sat"
-
-DATA_DIR = BASE_ROOT
-FIRMES_DIR = DATA_DIR / "firmes"
-EXIGIBLES_DIR = DATA_DIR / "exigibles"
-ZIP_UPLOAD_DIR = DATA_DIR / "zip_uploads"
-EXPORT_DIR = DATA_DIR / "exports"
-for d in (DATA_DIR, FIRMES_DIR, EXIGIBLES_DIR, ZIP_UPLOAD_DIR, EXPORT_DIR):
-    d.mkdir(parents=True, exist_ok=True)
-
-XML_DB_PATH = DATA_DIR / "xml_index.db"
-FIRMES_MANIFEST_PATH = FIRMES_DIR / "manifest.json"
-EXIGIBLES_MANIFEST_PATH = EXIGIBLES_DIR / "manifest.json"
-
-# Parámetros
-DEFAULT_BATCH = 150
-POLL_INTERVAL = 0.7
-HEARTBEAT_MAX_AGE = 10  # s
-
-# =============================================================================
-# Estilos locales
-# =============================================================================
+# ------------------ CSS ------------------
 st.markdown("""
 <style>
-h1.titulo{font:700 1.9rem/1.2 ui-sans-serif;text-align:center;margin:.5rem 0 .75rem}
-.card{border:1px solid #e5e7eb;background:#fafafa;border-radius:12px;padding:1rem;margin:.75rem 0}
+.main .block-container{max-width:980px;padding-top:1rem;padding-bottom:1rem}
+h1.titulo{font:700 1.9rem/1.2 ui-sans-serif;text-align:center;margin:0 0 .75rem}
+.card{border:1px solid #e5e7eb;background:#fafafa;border-radius:12px;padding:1rem;margin:.5rem 0}
 .hdr{font:700 1rem ui-sans-serif;margin-bottom:.5rem}
-.stepok{color:#065f46;font-weight:700}
-.stepbad{color:#991b1b;font-weight:700}
+.descargar-excel-box div.stDownloadButton>button{width:100%;height:56px;font-size:1rem;font-weight:700}
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<h1 class="titulo">Lista Negra SAT — Proceso con pasos</h1>', unsafe_allow_html=True)
+st.markdown('<h1 class="titulo">Cruce de RFC con Lista Negra del SAT</h1>', unsafe_allow_html=True)
 
-# =============================================================================
-# Utils XML / Excel / DB
-# =============================================================================
-def _local_tag(tag: str) -> str:
-    return tag.split("}", 1)[1] if "}" in tag else tag
+# ------------------ Helpers ------------------
+def _local_tag(tag:str)->str: 
+    return tag.split("}",1)[1] if "}" in tag else tag
 
-def _safe_float(value) -> float | None:
+def _safe_float(value)->float|None:
     try:
-        if value is None: return None
+        if value is None:
+            return None
         v = str(value).strip()
-        if not v: return None
+        if not v:
+            return None
         return float(v.replace(",", ""))
     except Exception:
         return None
 
-def _normalize_status(value: str | None) -> str:
-    if not value: return "Activo"
+def _normalize_status(value:str|None)->str:
+    if not value:
+        return "Activo"
     txt = value.strip()
-    if not txt: return "Activo"
-    u = txt.upper()
-    if "CANCEL" in u: return "Cancelado"
-    if "ACT" in u: return "Activo"
+    if not txt:
+        return "Activo"
+    upper = txt.upper()
+    if "CANCEL" in upper:
+        return "Cancelado"
+    if "ACT" in upper:
+        return "Activo"
     return txt
 
-def parse_emisor_from_xml_stream(fp) -> tuple[str | None, str | None, str | None, float | None, str]:
+def parse_emisor_from_xml_stream(fp)->tuple[str|None,str|None,str|None,float|None,str]:
+    """Streaming: extrae datos relevantes del comprobante sin cargarlo completo."""
     try:
-        fecha = None; total = None; estatus = None; emisor_rfc = None; emisor_nombre = None
+        fecha = None
+        total = None
+        estatus: str | None = None
+        emisor_rfc = None
+        emisor_nombre = None
         it = ET.iterparse(fp, events=("start",))
         for _, el in it:
             tag = _local_tag(el.tag).lower()
@@ -154,7 +108,332 @@ def parse_emisor_from_xml_stream(fp) -> tuple[str | None, str | None, str | None
     except ET.ParseError:
         return None, None, None, None, "Activo"
 
-def _db_init(db_path: Path):
+def _chunked(iterable, size: int = 500):
+    bucket: list[str] = []
+    for item in iterable:
+        bucket.append(item)
+        if len(bucket) >= size:
+            yield bucket
+            bucket = []
+    if bucket:
+        yield bucket
+
+
+def _load_xml_matches_from_db(db_path: Path, rfcs: list[str]) -> pd.DataFrame:
+    columns = [
+        "Archivo XML",
+        "RFC Emisor",
+        "Nombre Emisor",
+        "Fecha Timbrado",
+        "Total",
+        "Estatus",
+    ]
+    rfcs = [r.strip() for r in rfcs if isinstance(r, str) and r.strip()]
+    if not rfcs:
+        return pd.DataFrame(columns=columns)
+
+    frames: list[pd.DataFrame] = []
+    with closing(sqlite3.connect(str(db_path))) as con:
+        for batch in _chunked(rfcs, 800):
+            placeholders = ",".join("?" for _ in batch)
+            query = (
+                "SELECT filename AS 'Archivo XML', rfc AS 'RFC Emisor', nombre AS 'Nombre Emisor', "
+                "fecha AS 'Fecha Timbrado', total AS 'Total', estatus AS 'Estatus' "
+                f"FROM xml_emisores WHERE rfc IN ({placeholders})"
+            )
+            frames.append(pd.read_sql_query(query, con, params=batch))
+
+    if not frames:
+        return pd.DataFrame(columns=columns)
+    return pd.concat(frames, ignore_index=True)
+
+
+def build_excel_bytes(xml_source: pd.DataFrame | Path | str, df_black: pd.DataFrame) -> bytes:
+    resumen_columns = ["RFC", "PROVEEDOR", "FECHA (FIRMES)", "IMPORTE"]
+    desglose_columns = ["Situacion", "Fecha Timbrado", "RFC Emisor", "Razon Social Emisor", "Total", "Estatus"]
+
+    blk = df_black.copy()
+    if not blk.empty and "RFC" in blk.columns:
+        blk["RFC"] = blk["RFC"].astype(str).str.strip()
+    else:
+        blk = pd.DataFrame(columns=["RFC"])
+
+    if isinstance(xml_source, (str, Path)):
+        xml_df = _load_xml_matches_from_db(Path(xml_source), blk["RFC"].dropna().unique().tolist())
+    else:
+        xml_df = xml_source.copy()
+
+    if xml_df.empty or blk.empty:
+        out_empty = io.BytesIO()
+        with pd.ExcelWriter(out_empty, engine="xlsxwriter") as w:
+            pd.DataFrame(columns=resumen_columns).to_excel(w, index=False, sheet_name="Coincidencias")
+            pd.DataFrame(columns=desglose_columns).to_excel(w, index=False, sheet_name="Desglose")
+        return out_empty.getvalue()
+
+    xml_df["RFC Emisor"] = xml_df["RFC Emisor"].astype(str).str.strip()
+    xml_df["Total"] = pd.to_numeric(xml_df.get("Total"), errors="coerce").fillna(0.0)
+    rfcs_xml = xml_df["RFC Emisor"].dropna().unique().tolist()
+
+    coincidencias = blk[blk["RFC"].isin(rfcs_xml)].copy()
+    resumen_df = pd.DataFrame(columns=resumen_columns)
+    situacion_map: dict[str, str] = {}
+    rfcs_coincidentes: list[str] = []
+    if not coincidencias.empty:
+        rfcs_coincidentes = (
+            coincidencias["RFC"].dropna().astype(str).str.strip().unique().tolist()
+        )
+        if "SUPUESTO" in coincidencias.columns:
+            situacion_map = (
+                coincidencias.groupby("RFC")["SUPUESTO"]
+                .first()
+                .astype(str)
+                .str.strip()
+                .str.upper()
+                .to_dict()
+            )
+        coincidencias_ordenadas = coincidencias.copy()
+        if "FECHA DE PRIMERA PUBLICACION" in coincidencias_ordenadas.columns:
+            coincidencias_ordenadas = coincidencias_ordenadas.sort_values(
+                "FECHA DE PRIMERA PUBLICACION", ascending=False
+            )
+        resumen_df = coincidencias_ordenadas.groupby("RFC", as_index=False).first()
+        resumen_df = resumen_df.drop(columns=["TIPO PERSONA", "ENTIDAD FEDERATIVA", "SUPUESTO"], errors="ignore")
+        resumen_df = resumen_df.rename(
+            columns={
+                "RAZON SOCIAL": "PROVEEDOR",
+                "FECHA DE PRIMERA PUBLICACION": "FECHA (FIRMES)",
+            }
+        )
+        if "FECHA (FIRMES)" in resumen_df.columns:
+            resumen_df["FECHA (FIRMES)"] = pd.to_datetime(
+                resumen_df["FECHA (FIRMES)"], errors="coerce"
+            ).dt.date
+        resumen_df["IMPORTE"] = resumen_df["RFC"].map(
+            xml_df[xml_df["RFC Emisor"].isin(rfcs_coincidentes)].groupby("RFC Emisor")["Total"].sum()
+        ).fillna(0.0)
+        desired_cols = [c for c in ["RFC", "PROVEEDOR", "FECHA (FIRMES)", "IMPORTE"] if c in resumen_df.columns]
+        resumen_df = resumen_df[desired_cols] if desired_cols else resumen_df
+        if "RFC" in resumen_df.columns:
+            resumen_df.sort_values("RFC", inplace=True)
+
+    desglose_df = (
+        xml_df[xml_df["RFC Emisor"].isin(rfcs_coincidentes)].copy()
+        if rfcs_coincidentes
+        else xml_df.iloc[0:0].copy()
+    )
+    if situacion_map:
+        desglose_df["Situacion"] = desglose_df["RFC Emisor"].map(situacion_map).fillna("DESCONOCIDO")
+    else:
+        desglose_df["Situacion"] = "DESCONOCIDO"
+    desglose_df = desglose_df.rename(
+        columns={
+            "Fecha Timbrado": "Fecha Timbrado",
+            "Nombre Emisor": "Razon Social Emisor",
+        }
+    )
+    if "Fecha Timbrado" in desglose_df.columns:
+        desglose_df["Fecha Timbrado"] = pd.to_datetime(
+            desglose_df["Fecha Timbrado"], errors="coerce"
+        ).dt.date
+    desglose_df["Total"] = pd.to_numeric(desglose_df.get("Total"), errors="coerce").fillna(0.0)
+    for col, default in [
+        ("Fecha Timbrado", pd.NaT),
+        ("Razon Social Emisor", ""),
+        ("Estatus", "Activo"),
+    ]:
+        if col not in desglose_df.columns:
+            desglose_df[col] = default
+    for col in desglose_columns:
+        if col not in desglose_df.columns:
+            if col == "Total":
+                desglose_df[col] = 0.0
+            elif col == "Fecha Timbrado":
+                desglose_df[col] = pd.NaT
+            elif col == "Situacion":
+                desglose_df[col] = "DESCONOCIDO"
+            else:
+                desglose_df[col] = ""
+    if not desglose_df.empty:
+        desglose_df.sort_values(["RFC Emisor", "Fecha Timbrado"], inplace=True, kind="mergesort")
+    desglose_df = desglose_df[desglose_columns]
+
+    out = io.BytesIO()
+    with pd.ExcelWriter(out, engine="xlsxwriter") as w:
+        resumen_df.to_excel(w, index=False, sheet_name="Coincidencias")
+        desglose_df.to_excel(w, index=False, sheet_name="Desglose")
+    return out.getvalue()
+
+# ---- Firmes/Exigibles: solo lectura desde manifest ----
+# ---- Firmes/Exigibles: solo lectura desde manifest ----
+def _read_manifest(manifest_path: Path)->dict|None:
+    if manifest_path.exists():
+        try:
+            return json.loads(manifest_path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+    return None
+
+def _load_sat_reference(manifest_path: Path, base_dir: Path)->pd.DataFrame:
+    manifest = _read_manifest(manifest_path)
+    if not manifest:
+        return pd.DataFrame()
+    stored_name = manifest.get("stored_as", "")
+    if not stored_name:
+        return pd.DataFrame()
+    p = base_dir / stored_name
+    if not p.exists():
+        return pd.DataFrame()
+    try:
+        name_lower = p.name.lower()
+        if name_lower.endswith(".csv"):
+            df = pd.read_csv(p, encoding="latin-1")
+        elif name_lower.endswith((".xlsx", ".xls")):
+            df = pd.read_excel(p)
+        else:
+            df = pd.read_csv(p, encoding="latin-1")
+    except Exception:
+        return pd.DataFrame()
+    if df.empty or "RFC" not in df.columns:
+        return pd.DataFrame()
+    df["RFC"] = df["RFC"].astype(str).str.strip()
+    return df
+
+def load_firmes_from_disk()->pd.DataFrame:
+    return _load_sat_reference(FIRMES_MANIFEST_PATH, FIRMES_DIR)
+
+def load_exigibles_from_disk()->pd.DataFrame:
+    return _load_sat_reference(EXIGIBLES_MANIFEST_PATH, EXIGIBLES_DIR)
+
+def _has_rfc_column(df: pd.DataFrame | None) -> bool:
+    return isinstance(df, pd.DataFrame) and (not df.empty) and ("RFC" in df.columns)
+
+def _combine_blacklists(*dfs: pd.DataFrame)->pd.DataFrame:
+    frames: list[pd.DataFrame] = []
+    for df in dfs:
+        if _has_rfc_column(df):
+            frame = df.copy()
+            frame["RFC"] = frame["RFC"].astype(str).str.strip()
+            frames.append(frame)
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True)
+
+
+
+class _ZipJobCancelled(RuntimeError):
+    """Internal marker to abort ZIP processing in background threads."""
+
+
+def _zip_job_prune(expire_after: float = _ZIP_JOB_RETENTION_SECONDS) -> None:
+    now = time.time()
+    with _ZIP_JOBS_LOCK:
+        stale = [
+            job_id
+            for job_id, record in _ZIP_JOBS.items()
+            if record.get("finished") and (now - float(record.get("finished", 0.0))) > expire_after
+        ]
+        for job_id in stale:
+            _ZIP_JOBS.pop(job_id, None)
+
+
+def _zip_job_update(job_id: str, **payload: object) -> None:
+    with _ZIP_JOBS_LOCK:
+        record = _ZIP_JOBS.get(job_id)
+        if record:
+            record.update(payload)
+
+
+def _zip_job_get(job_id: str | None) -> dict[str, object] | None:
+    if not job_id:
+        return None
+    with _ZIP_JOBS_LOCK:
+        record = _ZIP_JOBS.get(job_id)
+        if not record:
+            return None
+        return dict(record)
+
+
+def _zip_job_flag_cancel(job_id: str | None) -> None:
+    if not job_id:
+        return
+    _zip_job_update(job_id, cancel_requested=True)
+
+
+def _zip_job_should_cancel(job_id: str) -> bool:
+    with _ZIP_JOBS_LOCK:
+        record = _ZIP_JOBS.get(job_id)
+        return bool(record and record.get("cancel_requested"))
+
+
+def _zip_job_clear(job_id: str | None) -> None:
+    if not job_id:
+        return
+    with _ZIP_JOBS_LOCK:
+        _ZIP_JOBS.pop(job_id, None)
+
+
+def _zip_job_start(zip_path: Path, *, batch: int = 1000) -> str:
+    job_id = f"{int(time.time() * 1000)}_{uuid4().hex}"
+    record: dict[str, object] = {
+        "status": "queued",
+        "progress": 0.0,
+        "processed": 0,
+        "inserted": 0,
+        "total": 0,
+        "error": None,
+        "zip_path": str(zip_path),
+        "started": time.time(),
+        "finished": None,
+        "cancel_requested": False,
+        "batch": batch,
+    }
+    with _ZIP_JOBS_LOCK:
+        _ZIP_JOBS[job_id] = record
+    worker = threading.Thread(target=_zip_job_worker, args=(job_id, zip_path, batch), daemon=True)
+    worker.start()
+    return job_id
+
+
+def _zip_job_worker(job_id: str, zip_path: Path, batch: int) -> None:
+    def _progress(processed: int, total: int, inserted: int) -> None:
+        progress = 0.0
+        if total > 0:
+            progress = min(processed / max(total, 1), 1.0)
+        _zip_job_update(job_id, processed=processed, total=total, inserted=inserted, progress=progress)
+        if _zip_job_should_cancel(job_id):
+            raise _ZipJobCancelled()
+
+    try:
+        _zip_job_update(job_id, status="running")
+        total, inserted, secs = bulk_index_zip(zip_path, XML_DB_PATH, progress_cb=_progress, batch=batch)
+        _zip_job_update(
+            job_id,
+            status="done",
+            processed=total,
+            total=total,
+            inserted=inserted,
+            progress=1.0,
+            seconds=secs,
+            finished=time.time(),
+        )
+    except _ZipJobCancelled:
+        _zip_job_update(job_id, status="cancelled", finished=time.time())
+    except Exception as exc:  # pragma: no cover - defensive
+        _zip_job_update(job_id, status="error", error=str(exc), finished=time.time())
+    finally:
+        try:
+            zip_path.unlink(missing_ok=True)
+        except TypeError:
+            try:
+                if zip_path.exists():
+                    zip_path.unlink()
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+# ---- SQLite indice ZIP ----
+def _db_init(db_path:Path):
     with closing(sqlite3.connect(str(db_path))) as con:
         con.execute("""CREATE TABLE IF NOT EXISTS xml_emisores(
             filename TEXT NOT NULL,
@@ -166,569 +445,447 @@ def _db_init(db_path: Path):
             estatus TEXT,
             PRIMARY KEY(sha1))""")
         con.execute("CREATE INDEX IF NOT EXISTS idx_rfc ON xml_emisores(rfc)")
+        # En caso de que la tabla exista de versiones previas sin las columnas nuevas.
+        for col, ddl in (
+            ("fecha", "ALTER TABLE xml_emisores ADD COLUMN fecha TEXT"),
+            ("total", "ALTER TABLE xml_emisores ADD COLUMN total REAL"),
+            ("estatus", "ALTER TABLE xml_emisores ADD COLUMN estatus TEXT"),
+        ):
+            try:
+                con.execute(f"SELECT {col} FROM xml_emisores LIMIT 1")
+            except sqlite3.OperationalError:
+                try:
+                    con.execute(ddl)
+                except sqlite3.OperationalError:
+                    pass
         con.commit()
 
-def _sha1(b: bytes) -> str:
-    h = hashlib.sha1(); h.update(b); return h.hexdigest()
+def _sha1(b:bytes)->str:
+    h=hashlib.sha1(); h.update(b); return h.hexdigest()
 
-def bulk_index_zip(zip_path: Path, db_path: Path, *, progress_cb=None, batch: int = 200) -> tuple[int,int,float]:
+def bulk_index_zip(
+    zip_source: bytes | str | Path | BinaryIO,
+    db_path: Path,
+    *,
+    progress_cb=None,
+    batch: int = 200,
+) -> tuple[int, int, float]:
     _db_init(db_path)
     t0 = time.time()
-    processed = 0; inserted = 0; total_files = 0
-    with zipfile.ZipFile(str(zip_path), "r") as zf, closing(sqlite3.connect(str(db_path))) as con:
-        cur = con.cursor()
-        files = [i for i in zf.infolist() if (not i.is_dir()) and i.filename.lower().endswith(".xml")]
-        total_files = len(files)
-        buf = []
-        for info in files:
-            with zf.open(info, "r") as fp:
-                raw = fp.read()
-            sha = _sha1(raw)
-            rfc, nom, fecha, total_xml, estatus = parse_emisor_from_xml_stream(io.BytesIO(raw))
-            buf.append((info.filename, sha, (rfc or "").strip(), (nom or "").strip(), fecha, total_xml, estatus))
-            if len(buf) >= batch:
+
+    stream: BinaryIO
+    close_stream = False
+    if isinstance(zip_source, (str, Path)):
+        stream = open(zip_source, "rb")
+        close_stream = True
+    elif isinstance(zip_source, bytes):
+        stream = io.BytesIO(zip_source)
+    else:
+        stream = zip_source  # se asume tipo archivo
+
+    processed = 0
+    inserted = 0
+    total_files = 0
+
+    try:
+        try:
+            stream.seek(0)
+        except Exception:
+            pass
+
+        with zipfile.ZipFile(stream) as zf, closing(sqlite3.connect(str(db_path))) as con:
+            cur = con.cursor()
+            files = [i for i in zf.infolist() if (not i.is_dir()) and i.filename.lower().endswith(".xml")]
+            total_files = len(files)
+            buf: list[tuple[str, str, str, str, str | None, float | None, str]] = []
+
+            for info in files:
+                with zf.open(info, "r") as fp:
+                    raw = fp.read()
+                sha = _sha1(raw)
+                rfc, nom, fecha, total_xml, estatus = parse_emisor_from_xml_stream(io.BytesIO(raw))
+                buf.append(
+                    (
+                        info.filename,
+                        sha,
+                        (rfc or "").strip(),
+                        (nom or "").strip(),
+                        fecha,
+                        total_xml,
+                        estatus,
+                    )
+                )
+
+                if len(buf) >= batch:
+                    cur.executemany(
+                        "INSERT OR IGNORE INTO xml_emisores(filename,sha1,rfc,nombre,fecha,total,estatus) VALUES(?,?,?,?,?,?,?)",
+                        buf,
+                    )
+                    con.commit()
+                    inserted += cur.rowcount or 0
+                    processed += len(buf)
+                    buf.clear()
+                    if progress_cb:
+                        progress_cb(processed, total_files, inserted)
+
+            if buf:
                 cur.executemany(
                     "INSERT OR IGNORE INTO xml_emisores(filename,sha1,rfc,nombre,fecha,total,estatus) VALUES(?,?,?,?,?,?,?)",
-                    buf
+                    buf,
                 )
                 con.commit()
                 inserted += cur.rowcount or 0
                 processed += len(buf)
                 buf.clear()
-                if progress_cb: progress_cb(processed, total_files, inserted)
-        if buf:
-            cur.executemany(
-                "INSERT OR IGNORE INTO xml_emisores(filename,sha1,rfc,nombre,fecha,total,estatus) VALUES(?,?,?,?,?,?,?)",
-                buf
-            )
-            con.commit()
-            inserted += cur.rowcount or 0
-            processed += len(buf)
-            buf.clear()
-            if progress_cb: progress_cb(processed, total_files, inserted)
-    return processed, inserted, time.time() - t0
+                if progress_cb:
+                    progress_cb(processed, total_files, inserted)
+    finally:
+        if close_stream:
+            try:
+                stream.close()
+            except Exception:
+                pass
+
+    duration = time.time() - t0
+    if progress_cb:
+        progress_cb(processed, total_files or processed, inserted)
+    return processed, inserted, duration
+
+def index_as_df(db_path:Path, limit:int|None=None)->pd.DataFrame:
+    if not db_path.exists(): 
+        return pd.DataFrame(columns=["Archivo XML","RFC Emisor","Nombre Emisor"])
+    with closing(sqlite3.connect(str(db_path))) as con:
+        q="SELECT filename, rfc, nombre, fecha, total, estatus FROM xml_emisores"; 
+        if limit: q+=f" LIMIT {int(limit)}"
+        df=pd.read_sql_query(q, con)
+    return df.rename(
+        columns={
+            "filename":"Archivo XML",
+            "rfc":"RFC Emisor",
+            "nombre":"Nombre Emisor",
+            "fecha":"Fecha Timbrado",
+            "total":"Total",
+            "estatus":"Estatus",
+        }
+    )
 
 def index_doc_count(db_path: Path) -> int:
-    if not db_path.exists(): return 0
+    if not db_path.exists():
+        return 0
     with closing(sqlite3.connect(str(db_path))) as con:
-        return int(con.execute("SELECT COUNT(*) FROM xml_emisores").fetchone()[0] or 0)
+        n = con.execute("SELECT COUNT(*) FROM xml_emisores").fetchone()[0]
+    return int(n or 0)
 
 def index_rfc_count(db_path: Path) -> int:
-    if not db_path.exists(): return 0
+    if not db_path.exists():
+        return 0
     with closing(sqlite3.connect(str(db_path))) as con:
-        return int(con.execute("SELECT COUNT(DISTINCT rfc) FROM xml_emisores WHERE IFNULL(rfc,'')<>''").fetchone()[0] or 0)
+        n = con.execute(
+            "SELECT COUNT(DISTINCT rfc) FROM xml_emisores WHERE rfc IS NOT NULL AND rfc<>''"
+        ).fetchone()[0]
+    return int(n or 0)
 
-def _chunked(iterable, size=500):
-    bucket=[]
-    for item in iterable:
-        bucket.append(item)
-        if len(bucket)>=size:
-            yield bucket; bucket=[]
-    if bucket: yield bucket
-
-def _load_xml_matches_from_db(db_path: Path, rfcs: list[str]) -> pd.DataFrame:
-    columns = ["Archivo XML","RFC Emisor","Nombre Emisor","Fecha Timbrado","Total","Estatus"]
-    rfcs = [r.strip() for r in rfcs if isinstance(r,str) and r.strip()]
-    if not rfcs: return pd.DataFrame(columns=columns)
-    frames=[]
-    with closing(sqlite3.connect(str(db_path))) as con:
-        for batch in _chunked(rfcs, 800):
-            placeholders = ",".join("?" for _ in batch)
-            q = ("SELECT filename AS 'Archivo XML', rfc AS 'RFC Emisor', nombre AS 'Nombre Emisor', "
-                 "fecha AS 'Fecha Timbrado', total AS 'Total', estatus AS 'Estatus' "
-                 f"FROM xml_emisores WHERE rfc IN ({placeholders})")
-            frames.append(pd.read_sql_query(q, con, params=batch))
-    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=columns)
-
-def build_excel_bytes(xml_source: Path, df_black: pd.DataFrame) -> bytes:
-    # usa la BD para traer coincidencias y construir hojas
-    resumen_columns = ["RFC","PROVEEDOR","FECHA (FIRMES)","IMPORTE"]
-    desglose_columns = ["Situacion","Fecha Timbrado","RFC Emisor","Razon Social Emisor","Total","Estatus"]
-
-    blk = df_black.copy()
-    if not blk.empty and "RFC" in blk.columns:
-        blk["RFC"] = blk["RFC"].astype(str).str.strip()
-    else:
-        blk = pd.DataFrame(columns=["RFC"])
-
-    xml_df = _load_xml_matches_from_db(xml_source, blk["RFC"].dropna().unique().tolist()) if not blk.empty else pd.DataFrame()
-    if xml_df.empty or blk.empty:
-        out = io.BytesIO()
-        with pd.ExcelWriter(out, engine="xlsxwriter") as w:
-            pd.DataFrame(columns=resumen_columns).to_excel(w, index=False, sheet_name="Coincidencias")
-            pd.DataFrame(columns=desglose_columns).to_excel(w, index=False, sheet_name="Desglose")
-        return out.getvalue()
-
-    xml_df["RFC Emisor"] = xml_df["RFC Emisor"].astype(str).str.strip()
-    xml_df["Total"] = pd.to_numeric(xml_df.get("Total"), errors="coerce").fillna(0.0)
-    rfcs_xml = xml_df["RFC Emisor"].dropna().unique().tolist()
-
-    coincidencias = blk[blk["RFC"].isin(rfcs_xml)].copy()
-    resumen_df = pd.DataFrame(columns=resumen_columns)
-    situacion_map={}
-    rfcs_coincidentes=[]
-    if not coincidencias.empty:
-        rfcs_coincidentes = coincidencias["RFC"].dropna().astype(str).str.strip().unique().tolist()
-        if "SUPUESTO" in coincidencias.columns:
-            situacion_map = coincidencias.groupby("RFC")["SUPUESTO"].first().astype(str).str.strip().str.upper().to_dict()
-        c_ord = coincidencias.copy()
-        if "FECHA DE PRIMERA PUBLICACION" in c_ord.columns:
-            c_ord = c_ord.sort_values("FECHA DE PRIMERA PUBLICACION", ascending=False)
-        resumen_df = c_ord.groupby("RFC", as_index=False).first()
-        resumen_df = resumen_df.drop(columns=["TIPO PERSONA","ENTIDAD FEDERATIVA","SUPUESTO"], errors="ignore")
-        resumen_df = resumen_df.rename(columns={"RAZON SOCIAL":"PROVEEDOR","FECHA DE PRIMERA PUBLICACION":"FECHA (FIRMES)"})
-        if "FECHA (FIRMES)" in resumen_df.columns:
-            resumen_df["FECHA (FIRMES)"] = pd.to_datetime(resumen_df["FECHA (FIRMES)"], errors="coerce").dt.date
-        resumen_df["IMPORTE"] = resumen_df["RFC"].map(
-            xml_df[xml_df["RFC Emisor"].isin(rfcs_coincidentes)].groupby("RFC Emisor")["Total"].sum()
-        ).fillna(0.0)
-        keep = [c for c in ["RFC","PROVEEDOR","FECHA (FIRMES)","IMPORTE"] if c in resumen_df.columns]
-        resumen_df = resumen_df[keep] if keep else resumen_df
-        if "RFC" in resumen_df.columns: resumen_df.sort_values("RFC", inplace=True)
-
-    desglose_df = (xml_df[xml_df["RFC Emisor"].isin(rfcs_coincidentes)].copy()
-                   if rfcs_coincidentes else xml_df.iloc[0:0].copy())
-    desglose_df["Situacion"] = desglose_df["RFC Emisor"].map(situacion_map).fillna("DESCONOCIDO") if situacion_map else "DESCONOCIDO"
-    desglose_df = desglose_df.rename(columns={"Nombre Emisor":"Razon Social Emisor"})
-    if "Fecha Timbrado" in desglose_df.columns:
-        desglose_df["Fecha Timbrado"] = pd.to_datetime(desglose_df["Fecha Timbrado"], errors="coerce").dt.date
-    desglose_df["Total"] = pd.to_numeric(desglose_df.get("Total"), errors="coerce").fillna(0.0)
-    for col, default in [("Fecha Timbrado", pd.NaT), ("Razon Social Emisor",""), ("Estatus","Activo")]:
-        if col not in desglose_df.columns: desglose_df[col] = default
-    for col in desglose_columns:
-        if col not in desglose_df.columns:
-            if col=="Total": desglose_df[col]=0.0
-            elif col=="Fecha Timbrado": desglose_df[col]=pd.NaT
-            elif col=="Situacion": desglose_df[col]="DESCONOCIDO"
-            else: desglose_df[col]=""
-    if not desglose_df.empty:
-        desglose_df.sort_values(["RFC Emisor","Fecha Timbrado"], inplace=True, kind="mergesort")
-    desglose_df = desglose_df[desglose_columns]
-
-    out = io.BytesIO()
-    with pd.ExcelWriter(out, engine="xlsxwriter") as w:
-        resumen_df.to_excel(w, index=False, sheet_name="Coincidencias")
-        desglose_df.to_excel(w, index=False, sheet_name="Desglose")
-    return out.getvalue()
-
-# =============================================================================
-# Firmes/Exigibles — autodetección + manifest y subida directa
-# =============================================================================
-def _read_manifest(manifest_path: Path) -> dict | None:
-    if manifest_path.exists():
-        try: return json.loads(manifest_path.read_text(encoding="utf-8"))
-        except Exception: return None
-    return None
-
-def _write_manifest(manifest_path: Path, stored_as: str) -> None:
+# ------------------ Reset helpers ------------------
+def _clear_xml_index_file():
     try:
-        manifest_path.write_text(json.dumps({"stored_as": stored_as}, ensure_ascii=False, indent=2), encoding="utf-8")
+        if XML_DB_PATH.exists():
+            XML_DB_PATH.unlink()
     except Exception:
         pass
 
-def _looks_like_sat_file(path: Path) -> bool:
-    try:
-        n = path.name.lower()
-        if n.endswith(".csv"):
-            df = pd.read_csv(path, nrows=50, encoding="latin-1")
-        elif n.endswith((".xlsx",".xls")):
-            df = pd.read_excel(path, nrows=50)
-        else:
-            return False
-        return isinstance(df, pd.DataFrame) and ("RFC" in df.columns)
-    except Exception:
-        return False
+def _reset_page_state(keep_reference_data: bool = True):
+    """Reinicia buffers y widgets. Cambia el key del uploader para vaciarlo."""
+    ss = st.session_state
 
-def _find_best_sat_file(base_dir: Path, manifest_path: Path) -> Path | None:
-    m = _read_manifest(manifest_path)
-    if m and m.get("stored_as"):
-        cand = base_dir / m["stored_as"]
-        if cand.exists() and _looks_like_sat_file(cand): return cand
-    files = list(base_dir.glob("*.csv")) + list(base_dir.glob("*.xlsx")) + list(base_dir.glob("*.xls"))
-    if not files: return None
-    def score(p: Path) -> tuple[int,float]:
-        n = p.name.lower()
-        kw = 2 if ("firmes" in n or "firme" in n or "exigible" in n or "exigibles" in n) else 1
-        return (kw, p.stat().st_mtime)
-    files.sort(key=score, reverse=True)
-    for f in files:
-        if _looks_like_sat_file(f):
-            _write_manifest(manifest_path, f.name)
-            return f
-    return None
+    job_id = ss.pop("zip_job_id", None)
+    if job_id:
+        _zip_job_flag_cancel(job_id)
 
-def _load_sat_reference_from_path(path: Path) -> pd.DataFrame:
-    n = path.name.lower()
-    if n.endswith(".csv"):
-        df = pd.read_csv(path, encoding="latin-1")
-    elif n.endswith((".xlsx",".xls")):
-        df = pd.read_excel(path)
-    else:
-        return pd.DataFrame()
-    if df.empty or "RFC" not in df.columns: return pd.DataFrame()
-    df["RFC"] = df["RFC"].astype(str).str.strip()
-    return df
+    for key in ["zip_selected", "zip_indexing", "zip_done", "post_download_reset"]:
+        ss.pop(key, None)
 
-def _load_sat_reference(manifest_path: Path, base_dir: Path) -> pd.DataFrame:
-    best = _find_best_sat_file(base_dir, manifest_path)
-    if not best: return pd.DataFrame()
-    try: return _load_sat_reference_from_path(best)
-    except Exception: return pd.DataFrame()
+    ss.pop("zip_last_summary", None)
+    ss.pop("zip_download_ready", None)
+    ss.pop("zip_download_error", None)
 
-def load_firmes_from_disk() -> pd.DataFrame:
-    return _load_sat_reference(FIRMES_MANIFEST_PATH, FIRMES_DIR)
+    download_path = ss.pop("zip_download_path", None)
+    if download_path:
+        try:
+            Path(download_path).unlink()
+        except Exception:
+            pass
 
-def load_exigibles_from_disk() -> pd.DataFrame:
-    return _load_sat_reference(EXIGIBLES_MANIFEST_PATH, EXIGIBLES_DIR)
+    # Compatibilidad con sesiones anteriores
+    ss.pop("zip_bytes", None)
+    ss.pop("parsed_df", None)
+    ss.pop("archivos_xml_nombres", None)
 
-def _has_rfc_column(df: pd.DataFrame | None) -> bool:
-    return isinstance(df, pd.DataFrame) and (not df.empty) and ("RFC" in df.columns)
+    if not keep_reference_data:
+        ss["firmes_df"] = pd.DataFrame()
+        ss["exigibles_df"] = pd.DataFrame()
+    ss["blacklist_df"] = _combine_blacklists(
+        ss.get("firmes_df"),
+        ss.get("exigibles_df"),
+    )
 
-def _combine_blacklists(*dfs: pd.DataFrame) -> pd.DataFrame:
-    frames=[]
-    for df in dfs:
-        if _has_rfc_column(df):
-            f = df.copy(); f["RFC"] = f["RFC"].astype(str).str.strip(); frames.append(f)
-    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+    ss["uploader_nonce"] = ss.get("uploader_nonce", 0) + 1
 
-# =============================================================================
-# Estado y helpers de la UI por pasos
-# =============================================================================
+
+# ------------------ Estado inicial ------------------
 ss = st.session_state
-def _init_state():
-    ss.setdefault("firmes_df", load_firmes_from_disk())
-    ss.setdefault("exigibles_df", load_exigibles_from_disk())
-    ss["blacklist_df"] = _combine_blacklists(ss.get("firmes_df"), ss.get("exigibles_df"))
-    ss.setdefault("uploader_nonce", 0)
-    # pasos
-    ss.setdefault("step1_zip_path", "")       # ruta al ZIP guardado
-    ss.setdefault("step2_done", False)        # índice leído
-    ss.setdefault("step3_done", False)        # cruce listo
-    ss.setdefault("step4_ready", False)       # excel listo
-    ss.setdefault("excel_path", "")
-    ss.setdefault("last_error", "")
-    ss.setdefault("last_trace", "")
-    ss.setdefault("progress_info", {"processed":0,"total":0,"inserted":0})
-_init_state()
+_zip_job_prune()
 
-def _reset_after_download():
-    # limpiezas suaves, conservando archivos de referencia
-    ss["uploader_nonce"] += 1
-    ss["step1_zip_path"] = ""
-    ss["step2_done"] = False
-    ss["step3_done"] = False
-    ss["step4_ready"] = False
-    ss["excel_path"] = ""
-    ss["last_error"] = ""
-    ss["last_trace"] = ""
-    ss["progress_info"] = {"processed":0,"total":0,"inserted":0}
+if "init_done" not in ss:
+    ss["firmes_df"] = load_firmes_from_disk()
+    ss["exigibles_df"] = load_exigibles_from_disk()
+    ss["uploader_nonce"] = 0              # base para key dinamico del uploader
+    _clear_xml_index_file()               # contadores = 0; no residuos
+    _reset_page_state(keep_reference_data=True)   # sin archivos ni contadores visibles
+    ss["init_done"] = True
 
-# =============================================================================
-# Paso 0 — Subir Firmes / Exigibles
-# =============================================================================
-st.markdown('<div class="card">', unsafe_allow_html=True)
-st.markdown('<div class="hdr">Paso 0) Subir archivos SAT (Firmes / Exigibles)</div>', unsafe_allow_html=True)
+ss["blacklist_df"] = _combine_blacklists(
+    ss.get("firmes_df"),
+    ss.get("exigibles_df"),
+)
 
-def _has_rfc_column_in_upload(uploaded_file) -> bool:
-    name = (uploaded_file.name or "").lower()
-    try:
-        if name.endswith(".csv"):
-            df = pd.read_csv(uploaded_file, nrows=50, encoding="latin-1")
-        elif name.endswith((".xlsx",".xls")):
-            df = pd.read_excel(uploaded_file, nrows=50)
-        else:
-            return False
-        return isinstance(df, pd.DataFrame) and ("RFC" in df.columns)
-    except Exception:
-        return False
+if ss.get("post_download_reset"):
+    _clear_xml_index_file()
+    _reset_page_state(keep_reference_data=True)
+    ss["post_download_reset"] = False
+    st.rerun()
 
-c1, c2 = st.columns(2)
-with c1:
-    st.caption("Sube **Firmes** (.csv/.xlsx/.xls). Debe incluir columna `RFC`.")
-    up_firmes = st.file_uploader("Firmes", type=["csv","xlsx","xls"], key=f"up_firmes_{ss['uploader_nonce']}")
-    if up_firmes is not None:
-        try:
-            if not _has_rfc_column_in_upload(up_firmes):
-                st.error("El archivo Firmes no tiene columna `RFC`.")
-            else:
-                safe_name = f"firmes_{int(time.time())}_{Path(up_firmes.name).name}"
-                dest = FIRMES_DIR / safe_name
-                up_firmes.seek(0)
-                with dest.open("wb") as fh:
-                    shutil.copyfileobj(up_firmes, fh, length=1024*1024)
-                _write_manifest(FIRMES_MANIFEST_PATH, safe_name)
-                ss["firmes_df"] = load_firmes_from_disk()
-                ss["blacklist_df"] = _combine_blacklists(ss.get("firmes_df"), ss.get("exigibles_df"))
-                st.success(f"Firmes cargado: {safe_name}")
-        except Exception as exc:
-            ss["last_error"] = f"Firmes: {exc}"
-            ss["last_trace"] = traceback.format_exc()
-            st.exception(exc)
 
-with c2:
-    st.caption("Sube **Exigibles** (.csv/.xlsx/.xls). Debe incluir columna `RFC`.")
-    up_exig = st.file_uploader("Exigibles", type=["csv","xlsx","xls"], key=f"up_exigibles_{ss['uploader_nonce']}")
-    if up_exig is not None:
-        try:
-            if not _has_rfc_column_in_upload(up_exig):
-                st.error("El archivo Exigibles no tiene columna `RFC`.")
-            else:
-                safe_name = f"exigibles_{int(time.time())}_{Path(up_exig.name).name}"
-                dest = EXIGIBLES_DIR / safe_name
-                up_exig.seek(0)
-                with dest.open("wb") as fh:
-                    shutil.copyfileobj(up_exig, fh, length=1024*1024)
-                _write_manifest(EXIGIBLES_MANIFEST_PATH, safe_name)
-                ss["exigibles_df"] = load_exigibles_from_disk()
-                ss["blacklist_df"] = _combine_blacklists(ss.get("firmes_df"), ss.get("exigibles_df"))
-                st.success(f"Exigibles cargado: {safe_name}")
-        except Exception as exc:
-            ss["last_error"] = f"Exigibles: {exc}"
-            ss["last_trace"] = traceback.format_exc()
-            st.exception(exc)
-
-tengo_firmes = _has_rfc_column(ss.get("firmes_df"))
-tengo_exigibles = _has_rfc_column(ss.get("exigibles_df"))
-if not (tengo_firmes and tengo_exigibles):
-    st.warning("Aún faltan **Firmes** y/o **Exigibles** para poder cruzar datos.")
-st.markdown('</div>', unsafe_allow_html=True)
-
-# =============================================================================
-# Paso 1 — Cargar ZIP (solo guardar archivo)
-# =============================================================================
-st.markdown('<div class="card">', unsafe_allow_html=True)
-st.markdown('<div class="hdr">Paso 1) Cargar archivo ZIP de XML</div>', unsafe_allow_html=True)
-
-def _on_pick_zip():
-    key = f"zip_pick_{ss['uploader_nonce']}"
+def _on_zip_selected():
+    key = f"zip_bulk_uploader_{ss['uploader_nonce']}"
     up = ss.get(key)
     if not up:
+        ss["zip_selected"] = False
+        ss["zip_indexing"] = False
+        ss["zip_done"] = False
+        previous_job = ss.pop("zip_job_id", None)
+        if previous_job:
+            _zip_job_flag_cancel(previous_job)
         return
+
+    previous_job = ss.pop("zip_job_id", None)
+    if previous_job:
+        _zip_job_flag_cancel(previous_job)
+
+    ss.pop("zip_last_summary", None)
+
+    download_path = ss.pop("zip_download_path", None)
+    if download_path:
+        try:
+            Path(download_path).unlink()
+        except Exception:
+            pass
+    ss.pop("zip_download_ready", None)
+    ss.pop("zip_download_error", None)
+
+    safe_name = Path(getattr(up, "name", "upload.zip") or "upload.zip").name
+    dest = ZIP_UPLOAD_DIR / f"{int(time.time() * 1000)}_{safe_name}"
+
     try:
-        safe_name = Path(getattr(up, "name", "cfdi.zip") or "cfdi.zip").name
-        dest = ZIP_UPLOAD_DIR / f"{int(time.time()*1000)}_{safe_name}"
-        up.seek(0)
+        try:
+            up.seek(0)
+        except Exception:
+            pass
         with dest.open("wb") as fh:
-            shutil.copyfileobj(up, fh, length=1024*1024)
-        ss["step1_zip_path"] = str(dest)
-        ss["step2_done"] = False
-        ss["step3_done"] = False
-        ss["step4_ready"] = False
-        ss["excel_path"] = ""
-        ss["last_error"] = ""
-        ss["last_trace"] = ""
-        ss["progress_info"] = {"processed":0,"total":0,"inserted":0}
-        st.success(f"ZIP guardado: {dest.name}")
-    except Exception as exc:
-        ss["last_error"] = f"Cargar ZIP: {exc}"
-        ss["last_trace"] = traceback.format_exc()
-        st.exception(exc)
+            shutil.copyfileobj(up, fh, length=1024 * 1024)
+        try:
+            up.seek(0)
+        except Exception:
+            pass
+    except Exception:
+        try:
+            dest.unlink()
+        except Exception:
+            pass
+        ss["zip_selected"] = False
+        ss["zip_indexing"] = False
+        ss["zip_done"] = False
+        st.error("No fue posible almacenar el ZIP seleccionado. Intenta de nuevo.")
+        return
 
-zip_key = f"zip_pick_{ss['uploader_nonce']}"
-st.file_uploader("Selecciona el ZIP (no se procesa hasta el paso 2)", type=["zip"], key=zip_key, on_change=_on_pick_zip)
-if ss.get("step1_zip_path"):
-    p = Path(ss["step1_zip_path"])
-    st.caption(f"Archivo seleccionado: **{p.name}** ({p.stat().st_size/1024/1024:,.2f} MB)")
-else:
-    st.info("Selecciona un archivo ZIP para continuar con el paso 2.")
-st.markdown('</div>', unsafe_allow_html=True)
+    job_id = _zip_job_start(dest)
+    ss["zip_job_id"] = job_id
+    ss["zip_selected"] = True
+    ss["zip_indexing"] = True
+    ss["zip_done"] = False
 
-# =============================================================================
-# Paso 2 — Leer XML (indexar ZIP a SQLite) + Reintentar
-# =============================================================================
+def _after_download():
+    # Marcar reset total; el cuerpo principal lo hara fuera del callback
+    ss["post_download_reset"] = True
+
+# ------------------ UI: ZIP ------------------
 st.markdown('<div class="card">', unsafe_allow_html=True)
-st.markdown('<div class="hdr">Paso 2) Leer XML del ZIP e indexar</div>', unsafe_allow_html=True)
+st.markdown('<div class="hdr">1) Carga masiva (ZIP con miles de XML)</div>', unsafe_allow_html=True)
 
-# Worker simple con heartbeat y retry manual
-_ZIP_JOBS: Dict[str, Dict[str, Any]] = {}
-_ZIP_LOCK = threading.Lock()
+# Key dinamico para vaciar el uploader tras reset:
+zip_uploader_key = f"zip_bulk_uploader_{ss['uploader_nonce']}"
 
-def _job_update(job_id: str, **payload):
-    payload.setdefault("heartbeat", int(time.time()))
-    with _ZIP_LOCK:
-        if job_id in _ZIP_JOBS:
-            _ZIP_JOBS[job_id].update(payload)
-
-def _job_get(job_id: str) -> Dict[str, Any] | None:
-    with _ZIP_LOCK:
-        return dict(_ZIP_JOBS.get(job_id) or {}) or None
-
-def _job_start(zip_path: Path, batch: int = DEFAULT_BATCH) -> str:
-    job_id = f"{int(time.time()*1000)}_{uuid4().hex}"
-    with _ZIP_LOCK:
-        _ZIP_JOBS[job_id] = {
-            "status":"queued","progress":0.0,"processed":0,"inserted":0,"total":0,
-            "zip_path":str(zip_path),"error":None,"heartbeat":int(time.time()),"batch":batch
-        }
-    threading.Thread(target=_job_worker, args=(job_id,zip_path,batch), daemon=True).start()
-    return job_id
-
-def _job_worker(job_id: str, zip_path: Path, batch: int):
-    def _progress(processed:int, total:int, inserted:int):
-        prog = (processed / max(1,total)) if total else 0.0
-        _job_update(job_id, processed=processed, total=total, inserted=inserted, progress=prog)
-    try:
-        _job_update(job_id, status="running")
-        processed, inserted, secs = bulk_index_zip(zip_path, XML_DB_PATH, progress_cb=_progress, batch=batch)
-        _job_update(job_id, status="done", seconds=secs, processed=processed, total=processed, inserted=inserted, progress=1.0)
-    except Exception as exc:
-        _job_update(job_id, status="error", error=str(exc))
-
-def _job_restart(job_id: str):
-    rec = _job_get(job_id)
-    if not rec: return
-    zp = Path(rec["zip_path"])
-    if not zp.exists(): return
-    _job_update(job_id, status="queued", error=None, progress=0.0, processed=0, inserted=0, total=0)
-    threading.Thread(target=_job_worker, args=(job_id,zp,int(rec.get("batch") or DEFAULT_BATCH)), daemon=True).start()
-
-# UI botones paso 2
-col_2a, col_2b, col_2c = st.columns([0.4,0.3,0.3])
-if col_2a.button("📖 Leer XML (indexar ZIP)", use_container_width=True, disabled=not ss.get("step1_zip_path")):
-    try:
-        # borrar BD anterior para pruebas limpias
-        if XML_DB_PATH.exists(): XML_DB_PATH.unlink()
-        job_id = _job_start(Path(ss["step1_zip_path"]), batch=DEFAULT_BATCH)
-        ss["zip_job_id"] = job_id
-        ss["step2_done"] = False
-        ss["last_error"] = ""
-        ss["last_trace"] = ""
-    except Exception as exc:
-        ss["last_error"] = f"Leer XML: {exc}"
-        ss["last_trace"] = traceback.format_exc()
-        st.exception(exc)
-
-if col_2b.button("🔁 Reintentar lectura", use_container_width=True, disabled=not ss.get("zip_job_id")):
-    try:
-        _job_restart(ss["zip_job_id"])
-    except Exception as exc:
-        ss["last_error"] = f"Reintentar: {exc}"
-        ss["last_trace"] = traceback.format_exc()
-        st.exception(exc)
-
-if col_2c.button("🧹 Limpiar índice", use_container_width=True):
-    try:
-        if XML_DB_PATH.exists(): XML_DB_PATH.unlink()
-        ss["step2_done"] = False
-        st.success("Índice limpio.")
-    except Exception as exc:
-        ss["last_error"] = f"Limpiar índice: {exc}"
-        ss["last_trace"] = traceback.format_exc()
-        st.exception(exc)
+st.file_uploader(
+    "Sube tu .zip (se indexa automaticamente)",
+    type=["zip"], accept_multiple_files=False, key=zip_uploader_key,
+    on_change=_on_zip_selected, label_visibility="collapsed"
+)
 
 job_id = ss.get("zip_job_id")
-if job_id:
-    info = _job_get(job_id)
-    if info:
-        st.progress(float(info.get("progress") or 0.0))
-        pr = int(info.get("processed") or 0); tot = int(info.get("total") or 0); ins = int(info.get("inserted") or 0)
-        st.caption(f"Progreso: {pr:,}/{tot:,} (insertados {ins:,}) | estado: {info.get('status')}")
-        if info.get("status") in {"queued","running"}:
-            time.sleep(POLL_INTERVAL)
-            st.rerun()
-        elif info.get("status") == "done":
-            ss["step2_done"] = True
-            st.success(f"Lectura OK — XML indexados: {index_doc_count(XML_DB_PATH):,} | RFC únicos: {index_rfc_count(XML_DB_PATH):,}")
-        elif info.get("status") == "error":
-            ss["last_error"] = f"Lectura ZIP: {info.get('error')}"
-            st.error(f"Error al leer ZIP: {info.get('error')}")
-else:
-    st.info("Inicia la lectura con el botón **Leer XML (indexar ZIP)**.")
+job_info = _zip_job_get(job_id)
+if job_info:
+    progress_value = float(job_info.get("progress") or 0.0)
+    st.progress(progress_value)
+    processed = int(job_info.get("processed") or 0)
+    total = int(job_info.get("total") or 0)
+    status = str(job_info.get("status") or "queued")
+    inserted = int(job_info.get("inserted") or 0)
 
-st.markdown('</div>', unsafe_allow_html=True)
-
-# =============================================================================
-# Paso 3 — Cruzar datos
-# =============================================================================
-st.markdown('<div class="card">', unsafe_allow_html=True)
-st.markdown('<div class="hdr">Paso 3) Cruzar datos (XML vs Firmes/Exigibles)</div>', unsafe_allow_html=True)
-
-col3a, col3b = st.columns([0.5,0.5])
-with col3a:
-    if st.button("🔍 Cruzar datos", use_container_width=True, disabled=not (ss.get("step2_done") and _has_rfc_column(ss.get("blacklist_df")))):
-        try:
-            # simple prueba de consulta para verificar cruce
-            blk = ss["blacklist_df"]
-            rfcs = blk["RFC"].dropna().astype(str).str.strip().unique().tolist() if "RFC" in blk.columns else []
-            if not rfcs:
-                st.warning("No hay RFC en Firmes/Exigibles.")
-            else:
-                df_match = _load_xml_matches_from_db(XML_DB_PATH, rfcs)
-                ss["step3_done"] = True
-                st.success(f"Cruce OK: {len(df_match):,} filas coincidentes.")
-                with st.expander("Ver muestra de coincidencias (hasta 20)", expanded=False):
-                    st.dataframe(df_match.head(20), use_container_width=True)
-        except Exception as exc:
-            ss["last_error"] = f"Cruzar datos: {exc}"
-            ss["last_trace"] = traceback.format_exc()
-            st.exception(exc)
-
-with col3b:
-    st.caption("Requisitos: haber completado el **Paso 2** y contar con **Firmes/Exigibles** válidos (columna `RFC`).")
-
-st.markdown('</div>', unsafe_allow_html=True)
-
-# =============================================================================
-# Paso 4 — Descargar Excel
-# =============================================================================
-st.markdown('<div class="card">', unsafe_allow_html=True)
-st.markdown('<div class="hdr">Paso 4) Descargar Excel</div>', unsafe_allow_html=True)
-
-col4a, col4b = st.columns([0.55,0.45])
-
-with col4a:
-    if st.button("🧾 Generar Excel", use_container_width=True, disabled=not (ss.get("step2_done") and _has_rfc_column(ss.get("blacklist_df")))):
-        try:
-            bytes_data = build_excel_bytes(XML_DB_PATH, ss["blacklist_df"])
-            export_name = f"Cruce_RFC_vs_Lista_Negra_SAT_{int(time.time()*1000)}.xlsx"
-            export_path = EXPORT_DIR / export_name
-            export_path.write_bytes(bytes_data)
-            ss["excel_path"] = str(export_path)
-            ss["step4_ready"] = True
-            st.success("Excel generado. Puedes descargarlo.")
-        except Exception as exc:
-            ss["last_error"] = f"Generar Excel: {exc}"
-            ss["last_trace"] = traceback.format_exc()
-            st.exception(exc)
-
-with col4b:
-    if ss.get("step4_ready") and ss.get("excel_path") and Path(ss["excel_path"]).exists():
-        try:
-            data_bytes = Path(ss["excel_path"]).read_bytes()
-            st.download_button(
-                "⬇️ Descargar Excel",
-                data=data_bytes,
-                file_name=Path(ss["excel_path"]).name,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                use_container_width=True,
-                key="dl_xlsx_final",
-                on_click=_reset_after_download,
-            )
-        except Exception as exc:
-            ss["last_error"] = f"Descargar Excel: {exc}"
-            ss["last_trace"] = traceback.format_exc()
-            st.exception(exc)
+    if total:
+        st.caption(f"Procesando XML {processed:,} de {total:,} (insertados {inserted:,})")
     else:
-        st.info("Primero genera el Excel.")
+        st.caption(f"Procesando XML {processed:,} (insertados {inserted:,})")
+
+    if status in {"queued", "running"}:
+        ss["zip_indexing"] = True
+        time.sleep(0.3)
+        st.rerun()
+    elif status == "done":
+        ss["zip_last_summary"] = {
+            "procesados": processed,
+            "insertados": inserted,
+            "tiempo": float(job_info.get("seconds") or 0.0),
+        }
+        ss["zip_done"] = True
+        ss["zip_indexing"] = False
+        _zip_job_clear(job_id)
+        ss.pop("zip_job_id", None)
+    elif status == "cancelled":
+        st.info("Procesamiento de ZIP cancelado.")
+        ss["zip_indexing"] = False
+        ss["zip_done"] = False
+        _zip_job_clear(job_id)
+        ss.pop("zip_job_id", None)
+    elif status == "error":
+        detail = job_info.get("error") or "Error interno desconocido"
+        st.error(f"No fue posible procesar el ZIP. Detalle: {detail}")
+        ss["zip_indexing"] = False
+        ss["zip_done"] = False
+        _zip_job_clear(job_id)
+        ss.pop("zip_job_id", None)
+else:
+    ss.setdefault("zip_indexing", False)
 
 st.markdown('</div>', unsafe_allow_html=True)
 
-# =============================================================================
-# Panel de depuración
-# =============================================================================
-with st.expander("🛠️ Depuración / Estado interno", expanded=False):
-    st.write("**Rutas**")
-    st.code(f"DATA_DIR         = {DATA_DIR}\nXML_DB_PATH      = {XML_DB_PATH}\nZIP_UPLOAD_DIR   = {ZIP_UPLOAD_DIR}\nEXPORT_DIR       = {EXPORT_DIR}\nFIRMES_DIR       = {FIRMES_DIR}\nEXIGIBLES_DIR    = {EXIGIBLES_DIR}", language="bash")
-    st.write("**Paso 1**")
-    st.json({"step1_zip_path": ss.get("step1_zip_path")})
-    st.write("**Paso 2**")
-    st.json({"step2_done": ss.get("step2_done"), "xml_docs": index_doc_count(XML_DB_PATH), "xml_rfcs": index_rfc_count(XML_DB_PATH)})
-    st.write("**Paso 3**")
-    st.json({"step3_done": ss.get("step3_done"), "have_blacklist": _has_rfc_column(ss.get("blacklist_df"))})
-    st.write("**Paso 4**")
-    st.json({"step4_ready": ss.get("step4_ready"), "excel_path": ss.get("excel_path")})
-    if ss.get("last_error"):
-        st.error(ss["last_error"])
-        if ss.get("last_trace"):
-            with st.expander("Traceback"):
-                st.code(ss["last_trace"], language="python")
+# --- Metricas del indice (solo visibles SI hay ZIP cargado e indexado) ---
+summary = ss.get("zip_last_summary") or {}
+doc_count = index_doc_count(XML_DB_PATH)
+show_metrics = bool(ss.get("zip_done")) and bool(summary or doc_count)
+if show_metrics:
+    mcol1, mcol2 = st.columns(2)
+    with mcol1:
+        st.metric("XML indexados", f"{doc_count:,}")
+    with mcol2:
+        st.metric("RFC unicos en indice", f"{index_rfc_count(XML_DB_PATH):,}")
+
+    if summary:
+        st.caption(
+            f"Ultima carga: {summary['procesados']:,} XML procesados, {summary['insertados']:,} nuevos, {summary['tiempo']:.1f}s."
+        )
+
+# ------------------ Archivos SAT ------------------
+summary = summary if 'summary' in locals() else ss.get("zip_last_summary") or {}
+tengo_xml = bool(summary.get("procesados")) or bool(locals().get('doc_count', index_doc_count(XML_DB_PATH)))
+firmes_df = ss.get("firmes_df")
+exigibles_df = ss.get("exigibles_df")
+black = ss.get("blacklist_df", pd.DataFrame())
+tengo_firmes = _has_rfc_column(firmes_df)
+tengo_exigibles = _has_rfc_column(exigibles_df)
+tengo_blacklist = _has_rfc_column(black)
+
+warning_message = None
+redirect_target = None
+redirect_label = None
+
+if not tengo_firmes and not tengo_exigibles:
+    warning_message = "No existen los archivos Firmes ni Exigibles. Cargalos antes de continuar."
+    redirect_target = "pages/17_Archivo_firmes.py"
+    redirect_label = "Ir a Archivo Firmes"
+elif not tengo_firmes:
+    warning_message = "No existe el archivo Firmes. Cargalo para habilitar el cruce."
+    redirect_target = "pages/17_Archivo_firmes.py"
+    redirect_label = "Ir a Archivo Firmes"
+elif not tengo_exigibles:
+    warning_message = "No existe el archivo Exigibles. Cargalo para habilitar el cruce."
+    redirect_target = "pages/21_Archivo_exigibles.py"
+    redirect_label = "Ir a Archivo Exigibles"
+
+if warning_message:
+    st.warning(warning_message)
+    if st.button(redirect_label, use_container_width=True, key="go_missing_sat_file"):
+        try:
+            st.switch_page(redirect_target)
+            st.stop()
+        except Exception:
+            st.stop()
+
+# ------------------ Descarga (unico boton) + reset total tras clic ------------------
+if tengo_xml and tengo_blacklist:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown('<div class="hdr">3) Cruce y descarga</div>', unsafe_allow_html=True)
+
+    col_gen, col_download = st.columns([0.55, 0.45])
+    with col_gen:
+        if st.button('Generar coincidencias (Excel)', use_container_width=True, key='generate_excel_btn'):
+            existing_path = ss.pop('zip_download_path', None)
+            if existing_path:
+                try:
+                    Path(existing_path).unlink()
+                except Exception:
+                    pass
+            try:
+                bytes_data = build_excel_bytes(XML_DB_PATH, black)
+                export_name = f'Cruce_RFC_vs_Lista_Negra_SAT_{int(time.time() * 1000)}.xlsx'
+                export_path = EXPORT_DIR / export_name
+                export_path.write_bytes(bytes_data)
+                ss['zip_download_path'] = str(export_path)
+                ss['zip_download_ready'] = True
+                ss['zip_download_error'] = None
+                st.success('Excel generado correctamente. Usa el boton de descarga.')
+            except Exception as exc:
+                ss['zip_download_ready'] = False
+                ss['zip_download_error'] = str(exc)
+                st.error('No fue posible generar el Excel. Revisa el log e intentalo de nuevo.')
+
+    download_error = ss.get('zip_download_error')
+    if download_error and not ss.get('zip_download_ready'):
+        st.error(f'Error al generar el archivo: {download_error}')
+
+    download_path_value = ss.get('zip_download_path')
+    download_ready = ss.get('zip_download_ready') and download_path_value
+    with col_download:
+        if download_ready:
+            download_path = Path(download_path_value)
+            if download_path.exists():
+                try:
+                    data_bytes = download_path.read_bytes()
+                    st.download_button(
+                        'Descargar coincidencias (Excel)',
+                        data=data_bytes,
+                        file_name=download_path.name,
+                        mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        use_container_width=True,
+                        key='dl_xlsx',
+                        on_click=_after_download,
+                    )
+                except Exception as exc:
+                    st.error(f'No se pudo leer el archivo generado. Detalle: {exc}')
+            else:
+                st.warning('El archivo generado ya no esta disponible. Genera uno nuevo.')
+                ss['zip_download_ready'] = False
+                ss.pop('zip_download_path', None)
+        else:
+            st.info('Genera el Excel para habilitar la descarga.')
+
+    st.markdown('</div>', unsafe_allow_html=True)
+

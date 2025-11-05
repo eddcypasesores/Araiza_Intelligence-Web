@@ -6,3 +6,4 @@ requests
 psycopg[binary]
 xlsxwriter
 tomli; python_version < "3.11"
+xlrd==2.0.1  
