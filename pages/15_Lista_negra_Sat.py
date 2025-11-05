@@ -372,7 +372,10 @@ def _zip_job_clear(job_id: str | None) -> None:
         _ZIP_JOBS.pop(job_id, None)
 
 
-def _zip_job_start(zip_path: Path, *, batch: int = 1000) -> str:
+# --- INICIO: CODIGO CORREGIDO ---
+
+def _zip_job_start(zip_data: bytes, zip_path: Path, *, batch: int = 1000) -> str:
+    """Modificado para aceptar zip_data (bytes) y zip_path (destino)"""
     job_id = f"{int(time.time() * 1000)}_{uuid4().hex}"
     record: dict[str, object] = {
         "status": "queued",
@@ -381,7 +384,7 @@ def _zip_job_start(zip_path: Path, *, batch: int = 1000) -> str:
         "inserted": 0,
         "total": 0,
         "error": None,
-        "zip_path": str(zip_path),
+        "zip_path": str(zip_path), # Guardamos el path para referencia
         "started": time.time(),
         "finished": None,
         "cancel_requested": False,
@@ -389,12 +392,16 @@ def _zip_job_start(zip_path: Path, *, batch: int = 1000) -> str:
     }
     with _ZIP_JOBS_LOCK:
         _ZIP_JOBS[job_id] = record
-    worker = threading.Thread(target=_zip_job_worker, args=(job_id, zip_path, batch), daemon=True)
+    
+    # 3. Pasar los datos, el path y el batch al worker
+    worker = threading.Thread(target=_zip_job_worker, args=(job_id, zip_data, zip_path, batch), daemon=True)
     worker.start()
     return job_id
 
 
-def _zip_job_worker(job_id: str, zip_path: Path, batch: int) -> None:
+def _zip_job_worker(job_id: str, zip_data: bytes, zip_path: Path, batch: int) -> None:
+    """Modificado para aceptar zip_data y zip_path"""
+    
     def _progress(processed: int, total: int, inserted: int) -> None:
         progress = 0.0
         if total > 0:
@@ -405,7 +412,22 @@ def _zip_job_worker(job_id: str, zip_path: Path, batch: int) -> None:
 
     try:
         _zip_job_update(job_id, status="running")
+
+        # 4. PRIMERO: Guardar los bytes en el disco (operación lenta, AHORA en el thread)
+        try:
+            with zip_path.open("wb") as fh:
+                fh.write(zip_data)
+        except Exception as exc:
+            # Reportar error si no se puede guardar en disco
+            _zip_job_update(job_id, status="error", error=f"Error al guardar ZIP en disco: {exc}", finished=time.time())
+            return
+        
+        # 5. Liberar la memoria de los bytes (opcional, pero buena práctica)
+        del zip_data
+
+        # 6. SEGUNDO: Indexar el archivo AHORA desde el path en disco
         total, inserted, secs = bulk_index_zip(zip_path, XML_DB_PATH, progress_cb=_progress, batch=batch)
+        
         _zip_job_update(
             job_id,
             status="done",
@@ -421,6 +443,7 @@ def _zip_job_worker(job_id: str, zip_path: Path, batch: int) -> None:
     except Exception as exc:  # pragma: no cover - defensive
         _zip_job_update(job_id, status="error", error=str(exc), finished=time.time())
     finally:
+        # El bloque finally que borra el archivo ZIP ya es correcto
         try:
             zip_path.unlink(missing_ok=True)
         except TypeError:
@@ -431,6 +454,9 @@ def _zip_job_worker(job_id: str, zip_path: Path, batch: int) -> None:
                 pass
         except Exception:
             pass
+
+# --- FIN: CODIGO CORREGIDO ---
+
 
 # ---- SQLite indice ZIP ----
 def _db_init(db_path:Path):
@@ -655,6 +681,8 @@ if ss.get("post_download_reset"):
     st.rerun()
 
 
+# --- INICIO: CODIGO CORREGIDO ---
+
 def _on_zip_selected():
     key = f"zip_bulk_uploader_{ss['uploader_nonce']}"
     up = ss.get(key)
@@ -686,32 +714,25 @@ def _on_zip_selected():
     dest = ZIP_UPLOAD_DIR / f"{int(time.time() * 1000)}_{safe_name}"
 
     try:
-        try:
-            up.seek(0)
-        except Exception:
-            pass
-        with dest.open("wb") as fh:
-            shutil.copyfileobj(up, fh, length=1024 * 1024)
-        try:
-            up.seek(0)
-        except Exception:
-            pass
-    except Exception:
-        try:
-            dest.unlink()
-        except Exception:
-            pass
+        # 1. Leer el archivo a bytes en memoria (MUY RAPIDO)
+        up.seek(0)
+        zip_data = up.read()
+    except Exception as exc:
         ss["zip_selected"] = False
         ss["zip_indexing"] = False
         ss["zip_done"] = False
-        st.error("No fue posible almacenar el ZIP seleccionado. Intenta de nuevo.")
+        st.error(f"No fue posible leer el archivo ZIP. Detalle: {exc}")
         return
 
-    job_id = _zip_job_start(dest)
+    # 2. Iniciar el job pasando los bytes de datos Y el path de destino
+    job_id = _zip_job_start(zip_data, dest)
     ss["zip_job_id"] = job_id
     ss["zip_selected"] = True
     ss["zip_indexing"] = True
     ss["zip_done"] = False
+
+# --- FIN: CODIGO CORREGIDO ---
+
 
 def _after_download():
     # Marcar reset total; el cuerpo principal lo hara fuera del callback
@@ -888,4 +909,3 @@ if tengo_xml and tengo_blacklist:
             st.info('Genera el Excel para habilitar la descarga.')
 
     st.markdown('</div>', unsafe_allow_html=True)
-
