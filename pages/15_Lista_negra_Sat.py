@@ -4,7 +4,7 @@ from __future__ import annotations
 import os, io, json, time, hashlib, zipfile, sqlite3, shutil, threading, tempfile
 from contextlib import closing
 from pathlib import Path
-from typing import BinaryIO, Iterable, Dict, Any, Optional
+from typing import BinaryIO, Dict, Any
 from uuid import uuid4
 import xml.etree.ElementTree as ET
 
@@ -264,7 +264,7 @@ def build_excel_bytes(xml_source: pd.DataFrame | Path | str, df_black: pd.DataFr
     for col, default in [("Fecha Timbrado", pd.NaT), ("Razon Social Emisor", ""), ("Estatus", "Activo")]:
         if col not in desglose_df.columns:
             desglose_df[col] = default
-    for col in desglose_columns:
+    for col in ["Situacion","Fecha Timbrado","RFC Emisor","Razon Social Emisor","Total","Estatus"]:
         if col not in desglose_df.columns:
             if col == "Total": desglose_df[col] = 0.0
             elif col == "Fecha Timbrado": desglose_df[col] = pd.NaT
@@ -272,7 +272,7 @@ def build_excel_bytes(xml_source: pd.DataFrame | Path | str, df_black: pd.DataFr
             else: desglose_df[col] = ""
     if not desglose_df.empty:
         desglose_df.sort_values(["RFC Emisor", "Fecha Timbrado"], inplace=True, kind="mergesort")
-    desglose_df = desglose_df[desglose_columns]
+    desglose_df = desglose_df[["Situacion","Fecha Timbrado","RFC Emisor","Razon Social Emisor","Total","Estatus"]]
 
     out = io.BytesIO()
     with pd.ExcelWriter(out, engine="xlsxwriter") as w:
@@ -535,7 +535,7 @@ def _zip_job_restart(job_id: str) -> None:
     if not rec: return
     zp = Path(rec.get("zip_path", ""))
     if not zp.exists(): return
-    _zip_job_update(job_id, status="queued")
+    _zip_job_update(job_id, status="queued", error=None)
     worker = threading.Thread(target=_zip_job_worker, args=(job_id, zp, int(rec.get("batch") or DEFAULT_BATCH)), daemon=True)
     worker.start()
 
@@ -719,41 +719,64 @@ st.file_uploader(
     on_change=_on_zip_selected, label_visibility="collapsed"
 )
 
+# ---- Handler con botón "Reintentar" ----
 job_id = ss.get("zip_job_id")
 job_info = _zip_job_get(job_id)
 if job_info:
-    _zip_supervise_and_autoretry(job_id)  # auto-reintento
+    # Auto-reintento por heartbeat
+    _zip_supervise_and_autoretry(job_id)
+
     progress_value = float(job_info.get("progress") or 0.0)
     st.progress(progress_value)
+
     processed = int(job_info.get("processed") or 0)
     total = int(job_info.get("total") or 0)
-    status = str(job_info.get("status") or "queued")
     inserted = int(job_info.get("inserted") or 0)
+    status = str(job_info.get("status") or "queued")
+    detail = job_info.get("error") or ""
+
     if total:
         st.caption(f"Procesando XML {processed:,} de {total:,} (insertados {inserted:,})")
     else:
         st.caption(f"Procesando XML {processed:,} (insertados {inserted:,})")
+
     if status in {"queued", "running"}:
         ss["zip_indexing"] = True
         time.sleep(POLL_INTERVAL)
         st.rerun()
+
     elif status == "done":
-        ss["zip_last_summary"] = {"procesados": processed, "insertados": inserted, "tiempo": float(job_info.get("seconds") or 0.0)}
+        ss["zip_last_summary"] = {
+            "procesados": processed,
+            "insertados": inserted,
+            "tiempo": float(job_info.get("seconds") or 0.0),
+        }
         ss["zip_done"] = True
         ss["zip_indexing"] = False
         _zip_job_clear(job_id)
         ss.pop("zip_job_id", None)
-    elif status == "cancelled":
-        st.info("Procesamiento de ZIP cancelado.")
-        ss["zip_indexing"] = False; ss["zip_done"] = False
-        _zip_job_clear(job_id); ss.pop("zip_job_id", None)
-    elif status == "error":
-        detail = job_info.get("error") or "Error interno desconocido"
-        st.error(f"No fue posible procesar el ZIP. Detalle: {detail}")
-        ss["zip_indexing"] = False; ss["zip_done"] = False
-        _zip_job_clear(job_id); ss.pop("zip_job_id", None)
+
+    elif status in {"error", "cancelled"}:
+        if status == "error":
+            st.error(f"No fue posible procesar el ZIP. Detalle: {detail or 'Error interno desconocido'}")
+        else:
+            st.info("Procesamiento de ZIP cancelado.")
+
+        c1, c2 = st.columns([0.45, 0.55])
+        with c1:
+            if st.button("🔁 Reintentar", use_container_width=True, key="retry_zip_job"):
+                _zip_job_restart(job_id)
+                st.rerun()
+        with c2:
+            if st.button("🗑️ Descartar ZIP y limpiar", use_container_width=True, key="discard_zip_job"):
+                _zip_job_clear(job_id)
+                ss.pop("zip_job_id", None)
+                ss["zip_indexing"] = False
+                ss["zip_done"] = False
+                st.success("Limpieza realizada. Vuelve a seleccionar un ZIP.")
 else:
     ss.setdefault("zip_indexing", False)
+
 st.markdown('</div>', unsafe_allow_html=True)
 
 # =============================================================================
