@@ -28,7 +28,7 @@ inject_hero_css()
 ROOT = Path(__file__).resolve().parent.parent
 
 # -----------------------------------------------------------------------------
-# Redirección por query param ?goto=pages/Algo.py
+# Redirección por query param ?goto=pages/Algo.py  (+ limpia sesión si logout=1)
 # -----------------------------------------------------------------------------
 try:
     qp = dict(st.query_params)  # Streamlit >= 1.32
@@ -40,10 +40,14 @@ if isinstance(dest, list):
     dest = dest[-1] if dest else None
 
 if dest:
+    # Si viene logout=1 en la URL del overlay, limpia sesión antes de cambiar de página
+    if qp.get("logout") in (["1"], "1", 1, True):
+        st.session_state.clear()
     try:
-        st.switch_page(dest)
+        st.switch_page(dest)  # ej: "pages/Descarga_masiva_xml.py"
     except Exception:
         pass
+    st.stop()  # evita re-render loop
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -72,14 +76,15 @@ def _normalize_page_path(p: str) -> str | None:
         p += ".py"
     return p
 
+# Devuelve un enlace RELATIVO: "?goto=pages/Archivo.py[&logout=1]"
 def _product_href(script_path: str, *, force_logout: bool = False) -> str:
     page = _normalize_page_path(script_path)
     if not page:
-        return "/"
+        return "#"
     params: dict[str, str] = {"goto": page}
     if force_logout:
         params["logout"] = "1"
-    return "/?" + urlencode(params)
+    return "?" + urlencode(params)
 
 def as_html_desc(text: str) -> str:
     if not text:
@@ -116,7 +121,7 @@ IMG_CEDULA      = image_src_for((Path("assets/cedula_impuestos_card.png"), Path(
 render_nav(active_top="inicio", show_inicio=False, show_cta=False)
 
 # -----------------------------------------------------------------------------
-# CSS — ajustes solicitados: imagen de tarjeta más pequeña y contenedor azul -25% altura
+# CSS — ajustes solicitados: imagen tarjeta más pequeña y contenedor azul -25%
 # -----------------------------------------------------------------------------
 st.markdown(dedent("""
 <style>
