@@ -5,6 +5,7 @@ import re
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
+from zipfile import BadZipFile, ZipFile
 
 import numpy as np
 import pandas as pd
@@ -126,31 +127,31 @@ render_brand_logout_nav(MODULE_TITLE)
 st.title("RIESGOS FISCALES")
 
 # ===================== Inputs arriba =====================
-form_cols = st.columns([1.4, 1.2, 1.4, 0.6])
+form_cols = st.columns([1.4, 1.2, 0.6])
 with form_cols[0]:
     regimen_fiscal_correcto = st.text_input("Régimen fiscal correcto", value="", placeholder="Ej. 601")
 with form_cols[1]:
     cp_val = st.text_input("CP", value="", placeholder="Ej. 50903")
-
-# ===== Estado para reiniciar uploader al limpiar =====
-if "uploader_key" not in st.session_state:
-    st.session_state["uploader_key"] = 0
-
 with form_cols[2]:
-    st.markdown("<div class='uploader-label'>Subir XML</div>", unsafe_allow_html=True)
-    uploaded = st.file_uploader(
-        "",
-        type=["xml"],
-        accept_multiple_files=True,
-        key=f"xml_uploader_{st.session_state['uploader_key']}",
-        label_visibility="collapsed",
-    )
-
-with form_cols[3]:
+    if "uploader_key" not in st.session_state:
+        st.session_state["uploader_key"] = 0
     st.markdown("&nbsp;", unsafe_allow_html=True)
     if st.button("Limpiar", use_container_width=True):
         st.session_state["uploader_key"] += 1
         st.rerun()
+
+# ===== Uploader debajo =====
+uploaded = None
+uploader_cols = st.columns([0.5, 3, 0.5])
+with uploader_cols[1]:
+    st.markdown("<div class='uploader-label uploader-centered'>Subir XML</div>", unsafe_allow_html=True)
+    uploaded = st.file_uploader(
+        "",
+        type=["xml", "zip"],
+        accept_multiple_files=True,
+        key=f"xml_uploader_{st.session_state['uploader_key']}",
+        label_visibility="collapsed",
+    )
 
 st.markdown(
     """
@@ -160,15 +161,22 @@ st.markdown(
         font-weight:600;
         margin-bottom:.25rem;
       }
+      .uploader-centered {
+        text-align:center;
+        display:block;
+      }
       div[data-testid="stFileUploader"]>label { display:none; }
       div[data-testid="stFileUploader"] div[data-testid="stFileUploaderDropzone"] {
-        border-radius:12px;
+        border-radius:14px;
         border:1px dashed #94a3b8;
         background:#f8fafc;
-        min-height:120px;
+        min-height:140px;
+        width:100%;
+        padding:1.1rem 1.2rem;
       }
       div[data-testid="stFileUploader"] div[data-testid="stFileUploaderDropzone"] > div {
         justify-content:center;
+        width:100%;
       }
     </style>
     """,
@@ -432,17 +440,41 @@ except Exception:
         return []
 
 
-valid_files, bad_files = [], []
+valid_files: list[tuple[str, bytes]] = []
+bad_files: list[str] = []
 if uploaded:
     for uf in uploaded:
+        name = uf.name or "archivo"
         try:
             data = uf.read()
             if not data:
                 raise ValueError("Archivo vacío")
-            ET.fromstring(data)
-            valid_files.append((uf.name, data))
+
+            lower_name = name.lower()
+            if lower_name.endswith(".zip"):
+                found_xml = False
+                try:
+                    with ZipFile(io.BytesIO(data)) as zf:
+                        for info in zf.infolist():
+                            if info.is_dir():
+                                continue
+                            if not info.filename.lower().endswith(".xml"):
+                                continue
+                            xml_bytes = zf.read(info)
+                            if not xml_bytes:
+                                continue
+                            ET.fromstring(xml_bytes)
+                            valid_files.append((f"{name}:{info.filename}", xml_bytes))
+                            found_xml = True
+                except BadZipFile as exc:
+                    raise ValueError("ZIP inválido") from exc
+                if not found_xml:
+                    raise ValueError("ZIP sin XML válidos")
+            else:
+                ET.fromstring(data)
+                valid_files.append((name, data))
         except Exception:
-            bad_files.append(uf.name)
+            bad_files.append(name)
 
     if bad_files:
         st.markdown(
@@ -830,7 +862,7 @@ if files:
                     _write_sheet(
                         writer,
                         nc_df if not nc_df.empty else pd.DataFrame(columns=cols_nc),
-                        "NC ≠ Condonación/PUE",
+                        "NC ≠ Condonación - PUE",
                         "Notas de crédito con método de pago diferente a condonación y PUE",
                     )
                     _write_sheet(
