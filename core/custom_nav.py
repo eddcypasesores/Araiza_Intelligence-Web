@@ -63,13 +63,10 @@ _NAV_CSS = """
   padding:6px 20px;
   border-radius:999px;
   background:#0d3c74;
-  color:#fff;
+  color:#fff !important;
   font-weight:600;
   text-decoration:none;
   box-shadow:0 6px 16px rgba(13,60,116,0.25);
-}
-.nav-spacer{
-  height:70px;
 }
 </style>
 """
@@ -105,9 +102,8 @@ def _logout_href(page_param: str) -> str:
 def render_brand_logout_nav(page_param: str, *, brand: str = "Araiza Intelligence") -> None:
     """Render the fixed navigation pill with brand logo and logout action."""
 
-    if not st.session_state.get("_custom_nav_css_loaded"):
-        st.markdown(_NAV_CSS, unsafe_allow_html=True)
-        st.session_state["_custom_nav_css_loaded"] = True
+    # Reinyecta el CSS en cada renderizado para evitar que se pierda tras un rerun.
+    st.markdown(_NAV_CSS, unsafe_allow_html=True)
 
     logo_src = _navbar_logo_data()
     logout_href = html.escape(_logout_href(page_param), quote=True)
@@ -115,7 +111,7 @@ def render_brand_logout_nav(page_param: str, *, brand: str = "Araiza Intelligenc
         f'<div class="custom-nav">'
         f'<div class="nav-brand"><img src="{logo_src}" alt="Araiza logo"><span>{brand}</span></div>'
         f'<div class="nav-actions"><a href="{logout_href}" target="_self">Cerrar sesi&oacute;n</a></div>'
-        f'</div><div class="nav-spacer"></div>'
+        f'</div>'
     )
     st.markdown(nav_html, unsafe_allow_html=True)
 
@@ -130,4 +126,3 @@ def handle_logout_request(redirect_page: str = "pages/0_Inicio.py") -> None:
         except Exception:
             st.stop()
         st.stop()
-

@@ -5,17 +5,56 @@ from typing import Any, Iterable, MutableMapping, Optional, Sequence
 
 import pandas as pd
 
-from .config import ROUTES_CSV
+from .config import VERIFIED_ROUTES_XLSX
 from .utils import normalize_name
 from .maps import GoogleMapsClient, GoogleMapsError, haversine_km
 
+def _load_routes_from_excel(path: Path) -> dict[str, list[str]]:
+    """Read verified routes from the supplemental Excel workbook."""
+    routes: dict[str, list[str]] = {}
+    if not path.exists():
+        return routes
+
+    try:
+        workbook = pd.ExcelFile(path)
+    except Exception:
+        return routes
+
+    for sheet_name in workbook.sheet_names:
+        try:
+            df = pd.read_excel(workbook, sheet_name=sheet_name)
+        except Exception:
+            continue
+
+        normalized_columns = {col: str(col).strip().upper() for col in df.columns}
+        df = df.rename(columns=normalized_columns)
+        if "CASETA" not in df.columns:
+            continue
+
+        plazas: list[str] = []
+        for value in df["CASETA"].tolist():
+            if isinstance(value, str):
+                plaza = value.strip()
+            elif pd.notna(value):
+                plaza = str(value).strip()
+            else:
+                plaza = ""
+            if plaza:
+                plazas.append(plaza)
+
+        if not plazas:
+            continue
+
+        route_name = " ".join(str(sheet_name).split()).upper()
+        if route_name:
+            routes[route_name] = plazas
+
+    return routes
+
+
 def load_routes() -> dict[str, list[str]]:
-    routes = {}
-    p = Path(ROUTES_CSV)
-    if p.exists():
-        df = pd.read_csv(p, encoding="utf-8").fillna("")
-        for ruta, chunk in df.groupby("RUTA", sort=False):
-            routes[ruta] = [str(x).strip() for x in chunk["CASETA"].tolist() if str(x).strip()]
+    """Lee únicamente las rutas verificadas del Excel."""
+    routes = _load_routes_from_excel(Path(VERIFIED_ROUTES_XLSX))
     if not routes:
         routes = {
             "TOLUCA-NUEVO LAREDO": [

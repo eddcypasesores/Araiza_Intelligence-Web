@@ -27,11 +27,11 @@ DB_PATH = Path(db_env).expanduser() if db_env else BASE_DIR / "db" / "tolls.db"
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 PORTAL_DATABASE_URL = os.getenv("PORTAL_DATABASE_URL", "").strip() or DATABASE_URL
 
-routes_env = os.getenv("ROUTES_CSV", "").strip()
-if routes_env:
-    ROUTES_CSV = Path(routes_env).expanduser()
+verified_routes_env = os.getenv("VERIFIED_ROUTES_XLSX", "").strip()
+if verified_routes_env:
+    VERIFIED_ROUTES_XLSX = Path(verified_routes_env).expanduser()
 else:
-    ROUTES_CSV = BASE_DIR / "data" / "plantilla_rutas_peaje.csv"
+    VERIFIED_ROUTES_XLSX = BASE_DIR / "data" / "CASETAS TRAFICO TOLUCA.xlsx"
 
 tariffs_env = os.getenv("TARIFFS_XLSX", "").strip()
 if tariffs_env:

@@ -1,5 +1,4 @@
 # core/db.py
-import csv
 import hashlib
 import json
 import re
@@ -16,7 +15,6 @@ import pandas as pd  # puede usarse en otros helpers
 from .config import (
     DB_PATH,
     PORTAL_DATABASE_URL,
-    ROUTES_CSV,
     TARIFFS_XLSX,
 )
 
@@ -65,6 +63,36 @@ HEADER_ALIASES = {
     "costo": "costo",
     "clase": "clase",
 }
+
+CEDULA_SHARED_SUBMODULES: tuple[tuple[str, str], ...] = (
+    ("balanza", "Balanzas de comprobacion"),
+    ("catalogo_cuentas", "Catalogos de cuentas"),
+    ("estados_financieros", "Estados financieros"),
+    ("costo_ventas", "Costo de ventas"),
+    ("depreciacion_vs_fiscal", "Depreciacion contable vs fiscal"),
+    ("resultado", "Resultado contable / fiscal"),
+    ("conciliacion", "Conciliacion contable vs fiscal"),
+    ("ajuste_inflacion", "Ajuste anual por inflacion"),
+    ("perdidas_fiscales", "Perdidas fiscales"),
+    ("cufin_cuca", "CUFIN y CUCA"),
+    ("calculo_ptu", "Calculo de PTU"),
+    ("coeficiente_utilidad", "Coeficiente de utilidad"),
+    ("actualizacion_perdidas", "Actualizacion y Amortizacion de Perdidas"),
+)
+
+def _slugify(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", (value or "").strip().lower()).strip("_")
+
+_CEDULA_SLUG_TO_CODE: dict[str, str] = {}
+for code, label in CEDULA_SHARED_SUBMODULES:
+    _CEDULA_SLUG_TO_CODE[code] = code
+    _CEDULA_SLUG_TO_CODE[_slugify(label)] = code
+
+def _normalize_cedula_submodule(value: str) -> str:
+    slug = _slugify(value)
+    if slug in _CEDULA_SLUG_TO_CODE:
+        return _CEDULA_SLUG_TO_CODE[slug]
+    raise ValueError(f"Submodulo de cedula desconocido: {value}")
 
 
 USE_PORTAL_POSTGRES = bool(PORTAL_DATABASE_URL)
@@ -151,25 +179,6 @@ def _records_from_excel(path: Path) -> list[dict]:
             normalized[alias] = raw.get(original_key)
         records.append(normalized)
     return records
-
-
-def _records_from_csv(path: Path) -> list[dict]:
-    if not path.exists():
-        return []
-    try:
-        with open(path, newline="", encoding="utf-8-sig") as fh:
-            reader = csv.DictReader(fh)
-            records = []
-            for row in reader:
-                normalized = {}
-                for key, value in row.items():
-                    alias = HEADER_ALIASES.get(_clean_header(key), _clean_header(key))
-                    normalized[alias] = value
-                records.append(normalized)
-            return records
-    except Exception as exc:
-        print(f"[ETL] Error leyendo CSV {path}: {exc}")
-        return []
 
 
 def _ingest_records(conn, records: Iterable[dict], source: str) -> bool:
@@ -305,14 +314,11 @@ def _seed_routes_if_empty(conn):
     if TARIFFS_XLSX and TARIFFS_XLSX.exists():
         seeded = _ingest_records(conn, _records_from_excel(TARIFFS_XLSX), "Excel")
 
-    if not seeded and ROUTES_CSV and ROUTES_CSV.exists():
-        seeded = _ingest_records(conn, _records_from_csv(ROUTES_CSV), "CSV")
-
     if seeded:
         _remove_generic_seed(conn)
         return
 
-    # Fallback mínimo (si no hay CSV)
+    # Fallback mínimo si no existe archivo de tarifas válido
     try:
         cur.execute("INSERT OR IGNORE INTO vias(nombre) VALUES(?)", ("VIA GENÉRICA",))
         via_row = cur.execute(
@@ -345,7 +351,7 @@ def _seed_routes_if_empty(conn):
                     (plaza_id, c, 100.0 if c in ("AUTOMOVIL", "T5") else 0.0),
                 )
         conn.commit()
-        print("[ETL] Seed de rutas mínimo creado (sin CSV).")
+        print("[ETL] Seed de rutas mínimo creado (sin archivo de tarifas).")
     except Exception as e:
         print(f"[ETL] Fallback de rutas falló: {e}")
 # =========================
@@ -568,6 +574,27 @@ def ensure_schema(conn):
     cur.execute("SELECT COUNT(*) FROM param_costeo_version")
     if (cur.fetchone() or [0])[0] == 0:
         _seed_parametros_v1(conn)
+
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cedula_submodules(
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            rfc TEXT NOT NULL,
+            submodule TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            created_by INTEGER,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(rfc, submodule)
+        )
+        """
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cedula_submodules_rfc ON cedula_submodules(rfc)"
+    )
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_cedula_submodules_sub ON cedula_submodules(submodule)"
+    )
 
     # >>> IMPORTANTE: cargar rutas/plazas/tarifas si está vacío
     _seed_routes_if_empty(conn)
@@ -1566,4 +1593,121 @@ def publish_version(conn, version_id: int):
       SET vigente_desde = DATE('now'), vigente_hasta = NULL
       WHERE id=?
     """, (version_id,))
+    conn.commit()
+
+
+# ---------- Cedula shared data ----------
+def cedula_list_rfcs(conn: sqlite3.Connection) -> list[str]:
+    cur = conn.execute(
+        "SELECT DISTINCT rfc FROM cedula_submodules WHERE rfc IS NOT NULL AND rfc <> '' ORDER BY rfc"
+    )
+    return [row[0] for row in cur.fetchall()]
+
+
+def cedula_list_payloads(
+    conn: sqlite3.Connection,
+    *,
+    rfc: str | None = None,
+    submodule: str | None = None,
+) -> list[dict]:
+    params: list[str] = []
+    clauses: list[str] = []
+    if rfc:
+        clauses.append("rfc=?")
+        params.append(_normalize_rfc(rfc))
+    if submodule:
+        clauses.append("submodule=?")
+        params.append(_normalize_cedula_submodule(submodule))
+    query = (
+        "SELECT rfc, submodule, payload, created_at, updated_at, created_by FROM cedula_submodules"
+    )
+    if clauses:
+        query += " WHERE " + " AND ".join(clauses)
+    query += " ORDER BY rfc, submodule"
+    cur = conn.execute(query, tuple(params))
+    records: list[dict] = []
+    for row in cur.fetchall():
+        payload_text = row[2]
+        try:
+            data = json.loads(payload_text) if payload_text else {}
+        except Exception:
+            data = payload_text
+        records.append(
+            {
+                "rfc": row[0],
+                "submodule": row[1],
+                "data": data,
+                "created_at": row[3],
+                "updated_at": row[4],
+                "created_by": row[5],
+            }
+        )
+    return records
+
+
+def cedula_get_payload(
+    conn: sqlite3.Connection,
+    rfc: str,
+    submodule: str,
+    *,
+    include_metadata: bool = False,
+):
+    norm_rfc = _normalize_rfc(rfc)
+    if not norm_rfc:
+        return None
+    code = _normalize_cedula_submodule(submodule)
+    row = conn.execute(
+        """
+        SELECT payload, created_at, updated_at, created_by
+        FROM cedula_submodules
+        WHERE rfc=? AND submodule=?
+        """,
+        (norm_rfc, code),
+    ).fetchone()
+    if not row:
+        return None
+    payload_text = row[0]
+    try:
+        data = json.loads(payload_text) if payload_text else {}
+    except Exception:
+        data = payload_text
+    if not include_metadata:
+        return data
+    return {
+        "rfc": norm_rfc,
+        "submodule": code,
+        "data": data,
+        "created_at": row[1],
+        "updated_at": row[2],
+        "created_by": row[3],
+    }
+
+
+def cedula_save_payload(
+    conn: sqlite3.Connection,
+    rfc: str,
+    submodule: str,
+    payload,
+    *,
+    user_id: int | None = None,
+) -> None:
+    norm_rfc = _normalize_rfc(rfc)
+    if not norm_rfc:
+        raise ValueError("RFC obligatorio")
+    code = _normalize_cedula_submodule(submodule)
+    try:
+        payload_text = json.dumps(payload if payload is not None else {}, ensure_ascii=False)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Payload no serializable: {exc}") from exc
+    conn.execute(
+        """
+        INSERT INTO cedula_submodules(rfc, submodule, payload, created_by)
+        VALUES(?,?,?,?)
+        ON CONFLICT(rfc, submodule) DO UPDATE SET
+            payload=excluded.payload,
+            created_by=excluded.created_by,
+            updated_at=CURRENT_TIMESTAMP
+        """,
+        (norm_rfc, code, payload_text, user_id),
+    )
     conn.commit()

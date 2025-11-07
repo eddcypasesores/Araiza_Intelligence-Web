@@ -6,10 +6,20 @@ import streamlit as st
 
 import base64
 import html
+import json
+from contextlib import closing
 from pathlib import Path
 from urllib.parse import quote, urlencode
 
 from core.auth import forget_session
+from core.db import (
+    CEDULA_SHARED_SUBMODULES,
+    cedula_get_payload,
+    cedula_list_rfcs,
+    cedula_save_payload,
+    ensure_schema,
+    get_conn,
+)
 from core.session import process_logout_flag
 from core.streamlit_compat import set_query_params
 
@@ -23,6 +33,10 @@ NAV_LOGO_CANDIDATES = (
 )
 
 CEDULA_INICIO_PAGE_PARAM = "Cedula de impuestos - Inicio"
+
+
+def _normalize_rfc(value: str) -> str:
+    return (value or "").strip().upper()
 
 
 CSS = """
@@ -93,10 +107,6 @@ div[data-testid="stToolbar"],
   text-decoration:none;
   box-shadow:0 6px 16px rgba(13,60,116,0.25);
 }
-.nav-spacer{
-  height:70px;
-}
-
 .cedulas-wrapper{
   max-width:1100px;
   margin:0 auto;
@@ -273,6 +283,120 @@ def _component_pills_html(auth_token: str | None) -> str:
     return "".join(parts)
 
 
+def _payload_to_text(payload) -> str:
+    if payload is None:
+        return ""
+    if isinstance(payload, (dict, list)):
+        try:
+            return json.dumps(payload, ensure_ascii=False, indent=2)
+        except Exception:
+            return str(payload)
+    return str(payload)
+
+
+def _text_to_payload(raw: str):
+    stripped = (raw or "").strip()
+    if not stripped:
+        return {}
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        return stripped
+
+
+def _selected_cedula_rfc(conn) -> str | None:
+    permisos = set(st.session_state.get("permisos") or [])
+    is_admin = "admin" in permisos
+    base_rfc = _normalize_rfc(st.session_state.get("usuario"))
+    rfcs = cedula_list_rfcs(conn)
+    selected = base_rfc
+    if is_admin:
+        options = sorted({r for r in rfcs if r} | ({base_rfc} if base_rfc else set()))
+        if options:
+            selected_opt = st.selectbox(
+                "RFC registrados",
+                options,
+                index=options.index(base_rfc) if base_rfc in options else 0,
+            )
+        else:
+            selected_opt = ""
+        manual = st.text_input(
+            "RFC a gestionar",
+            value=selected_opt or base_rfc,
+            placeholder="Ej. ABCD800101XXX",
+        )
+        selected = _normalize_rfc(manual) or selected_opt
+    else:
+        if base_rfc:
+            st.caption(f"Gestionando datos para **{base_rfc}**")
+        else:
+            st.warning("Tu cuenta no tiene un RFC asociado.")
+    selected = _normalize_rfc(selected)
+    st.session_state["cedula_active_rfc"] = selected
+    return selected
+
+
+def _render_shared_data(conn, selected_rfc: str | None) -> None:
+    if not selected_rfc:
+        st.warning("Captura un RFC válido para poder compartir datos entre submódulos.")
+        return
+
+    st.subheader("Datos compartidos entre submódulos")
+    st.caption(
+        "La información guardada aquí estará disponible para todas las cédulas de este RFC."
+    )
+    user_id = st.session_state.get("portal_user_id")
+
+    for code, label in CEDULA_SHARED_SUBMODULES:
+        record = cedula_get_payload(conn, selected_rfc, code, include_metadata=True)
+        existing = record["data"] if record else None
+        meta_parts: list[str] = []
+        if record and record.get("updated_at"):
+            meta_parts.append(f"Última actualización: {record['updated_at']}")
+        if record and record.get("created_by"):
+            meta_parts.append(f"Capturado por ID {record['created_by']}")
+
+        exp = st.expander(label, expanded=False)
+        with exp:
+            if meta_parts:
+                st.caption(" · ".join(meta_parts))
+            text_key = f"cedula_shared_{code}"
+            default_text = _payload_to_text(existing)
+            content = st.text_area(
+                "Contenido (puedes pegar texto o JSON)",
+                value=default_text,
+                height=140,
+                key=text_key,
+            )
+            col_save, col_reset = st.columns([1, 1])
+            with col_save:
+                if st.button("Guardar", key=f"save_{code}"):
+                    payload = _text_to_payload(content)
+                    try:
+                        cedula_save_payload(
+                            conn,
+                            selected_rfc,
+                            code,
+                            payload,
+                            user_id=user_id,
+                        )
+                        st.success("Información guardada correctamente.")
+                        st.experimental_rerun()
+                    except Exception as exc:
+                        st.error(f"No fue posible guardar: {exc}")
+            with col_reset:
+                if record and st.button("Vaciar", key=f"clear_{code}"):
+                    cedula_save_payload(
+                        conn,
+                        selected_rfc,
+                        code,
+                        {},
+                        user_id=user_id,
+                    )
+                    st.success("Información eliminada.")
+                    st.experimental_rerun()
+
+
 def _navbar_logo_data() -> str:
     for candidate in NAV_LOGO_CANDIDATES:
         if candidate.exists():
@@ -313,7 +437,7 @@ def render_fixed_nav() -> None:
         f'<div class="custom-nav">'
         f'<div class="nav-brand"><img src="{logo_src}" alt="Araiza logo"><span>Araiza Intelligence</span></div>'
         f'<div class="nav-actions"><a href="{logout_href}" target="_self">Cerrar sesi&oacute;n</a></div>'
-        f'</div><div class="nav-spacer"></div>'
+        f'</div>'
     )
     st.markdown(nav_html, unsafe_allow_html=True)
 
@@ -343,39 +467,46 @@ def main() -> None:
     st.markdown(f"<style>{CSS}</style>", unsafe_allow_html=True)
     render_fixed_nav()
 
-    hero_bytes = Path("assets/cedula_impuestos_menu.png").read_bytes()
-    hero_image_src = f"data:image/png;base64,{base64.b64encode(hero_bytes).decode()}"
-    components_bytes = Path("assets/robot_pensando.png").read_bytes()
-    components_image_src = f"data:image/png;base64,{base64.b64encode(components_bytes).decode()}"
-    component_pills_html = _component_pills_html(_auth_query_param())
+    with closing(get_conn()) as conn:
+        ensure_schema(conn)
+        selected_rfc = _selected_cedula_rfc(conn)
 
-    st.markdown(
-        f"""
-        <div class="cedulas-wrapper">
-          <section class="hero">
-            <div class="hero-media">
-              <img src="{hero_image_src}" alt="Papeles de trabajo y declaracion anual">
+        hero_bytes = Path("assets/cedula_impuestos_menu.png").read_bytes()
+        hero_image_src = f"data:image/png;base64,{base64.b64encode(hero_bytes).decode()}"
+        components_bytes = Path("assets/robot_pensando.png").read_bytes()
+        components_image_src = f"data:image/png;base64,{base64.b64encode(components_bytes).decode()}"
+        component_pills_html = _component_pills_html(_auth_query_param())
+
+        st.markdown(
+            f"""
+            <div class="cedulas-wrapper">
+              <section class="hero">
+                <div class="hero-media">
+                  <img src="{hero_image_src}" alt="Papeles de trabajo y declaracion anual">
+                </div>
+                <div class="hero-copy">
+                  <h1>Cedulas fiscales - Personas Morales</h1>
+                  <p>(Regimen General)</p>
+                </div>
+              </section>
+              <section class="components components-flex">
+                <div class="component-list">
+                  <h2>Componentes disponibles</h2>
+                  <div class="pill-grid">
+                      {component_pills_html}
+                  </div>
+                </div>
+                <div class="component-illustration">
+                  <img src="{components_image_src}" alt="Robot pensando" />
+                </div>
+              </section>
             </div>
-            <div class="hero-copy">
-              <h1>Cedulas fiscales - Personas Morales</h1>
-              <p>(Regimen General)</p>
-            </div>
-          </section>
-          <section class="components components-flex">
-            <div class="component-list">
-              <h2>Componentes disponibles</h2>
-              <div class="pill-grid">
-                  {component_pills_html}
-              </div>
-            </div>
-            <div class="component-illustration">
-              <img src="{components_image_src}" alt="Robot pensando" />
-            </div>
-          </section>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+            """,
+            unsafe_allow_html=True,
+        )
+
+        st.divider()
+        _render_shared_data(conn, selected_rfc)
 
 
 if __name__ == "__main__":

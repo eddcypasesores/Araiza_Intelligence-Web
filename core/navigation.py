@@ -46,11 +46,6 @@ NAV_CSS = """
     padding: calc(var(--nav-height) + 16px) clamp(16px, 4vw, 32px) clamp(48px, 8vw, 72px) !important;
   }
 
-  .nav-anchor {
-    display: block;
-    height: var(--nav-height);
-  }
-
   .nav-bar {
     position: fixed;
     top: 0;
@@ -741,7 +736,6 @@ def render_nav(
     logout_html = ""
 
     markup = (
-        '<div class="nav-anchor"></div>'
         '<nav class="nav-bar">'
         '<div class="nav-inner">'
         f'{brand_html}'

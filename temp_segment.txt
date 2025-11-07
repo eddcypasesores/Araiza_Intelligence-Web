@@ -1,0 +1,42 @@
+    collected: list[tuple[str, bytes]] = []
+    errors: list[str] = []
+
+    if not uploaded_files:
+        return collected, errors
+
+    for uf in uploaded_files:
+        name = uf.name or "archivo"
+        try:
+            data = uf.read()
+        except Exception:
+            errors.append(name)
+            continue
+        if not data:
+            errors.append(name)
+            continue
+        lower_name = name.lower()
+        if lower_name.endswith(".zip"):
+            try:
+                with ZipFile(io.BytesIO(data)) as zf:
+                    found_xml = False
+                    for info in zf.infolist():
+                        if info.is_dir() or not info.filename.lower().endswith(".xml"):
+                            continue
+                        found_xml = True
+                        try:
+                            xml_data = zf.read(info)
+                            ET.fromstring(xml_data)
+                            collected.append((info.filename, xml_data))
+                        except Exception:
+                            errors.append(f"{name}:{info.filename}")
+                    if not found_xml:
+                        errors.append(f"{name} (sin XML)")
+            except BadZipFile:
+                errors.append(name)
+        else:
+            try:
+                ET.fromstring(data)
+                collected.append((name, data))
+            except Exception:
+                errors.append(name)
+    return collected, errors

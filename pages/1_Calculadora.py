@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from pathlib import Path
 import pandas as pd
 import streamlit as st
+from streamlit.components.v1 import html as components_html
 
 # --- Utilidades / Proyecto
 from core.auth import ensure_session_from_token, persist_login
@@ -121,6 +122,42 @@ st.markdown(
       .top-form .meta-row { display:flex; gap:1rem; }
       .top-form .meta-row > div[data-testid="column"] { display:flex; }
       .top-form .meta-row > div[data-testid="column"] > div { flex:1; }
+      .calc-form-toggle-marker { display:none; }
+      div[data-testid="stVerticalBlock"]:has(.calc-form-toggle-marker) {
+        display:flex;
+        justify-content:flex-end;
+        margin:-18px 36px 6px;
+        padding:0;
+      }
+      div[data-testid="stVerticalBlock"]:has(.calc-form-toggle-marker) .stButton { margin:0; }
+      div[data-testid="stVerticalBlock"]:has(.calc-form-toggle-marker) .stButton>button {
+        border-radius:999px;
+        padding:.35rem 1.4rem;
+        font-size:.78rem;
+        letter-spacing:.12em;
+        text-transform:uppercase;
+        font-weight:800;
+        border:1px solid rgba(59,130,246,.35);
+        background:#e0e7ff;
+        color:#1d4ed8;
+      }
+      div[data-testid="stVerticalBlock"]:has(.calc-form-toggle-marker) .stButton>button:hover {
+        background:#c7d2fe;
+      }
+      body[data-top-form-collapsed="true"] .top-form {
+        max-height:0;
+        opacity:0;
+        overflow:hidden;
+        pointer-events:none;
+        transition:max-height .45s ease, opacity .35s ease;
+      }
+      body[data-top-form-collapsed="true"] div[data-testid="stVerticalBlock"]:has(> .calc-card__header):hover .top-form,
+      body[data-top-form-collapsed="true"] div[data-testid="stVerticalBlock"]:has(> .calc-card__header):focus-within .top-form,
+      body[data-top-form-collapsed="false"] .top-form {
+        max-height:4000px;
+        opacity:1;
+        pointer-events:auto;
+      }
       .calc-card__header {
         padding:26px 32px;
         background:linear-gradient(135deg,#3730a3,#6366f1);
@@ -150,6 +187,32 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+TOP_FORM_COLLAPSE_KEY = "calc_form_collapsed"
+TOP_FORM_USER_INTENT_KEY = "top_form_manual_state"
+
+if TOP_FORM_COLLAPSE_KEY not in st.session_state:
+    st.session_state[TOP_FORM_COLLAPSE_KEY] = False
+if TOP_FORM_USER_INTENT_KEY not in st.session_state:
+    st.session_state[TOP_FORM_USER_INTENT_KEY] = "auto"
+
+
+def _sync_top_form_collapse_attr() -> None:
+    collapsed = bool(st.session_state.get(TOP_FORM_COLLAPSE_KEY, False))
+    components_html(
+        f"""
+        <script>
+        const body = window.parent?.document?.body;
+        if (body) {{
+            body.setAttribute('data-top-form-collapsed', '{str(collapsed).lower()}');
+        }}
+        </script>
+        """,
+        height=0,
+    )
+
+
+_sync_top_form_collapse_attr()
 
 # ===============================
 # Sesion y permisos
@@ -610,6 +673,19 @@ st.markdown(
     "<div class='calc-card__header'><span class='calc-card__title'>COSTOS DE TRASLADO</span></div>",
     unsafe_allow_html=True,
 )
+
+collapsed_state = bool(st.session_state.get(TOP_FORM_COLLAPSE_KEY, False))
+with st.container():
+    st.markdown("<span class='calc-form-toggle-marker'></span>", unsafe_allow_html=True)
+    toggle_label = "MOSTRAR DATOS" if collapsed_state else "OCULTAR DATOS"
+    toggle_help = (
+        "Haz clic para {} la tarjeta de origen/parada/destino (tambien puedes pasar el cursor sobre la tarjeta)."
+    ).format("mostrar" if collapsed_state else "ocultar")
+    if st.button(toggle_label, key="top_form_toggle_btn", help=toggle_help):
+        collapsed_state = not collapsed_state
+        st.session_state[TOP_FORM_COLLAPSE_KEY] = collapsed_state
+        st.session_state[TOP_FORM_USER_INTENT_KEY] = "open" if not collapsed_state else "closed"
+        _sync_top_form_collapse_attr()
 
 clases = ["MOTO", "AUTOMOVIL", "B2", "B3", "B4", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9"]
 default_idx = clases.index("T5")
@@ -1468,6 +1544,16 @@ with total_banner:
         unsafe_allow_html=True,
     )
 
+manual_state = st.session_state.get(TOP_FORM_USER_INTENT_KEY, "auto")
+was_collapsed = bool(st.session_state.get(TOP_FORM_COLLAPSE_KEY, False))
+if manual_state != "open":
+    if not was_collapsed:
+        st.session_state[TOP_FORM_COLLAPSE_KEY] = True
+        st.session_state[TOP_FORM_USER_INTENT_KEY] = "auto"
+        _sync_top_form_collapse_attr()
+        rerun()
+    else:
+        st.session_state[TOP_FORM_USER_INTENT_KEY] = "auto"
 pdf_sections = [(sec.title, sec.total, sec.breakdown) for sec in section_outputs]
 
 # PDF

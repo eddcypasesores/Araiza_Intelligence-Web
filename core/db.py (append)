@@ -1,0 +1,113 @@
+# ---------- Cedula shared data ----------
+def cedula_list_rfcs(conn: sqlite3.Connection) -> list[str]:
+    cur = conn.execute(
+        "SELECT DISTINCT rfc FROM cedula_submodules WHERE rfc IS NOT NULL AND rfc <> '' ORDER BY rfc"
+    )
+    return [row[0] for row in cur.fetchall()]
+
+
+def cedula_list_payloads(
+    conn: sqlite3.Connection,
+    *,
+    rfc: str | None = None,
+    submodule: str | None = None,
+) -> list[dict]:
+    params: list[str] = []
+    query = "SELECT rfc, submodule, payload, created_at, updated_at, created_by FROM cedula_submodules"
+    clauses: list[str] = []
+    if rfc:
+        clauses.append("rfc=?")
+        params.append(_normalize_rfc(rfc))
+    if submodule:
+        clauses.append("submodule=?")
+        params.append(_normalize_cedula_submodule(submodule))
+    if clauses:
+        query += " WHERE " + " AND ".join(clauses)
+    query += " ORDER BY rfc, submodule"
+    cur = conn.execute(query, tuple(params))
+    records: list[dict] = []
+    for row in cur.fetchall():
+        payload_text = row[2]
+        try:
+            data = json.loads(payload_text) if payload_text else {}
+        except Exception:
+            data = payload_text
+        records.append(
+            {
+                "rfc": row[0],
+                "submodule": row[1],
+                "data": data,
+                "created_at": row[3],
+                "updated_at": row[4],
+                "created_by": row[5],
+            }
+        )
+    return records
+
+
+def cedula_get_payload(
+    conn: sqlite3.Connection,
+    rfc: str,
+    submodule: str,
+    *,
+    include_metadata: bool = False,
+):
+    norm_rfc = _normalize_rfc(rfc)
+    if not norm_rfc:
+        return None
+    code = _normalize_cedula_submodule(submodule)
+    row = conn.execute(
+        """
+        SELECT payload, created_at, updated_at, created_by
+        FROM cedula_submodules
+        WHERE rfc=? AND submodule=?
+        """,
+        (norm_rfc, code),
+    ).fetchone()
+    if not row:
+        return None
+    payload_text = row[0]
+    try:
+        data = json.loads(payload_text) if payload_text else {}
+    except Exception:
+        data = payload_text
+    if not include_metadata:
+        return data
+    return {
+        "rfc": norm_rfc,
+        "submodule": code,
+        "data": data,
+        "created_at": row[1],
+        "updated_at": row[2],
+        "created_by": row[3],
+    }
+
+
+def cedula_save_payload(
+    conn: sqlite3.Connection,
+    rfc: str,
+    submodule: str,
+    payload,
+    *,
+    user_id: int | None = None,
+) -> None:
+    norm_rfc = _normalize_rfc(rfc)
+    if not norm_rfc:
+        raise ValueError("RFC obligatorio")
+    code = _normalize_cedula_submodule(submodule)
+    try:
+        payload_text = json.dumps(payload if payload is not None else {}, ensure_ascii=False)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"Payload no serializable: {exc}") from exc
+    conn.execute(
+        """
+        INSERT INTO cedula_submodules(rfc, submodule, payload, created_by)
+        VALUES(?,?,?,?)
+        ON CONFLICT(rfc, submodule) DO UPDATE SET
+            payload=excluded.payload,
+            created_by=excluded.created_by,
+            updated_at=CURRENT_TIMESTAMP
+        """,
+        (norm_rfc, code, payload_text, user_id),
+    )
+    conn.commit()

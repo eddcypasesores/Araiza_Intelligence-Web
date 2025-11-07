@@ -1,4 +1,4 @@
-# pages/0_Inicio.py — Héroe más bajo, tarjetas angostas, texto pequeño/legible y “hover-ready”
+﻿# pages/0_Inicio.py — Héroe más bajo, tarjetas angostas, texto pequeño/legible y “hover-ready”
 from __future__ import annotations
 
 from pathlib import Path
@@ -198,21 +198,95 @@ st.markdown(dedent("""
 /* Imagen baja */
 .card-media{
   width:100%; background:#F8FAFC; display:flex; align-items:center; justify-content:center;
-  overflow:hidden; aspect-ratio:16/9; max-height: 90px;
+  overflow:hidden; aspect-ratio:16/9; max-height:70px;
 }
-@media (max-width: 1400px){ .card-media{ max-height: 96px; } }
-@media (max-width: 980px){ .card-media{ max-height: 100px; } }
-@media (max-width: 640px){ .card-media{ max-height: 96px; } }
-.card-media img{ width:100%; height:100%; object-fit:contain; }
+@media (max-width: 1400px){ .card-media{ max-height:72px; } }
+@media (max-width: 980px){ .card-media{ max-height:78px; } }
+@media (max-width: 640px){ .card-media{ max-height:74px; } }
+.card-media img{ width:80%; height:80%; object-fit:contain; }
 
-/* ===== Texto pequeño pero visible en tarjetas ===== */
-.card-copy{ padding:8px 10px 10px; }
-.card-title{ margin:0 0 2px; font-weight:800; color:var(--ink); font-size:.84rem; line-height:1.12; letter-spacing:.005em; }
-.card-desc{
-  margin:0; color:var(--muted); font-size:.76rem; line-height:1.12rem; text-align:justify;
-  display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;
+/* ===== Texto mostrado al pasar el cursor ===== */
+.card-copy{ padding:14px 12px; position:relative; min-height:120px; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; transition:transform .18s ease; }
+.card-title{
+  margin:0;
+  font-weight:800;
+  color:var(--ink);
+  font-size:.82rem;
+  line-height:1.1;
+  letter-spacing:.005em;
 }
-.card-list{ margin:6px 0 0; padding-left:1rem; color:var(--muted); font-size:.76rem; line-height:1.10rem; }
+.card-desc,
+.card-list{
+  margin:10px 0 0;
+  color:var(--muted);
+  font-size:.68rem;
+  line-height:1rem;
+  overflow:hidden;
+  max-height:0;
+  opacity:0;
+  transition:max-height .25s ease, opacity .2s ease;
+}
+.card-desc{
+  text-align:left;
+  display:-webkit-box;
+  -webkit-line-clamp:5;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+}
+.card-list{
+  padding-left:1rem;
+}
+.card-vertical:hover .card-copy{align-items:flex-start; text-align:left;}
+.card-vertical:hover .card-desc,
+.card-vertical:hover .card-list{
+  max-height:160px;
+  opacity:1;
+}
+.card-title{
+  margin:0;
+  font-weight:800;
+  color:var(--ink);
+  font-size:.78rem;
+  line-height:1.08;
+  letter-spacing:.005em;
+}
+.card-desc,
+.card-list{
+  margin:6px 0 0;
+  color:var(--muted);
+  font-size:.68rem;
+  line-height:1rem;
+  overflow:hidden;
+  max-height:0;
+  opacity:0;
+  transition:max-height .25s ease, opacity .2s ease;
+}
+.card-desc{
+  text-align:justify;
+  display:-webkit-box;
+  -webkit-line-clamp:5;
+  -webkit-box-orient:vertical;
+}
+.card-list{
+  padding-left:1rem;
+}
+.card-vertical{
+  transition:transform .2s ease, box-shadow .2s ease;
+  transform-origin:center;
+}
+.card-vertical:hover{
+  transform:translateY(-6px) scale(1.05);
+  box-shadow:0 20px 40px rgba(15,23,42,.18);
+  z-index:10;
+}
+.card-vertical:hover .card-title{
+  transform:translateY(-4px);
+}
+.card-vertical:hover .card-desc,
+.card-vertical:hover .card-list{
+  max-height:160px;
+  opacity:1;
+}
 .card-list li{ margin:0 0 .16rem; }
 .card-list li::marker{ color: var(--azul-600); }
 
@@ -260,7 +334,7 @@ PRODUCTS = [
     {
         "title": "Cédula de impuestos para cierre anual",
         "desc": (
-            "Prepara tu cierre anual sin estrés. Calcula y concilia ingresos, deducciones, coeficiente y PTU en plantillas Excel listas, reduciendo tiempo y errores."
+            "Cierra el año sin estrés: calcula ingresos, deducciones y coeficientes en plantillas listas para usar."
         ),
         "img": IMG_CEDULA,
         "page": "pages/Cedula_Impuestos.py",
@@ -270,7 +344,7 @@ PRODUCTS = [
     {
         "title": "Monitoreo especializado de EFOS",
         "desc": (
-            "Verifica en segundos si un RFC es EFOS en el SAT. Evita multas, pérdida de deducciones y auditorías con alertas claras y oportunas."
+            "Cruza RFC contra listas EFOS en segundos y recibe alertas para evitar multas y deducciones rechazadas."
         ),
         "img": IMG_EFOS,
         "page": "pages/14_Riesgo_fiscal.py",
@@ -280,7 +354,7 @@ PRODUCTS = [
     {
         "title": "Riesgo fiscal sin sobresaltos",
         "desc": (
-            "Detecta riesgos antes de que cuesten: análisis de CFDI, conciliaciones y señales de alerta en ISR, PTU e impuestos trasladados."
+            "Analiza CFDI, conciliaciones y señales críticas para detectar contingencias en ISR, PTU e impuestos trasladados."
         ),
         "img": IMG_RIESGO,
         "page": "pages/Riesgos_fiscales.py",
@@ -290,7 +364,7 @@ PRODUCTS = [
     {
         "title": "Descarga masiva de XML",
         "desc": (
-            "Descarga y organiza CFDI de forma masiva. Garantiza autenticidad y acelera la conciliación y el análisis financiero."
+            "Descarga y organiza CFDI masivos, validando timbres y acelerando conciliaciones contables."
         ),
         "img": IMG_XML,
         "page": "pages/Descarga_masiva_xml.py",
@@ -300,7 +374,7 @@ PRODUCTS = [
     {
         "title": "Convertidor de estados de cuenta",
         "desc": (
-            "Convierte estados bancarios a Excel limpio en segundos: cargos, abonos, fechas y saldos listos para analizar."
+            "Limpia estados bancarios y obtén cargos, abonos y saldos listos en Excel en un solo paso."
         ),
         "img": IMG_ESTADOS_CTA,
         "page": "pages/convertidor_estados_cuenta.py",
@@ -309,7 +383,7 @@ PRODUCTS = [
     {
         "title": "DIOT",
         "desc": (
-            "Genera el TXT oficial de la DIOT sin errores. Carga tus datos y presenta en minutos, con validaciones automáticas."
+            "Genera el TXT oficial de la DIOT con validaciones automáticas y menos errores al presentar."
         ),
         "img": IMG_DIOT,
         "page": "pages/22_DIOT_excel_txt.py",
@@ -319,7 +393,7 @@ PRODUCTS = [
     {
         "title": "Traslado inteligente",
         "desc": (
-            "Calcula el costo real de cada ruta: casetas, diésel, mantenimiento, viáticos y más, con analítica para decidir con precisión."
+            "Calcula rutas completas: casetas, diésel, mantenimiento y viáticos con analítica para decidir mejor."
         ),
         "img": IMG_TRASLADO,
         "page": "pages/1_Calculadora.py",
@@ -329,7 +403,7 @@ PRODUCTS = [
     {
         "title": "Generador de Pólizas contables",
         "desc": (
-            "Automatiza pólizas de ingresos, egresos y provisiones. Convierte Excel a sistemas contables en lote, rápido y exacto."
+            "Automatiza pólizas de ingresos, egresos y provisiones convirtiendo Excel a sistemas contables."
         ),
         "img": IMG_POLIZAS,
         "page": "pages/generador_polizas.py",
