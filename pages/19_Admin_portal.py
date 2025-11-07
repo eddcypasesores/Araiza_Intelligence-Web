@@ -5,25 +5,26 @@ from __future__ import annotations
 import json
 import sqlite3
 from contextlib import closing
+from dataclasses import dataclass
 from datetime import timezone
 from typing import Sequence
 
 import streamlit as st
 
-from core.auth import ensure_session_from_token, persist_login
 from core.db import (
-    PORTAL_ALLOWED_MODULES,
     ensure_schema,
     get_conn,
     portal_create_reset_token,
     portal_create_user,
     portal_delete_users,
     portal_list_pending_resets,
+    portal_list_permissions,
     portal_list_users,
     portal_revoke_reset_tokens,
     portal_set_password,
     portal_update_user,
 )
+from core.portal_admin_ui import enforce_super_admin_password_change, require_super_admin
 import streamlit.components.v1 as components
 from core.navigation import render_nav
 from core.streamlit_compat import rerun, set_query_params
@@ -116,9 +117,28 @@ def _module_label(value: str) -> str:
     return cleaned.title()
 
 
-MODULE_OPTIONS = [(_module_label(code), code) for code in PORTAL_ALLOWED_MODULES]
-LABEL_BY_VALUE = {value: label for label, value in MODULE_OPTIONS}
-VALUE_BY_LABEL = {label: value for label, value in MODULE_OPTIONS}
+@dataclass(frozen=True)
+class PermissionCatalog:
+    options: tuple[tuple[str, str], ...]
+    label_by_value: dict[str, str]
+    value_by_label: dict[str, str]
+
+
+def _build_permission_catalog(conn: sqlite3.Connection) -> PermissionCatalog:
+    records = portal_list_permissions(conn)
+    options: list[tuple[str, str]] = []
+    for row in records:
+        code = str(row.get("code") or "").strip().lower()
+        if not code:
+            continue
+        label = str(row.get("label") or "").strip() or _module_label(code)
+        options.append((label, code))
+    options_tuple = tuple(options)
+    return PermissionCatalog(
+        options=options_tuple,
+        label_by_value={code: label for label, code in options_tuple},
+        value_by_label={label: code for label, code in options_tuple},
+    )
 
 
 def _parse_permissions(raw) -> list[str]:
@@ -131,22 +151,32 @@ def _parse_permissions(raw) -> list[str]:
     return [str(p) for p in data if isinstance(p, str)]
 
 
-def _permisos_multiselect(default: Sequence[str] | None) -> list[str]:
-    labels = [label for label, _ in MODULE_OPTIONS]
-    default_values: list[str]
+def _permisos_multiselect(
+    catalog: PermissionCatalog, default: Sequence[str] | None
+) -> list[str]:
+    if not catalog.options:
+        st.info(
+            "Configura al menos un permiso desde 'Administrar productos' para poder asignarlo a los usuarios."
+        )
+        return []
+
+    labels = [label for label, _ in catalog.options]
     if isinstance(default, str):
         default_values = _parse_permissions(default)
     else:
         default_values = list(default or [])
+    default_labels = [
+        catalog.label_by_value.get(value, value) for value in default_values if value in catalog.label_by_value
+    ]
     selected_labels = st.multiselect(
         "Permisos de acceso",
         options=labels,
-        default=[LABEL_BY_VALUE.get(value, value) for value in default_values],
+        default=default_labels if default_labels else [],
     )
-    return [VALUE_BY_LABEL.get(label, label) for label in selected_labels]
+    return [catalog.value_by_label.get(label, label) for label in selected_labels if label]
 
 
-def _display_users_table(conn: sqlite3.Connection) -> None:
+def _display_users_table(conn: sqlite3.Connection, catalog: PermissionCatalog) -> None:
     df = portal_list_users(conn)
     if df.empty:
         st.info("No hay usuarios registrados.")
@@ -156,8 +186,9 @@ def _display_users_table(conn: sqlite3.Connection) -> None:
         level, message = modal_payload
         _render_feedback_modal(level, message)
     df = df.copy()
+    label_map = catalog.label_by_value
     df["permisos"] = df["permisos"].apply(
-        lambda raw: ", ".join(LABEL_BY_VALUE.get(p, p) for p in _parse_permissions(raw)) or "-"
+        lambda raw: ", ".join(label_map.get(p, _module_label(p)) for p in _parse_permissions(raw)) or "-"
     )
     df.rename(
         columns={
@@ -179,8 +210,12 @@ def _display_users_table(conn: sqlite3.Connection) -> None:
     st.dataframe(df, use_container_width=True, hide_index=True)
 
 
-def _create_user(conn: sqlite3.Connection) -> None:
+def _create_user(conn: sqlite3.Connection, catalog: PermissionCatalog) -> None:
     st.subheader("Crear usuario")
+    if not catalog.options:
+        st.info("Configura al menos un permiso en 'Administrar productos' antes de crear usuarios.")
+        return
+    default_codes = [catalog.options[0][1]] if catalog.options else []
     with st.form("create_portal_user", clear_on_submit=False):
         rfc = st.text_input("RFC*", placeholder="ej. ABCD800101XXX")
         regimen = st.text_input("Regimen fiscal")
@@ -190,7 +225,7 @@ def _create_user(conn: sqlite3.Connection) -> None:
         municipio = st.text_input("Alcaldia o municipio")
         email = st.text_input("Correo electronico")
         telefono = st.text_input("Telefono")
-        permisos = _permisos_multiselect(["traslados"])
+        permisos = _permisos_multiselect(catalog, default_codes)
         submitted = st.form_submit_button("Guardar usuario", use_container_width=True)
 
     if not submitted:
@@ -252,7 +287,7 @@ def _select_existing_user(conn: sqlite3.Connection):
     return df[df["rfc"] == selected].reset_index(drop=True)
 
 
-def _edit_user(conn: sqlite3.Connection) -> None:
+def _edit_user(conn: sqlite3.Connection, catalog: PermissionCatalog) -> None:
     st.subheader("Modificar usuario")
     df = _select_existing_user(conn)
     if df.empty:
@@ -267,7 +302,7 @@ def _edit_user(conn: sqlite3.Connection) -> None:
         municipio = st.text_input("Alcaldia o municipio", value=record.get("municipio") or "")
         email = st.text_input("Correo electronico", value=record.get("email") or "")
         telefono = st.text_input("Telefono", value=record.get("telefono") or "")
-        permisos = _permisos_multiselect(permisos_actuales)
+        permisos = _permisos_multiselect(catalog, permisos_actuales)
         must_change = st.checkbox(
             "Solicitar cambio de contrasena al siguiente inicio",
             value=bool(record.get("must_change_password")),
@@ -449,60 +484,9 @@ def _manage_recovery_tokens(conn: sqlite3.Connection) -> None:
                     st.error(f"No fue posible revocar los enlaces: {exc}")
 
 
-def _enforce_password_change(conn: sqlite3.Connection) -> None:
-    if not st.session_state.get("must_change_password"):
-        return
-
-    st.warning("Debes actualizar tu contrasena antes de continuar.")
-    with st.form("forced_super_admin_change", clear_on_submit=False):
-        nueva = st.text_input("Nueva contrasena", type="password")
-        confirm = st.text_input("Confirmar contrasena", type="password")
-        submitted = st.form_submit_button("Actualizar ahora", use_container_width=True)
-
-    if not submitted:
-        st.stop()
-
-    nueva = (nueva or "").strip()
-    confirm = (confirm or "").strip()
-    if len(nueva) < 8:
-        st.error("La contrasena debe tener al menos 8 caracteres.")
-        st.stop()
-    if nueva != confirm:
-        st.error("Las contrasenas no coinciden.")
-        st.stop()
-
-    try:
-        username = st.session_state.get("usuario", "") or ""
-        portal_set_password(conn, username, nueva, require_change=False)
-        permisos = st.session_state.get("permisos") or []
-        persist_login(
-            username,
-            permisos,
-            must_change_password=False,
-            user_id=st.session_state.get("portal_user_id"),
-        )
-        st.session_state["must_change_password"] = False
-        st.success("Contrasena actualizada correctamente.")
-    except Exception as exc:
-        st.error(f"No fue posible actualizar la contrasena: {exc}")
-        st.stop()
-    finally:
-        st.stop()
-
-
-def _require_super_admin() -> None:
-    ensure_session_from_token()
-    permisos = set(st.session_state.get("permisos") or [])
-    if not st.session_state.get("usuario") or "admin" not in permisos:
-        st.error(
-            "Acceso restringido. Inicia sesion como super administrador desde la seccion 'Acerca de Nosotros'."
-        )
-        st.stop()
-
-
 def main() -> None:
     st.set_page_config(page_title="Administracion del portal", layout="wide")
-    _require_super_admin()
+    require_super_admin()
     render_nav(active_top="admin_portal", show_inicio=True)
 
     st.title("Administracion del portal")
@@ -510,7 +494,12 @@ def main() -> None:
 
     with closing(get_conn()) as conn:
         ensure_schema(conn)
-        _enforce_password_change(conn)
+        enforce_super_admin_password_change(conn)
+        catalog = _build_permission_catalog(conn)
+        if not catalog.options:
+            st.warning(
+                "Aun no tienes permisos configurados. Usa la opcion 'Administrar productos' para definirlos antes de asignarlos a tus usuarios."
+            )
 
         view_options = ["Consultar", "Crear", "Modificar", "Eliminar", "Restablecer contrasena", "Recuperacion"]
         raw_view = st.query_params.get("view")
@@ -551,11 +540,11 @@ def main() -> None:
                 pass
 
         if choice == "Consultar":
-            _display_users_table(conn)
+            _display_users_table(conn, catalog)
         elif choice == "Crear":
-            _create_user(conn)
+            _create_user(conn, catalog)
         elif choice == "Modificar":
-            _edit_user(conn)
+            _edit_user(conn, catalog)
         elif choice == "Eliminar":
             _delete_users(conn)
         elif choice == "Restablecer contrasena":

@@ -1,4 +1,4 @@
-# pages/0_Inicio.py — Inicio con héroe, redirección ?goto=..., tarjetas 4×2 (imagen más pequeña) y contenedor azul 25% más bajo
+# pages/0_Inicio.py — Héroe más bajo, tarjetas angostas, texto pequeño/legible y “hover-ready”
 from __future__ import annotations
 
 from pathlib import Path
@@ -40,14 +40,13 @@ if isinstance(dest, list):
     dest = dest[-1] if dest else None
 
 if dest:
-    # Si viene logout=1 en la URL del overlay, limpia sesión antes de cambiar de página
     if qp.get("logout") in (["1"], "1", 1, True):
         st.session_state.clear()
     try:
         st.switch_page(dest)  # ej: "pages/Descarga_masiva_xml.py"
     except Exception:
         pass
-    st.stop()  # evita re-render loop
+    st.stop()
 
 # -----------------------------------------------------------------------------
 # Helpers
@@ -63,7 +62,6 @@ def page_exists(rel_page: str) -> bool:
         return False
     return p.is_file()
 
-# Usamos ?goto=... en lugar de ?page=...
 def _normalize_page_path(p: str) -> str | None:
     if not isinstance(p, str):
         return None
@@ -76,7 +74,6 @@ def _normalize_page_path(p: str) -> str | None:
         p += ".py"
     return p
 
-# Devuelve un enlace RELATIVO: "?goto=pages/Archivo.py[&logout=1]"
 def _product_href(script_path: str, *, force_logout: bool = False) -> str:
     page = _normalize_page_path(script_path)
     if not page:
@@ -121,7 +118,7 @@ IMG_CEDULA      = image_src_for((Path("assets/cedula_impuestos_card.png"), Path(
 render_nav(active_top="inicio", show_inicio=False, show_cta=False)
 
 # -----------------------------------------------------------------------------
-# CSS — ajustes solicitados: imagen tarjeta más pequeña y contenedor azul -25%
+# CSS — héroe bajo + tarjetas angostas/bajas + texto pequeño/legible
 # -----------------------------------------------------------------------------
 st.markdown(dedent("""
 <style>
@@ -137,56 +134,86 @@ st.markdown(dedent("""
   margin:0 auto!important;
 }
 
-/* ===== HERO ===== */
+/* ===== HERO (más bajo) ===== */
 .hero-wrap{
-  position:relative; border-radius:20px; padding:clamp(28px,5vw,48px);
+  position:relative; border-radius:20px; 
+  padding: clamp(16px, 4vw, 32px);
   background:
     radial-gradient(1200px 600px at 15% 10%, rgba(37,99,235,.08), transparent 60%),
     radial-gradient(1000px 500px at 85% 30%, rgba(37,99,235,.10), transparent 70%),
     linear-gradient(#FFF,#FFF);
   border:1px solid var(--line); box-shadow:0 10px 30px rgba(2,6,23,.06);
 }
-.hero-grid{ display:grid; gap:clamp(18px,3.5vw,36px); grid-template-columns:1.2fr .8fr; align-items:center;}
+.hero-grid{ 
+  display:grid; 
+  gap: clamp(12px, 2.5vw, 22px);
+  grid-template-columns:1.2fr .8fr; 
+  align-items:center;
+}
 @media (max-width:900px){ .hero-grid{ grid-template-columns:1fr; } }
-.hero-title-main{ margin:0; color:var(--ink); font-weight:900; line-height:1.05; font-size:clamp(36px,5vw,56px); letter-spacing:-.01em; }
-.hero-subtitle{ margin:6px 0 0; color:var(--muted); font-size:clamp(16px,1.6vw,20px); line-height:1.35; }
+/* Tamaños de texto del héroe — pequeños pero visibles */
+.hero-title-main{ margin:0; color:var(--ink); font-weight:900; line-height:1.05; font-size:clamp(34px, 4.6vw, 50px); letter-spacing:-.01em; }
+.hero-subtitle{ margin:4px 0 0; color:var(--muted); font-size:clamp(14px, 1.25vw, 17px); line-height:1.32; }
 .hero-logo{ display:flex; align-items:center; justify-content:center; }
-.hero-logo .logo{ width: min(240px, 80%); aspect-ratio: 1 / 1; object-fit: contain; border-radius: 20px; filter: drop-shadow(0 6px 12px rgba(29,78,216,.15)); }
-@media (max-width: 900px){ .hero-logo .logo{ width: min(210px, 68%); border-radius: 18px; } }
+.hero-logo .logo{
+  width: min(120px, 45%);
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  border-radius: 20px;
+  filter: drop-shadow(0 6px 12px rgba(29,78,216,.15));
+}
+@media (max-width: 900px){
+  .hero-logo .logo{ width: min(95px, 40%); border-radius: 18px; }
+}
 
-/* ===== CONTENEDOR AZUL (25% menos alto) ===== */
+/* ===== CONTENEDOR AZUL ===== */
 .modules-wrap{
-  margin-top: clamp(14px, 3vw, 24px);
+  margin-top: clamp(12px, 2.5vw, 20px);
   border-radius:20px;
-  padding: clamp(12px, 2.2vw, 18px); /* -25% aprox */
+  padding: clamp(12px, 2.2vw, 18px);
   background: linear-gradient(180deg, color-mix(in srgb, var(--azul) 16%, #fff) 0%, #fff 60%);
   border:1px solid color-mix(in srgb, var(--azul) 25%, var(--line));
   box-shadow: 0 10px 28px rgba(2,6,23,.07) inset, 0 8px 22px rgba(2,6,23,.06);
 }
 
-/* ===== GRID 4×2 ===== */
-.cards-grid{ display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: clamp(16px, 2.4vw, 20px); }
-@media (max-width: 1400px){ .cards-grid{ grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 980px){ .cards-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 640px){ .cards-grid{ grid-template-columns: 1fr; } }
+/* ===== GRID — TARJETAS MÁS ANGOSTAS (solo ancho) ===== */
+.cards-grid{
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 260px));
+  justify-content: center;
+  gap: clamp(14px, 2.2vw, 18px);
+}
 
-/* ===== Tarjeta vertical COMPACTA ===== */
-.card-vertical{ position:relative; display:flex; flex-direction:column; border:1px solid var(--line); border-radius:14px; background:var(--card); box-shadow:0 6px 18px rgba(2,6,23,.06); overflow:hidden; isolation:isolate; transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease; cursor:pointer; }
-.card-vertical:hover{ transform:translateY(-2px); box-shadow:0 12px 26px rgba(2,6,23,.10); border-color:color-mix(in srgb, var(--azul) 18%, var(--line)); }
+/* ===== Tarjeta vertical COMPACTA Y BAJA ===== */
+.card-vertical{
+  position:relative; display:flex; flex-direction:column;
+  border:1px solid var(--line); border-radius:14px; background:var(--card);
+  box-shadow:0 6px 18px rgba(2,6,23,.06); overflow:hidden; isolation:isolate;
+  transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease; cursor:pointer;
+  min-height:auto;
+}
+/* Hover real se activa con .ai-ready (ver abajo) */
+.card-vertical:hover{ transform:none; box-shadow:0 6px 18px rgba(2,6,23,.06); }
 
-/* Imagen contenida MÁS PEQUEÑA (reduce alto) */
-.card-media{ width:100%; background:#F8FAFC; display:flex; align-items:center; justify-content:center; overflow:hidden; aspect-ratio:16/9; max-height: 110px; }
-@media (max-width: 1400px){ .card-media{ max-height: 118px; } }
-@media (max-width: 980px){ .card-media{ max-height: 126px; } }
-@media (max-width: 640px){ .card-media{ max-height: 118px; } }
+/* Imagen baja */
+.card-media{
+  width:100%; background:#F8FAFC; display:flex; align-items:center; justify-content:center;
+  overflow:hidden; aspect-ratio:16/9; max-height: 90px;
+}
+@media (max-width: 1400px){ .card-media{ max-height: 96px; } }
+@media (max-width: 980px){ .card-media{ max-height: 100px; } }
+@media (max-width: 640px){ .card-media{ max-height: 96px; } }
 .card-media img{ width:100%; height:100%; object-fit:contain; }
 
-/* Texto compacto */
-.card-copy{ padding:10px 10px 12px; }
-.card-title{ margin:0 0 4px; font-weight:800; color:var(--ink); font-size:.95rem; line-height:1.18; letter-spacing:.005em; }
-.card-desc{ margin:0; color:var(--muted); font-size:.86rem; line-height:1.28rem; text-align:justify; }
-.card-list{ margin:6px 0 0; padding-left:1rem; color:var(--muted); font-size:.86rem; line-height:1.18rem; }
-.card-list li{ margin:0 0 .2rem; }
+/* ===== Texto pequeño pero visible en tarjetas ===== */
+.card-copy{ padding:8px 10px 10px; }
+.card-title{ margin:0 0 2px; font-weight:800; color:var(--ink); font-size:.84rem; line-height:1.12; letter-spacing:.005em; }
+.card-desc{
+  margin:0; color:var(--muted); font-size:.76rem; line-height:1.12rem; text-align:justify;
+  display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;
+}
+.card-list{ margin:6px 0 0; padding-left:1rem; color:var(--muted); font-size:.76rem; line-height:1.10rem; }
+.card-list li{ margin:0 0 .16rem; }
 .card-list li::marker{ color: var(--azul-600); }
 
 /* Enlace overlay (solo activas) */
@@ -195,7 +222,7 @@ st.markdown(dedent("""
 
 /* Ribbon Próximamente */
 .ribbon{ position:absolute; top:10px; left:-8px; z-index:5; background: var(--azul-600); color:#fff; font-weight:800; font-size:.72rem; padding:.3rem .65rem .3rem .9rem; border-radius:10px; box-shadow:0 6px 14px rgba(29,78,216,.35); letter-spacing:.01em; }
-.ribbon::after{ content:""; position:absolute; left:0; top:100%; border-width:8px; border-style:solid; border-color: color-mix(in srgb, var(--azul-600) 80%, #000 20%) transparent transparent transparent; }
+.ribbon::after{ content:""; position:absolute; left:0; top:100%; border-width:8px; border-style:solid; border-color: color-mix(in srgb, var(--azul-600) 80%), transparent transparent transparent; }
 
 /* Deshabilitadas */
 .card-vertical.is-disabled, .card-vertical.is-disabled *{ cursor: not-allowed !important; }
@@ -207,6 +234,24 @@ hr{ border:0; border-top:1px solid var(--line); margin:20px 0 10px; }
 .footer{ text-align:center; color:#64748b; font-size:.78rem; padding:6px 0 16px; }
 </style>
 """), unsafe_allow_html=True)
+
+# -----------------------------------------------------------------------------
+# Hover solo cuando la página está lista (evita “hover” inicial)
+# -----------------------------------------------------------------------------
+st.markdown("""
+<script>
+window.addEventListener('load', () => {
+  document.documentElement.classList.add('ai-ready');
+});
+</script>
+<style>
+.ai-ready .card-vertical:hover{
+  transform: translateY(-2px);
+  box-shadow: 0 12px 26px rgba(2,6,23,.10);
+  border-color: color-mix(in srgb, var(--azul) 18%, var(--line));
+}
+</style>
+""", unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
 # DATA
@@ -258,7 +303,7 @@ PRODUCTS = [
             "Convierte estados bancarios a Excel limpio en segundos: cargos, abonos, fechas y saldos listos para analizar."
         ),
         "img": IMG_ESTADOS_CTA,
-        "page": "pages/Convertidor_Estados.py",
+        "page": "pages/convertidor_estados_cuenta.py",
         "key": "go_estados",
     },
     {
@@ -287,7 +332,7 @@ PRODUCTS = [
             "Automatiza pólizas de ingresos, egresos y provisiones. Convierte Excel a sistemas contables en lote, rápido y exacto."
         ),
         "img": IMG_POLIZAS,
-        "page": "pages/Generador_Polizas.py",
+        "page": "pages/generador_polizas.py",
         "key": "go_polizas",
     },
 ]
@@ -310,22 +355,19 @@ st.markdown(dedent(f"""
 """), unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# Tarjetas compactas
+# Tarjetas
 # -----------------------------------------------------------------------------
 cards_html_parts = ['<section class="modules-wrap"><div class="cards-grid">']
 for p in PRODUCTS:
     exists = page_exists(p["page"]) if p.get("page") else False
     dis_cls = " is-disabled" if not exists else ""
     cls = f"card-vertical{dis_cls}"
-
     href = _product_href(p["page"], force_logout=bool(p.get("force_logout"))) if exists else None
     overlay_html = f'<div class="overlay-link"><a href="{href}" target="_self"></a></div>' if href else ""
     ribbon_html = '' if exists else '<div class="ribbon">Próximamente</div>'
-
     desc_html = as_html_desc(p.get("desc", ""))
     img_src = p.get("img") or ""
     media_html = f'<div class="card-media"><img src="{img_src}" alt="{html.escape(p["title"])}"/></div>' if img_src else ""
-
     cards_html_parts.append(
         f'<article class="{cls}">'
         f'{ribbon_html}'

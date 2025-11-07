@@ -317,8 +317,14 @@ PAGE_PARAM_NAMES: dict[str, str] = {
     "pages/18_Restablecer_contrasena.py": "Recuperar contrasena",
     "pages/19_Admin_portal.py": "Administracion del portal",
     "pages/20_Admin_login.py": "Acceso super administrador",
+    "pages/24_Admin_productos.py": "Administrar productos",
     "pages/22_DIOT_excel_txt.py": "DIOT",
     "pages/23_DIOT_login.py": "DIOT - Acceso",
+    "pages/Descarga_masiva_login.py": "Descarga masiva - Acceso",
+    "pages/Descarga_masiva_xml.py": "Descarga masiva de XML",
+    "pages/convertidor_estados_cuenta.py": "Convertidor de estados de cuenta",
+    "pages/generador_polizas.py": "Generador de polizas contables",
+
 }
 
 
@@ -346,7 +352,7 @@ PRODUCT_ACTIONS: tuple[DropdownAction, ...] = (
     DropdownAction("Cedula de impuestos", "producto_cedula", "pages/Cedula_Impuestos.py"),
     DropdownAction("Lista Negra SAT", "producto_lista", "pages/15_Lista_negra_Sat.py"),
     DropdownAction("Archivo Firmes", "producto_firmes", "pages/17_Archivo_firmes.py"),
-    DropdownAction("Descarga masiva de XML", "producto_xml", "pages/14_Riesgo_fiscal.py"),
+    DropdownAction("Descarga masiva de XML", "producto_xml", "pages/Descarga_masiva_login.py", {"next":"pages/Descarga_masiva_xml.py"}),
     DropdownAction("Generador de Polizas", "producto_polizas", "pages/XX_Generador_polizas.py"),
     DropdownAction("Convertidor de Estados de Cuenta", "producto_estados", "pages/XX_Convertidor_estados.py"),
 )
@@ -519,7 +525,7 @@ def _resolve_nav_mode(active_top: str | None) -> str:
         return "monitoreo"
     if active_top in CEDULA_TOPS:
         return "cedula"
-    if active_top == "admin_portal":
+    if active_top in {"admin_portal", "admin_products"}:
         return "portal_admin"
 
     logged_in = bool(st.session_state.get("usuario"))
@@ -665,6 +671,12 @@ def _build_nav_items(
                 label="Administracion",
                 target_page="pages/19_Admin_portal.py",
                 top_key="admin_portal",
+                active_top=active_top,
+            ),
+            _root_link_html(
+                label="Administrar productos",
+                target_page="pages/24_Admin_productos.py",
+                top_key="admin_products",
                 active_top=active_top,
             ),
             _root_link_html(

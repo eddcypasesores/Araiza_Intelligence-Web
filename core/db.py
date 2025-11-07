@@ -686,6 +686,18 @@ def ensure_portal_schema(conn):
                 )
                 """
             )
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS portal_permissions(
+                    id BIGSERIAL PRIMARY KEY,
+                    code TEXT NOT NULL UNIQUE,
+                    label TEXT NOT NULL UNIQUE,
+                    description TEXT,
+                    created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    updated_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP
+                )
+                """
+            )
     else:
         conn.execute(
             """
@@ -719,11 +731,32 @@ def ensure_portal_schema(conn):
             )
             """
         )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS portal_permissions(
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                code TEXT NOT NULL UNIQUE,
+                label TEXT NOT NULL UNIQUE,
+                description TEXT,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
         conn.commit()
+
+    _ensure_default_portal_permissions(conn)
 
 
 # ---------- Portal Users (nueva autenticacion global) ----------
-PORTAL_ALLOWED_MODULES: tuple[str, ...] = ("traslados", "riesgos", "diot", "cedula", "admin")
+DEFAULT_PORTAL_PERMISSIONS: tuple[tuple[str, str], ...] = (
+    ("traslados", "Traslados"),
+    ("riesgos", "Monitoreo EFOS"),
+    ("diot", "DIOT"),
+    ("cedula", "Cedula de impuestos"),
+    ("admin", "Administracion"),
+)
+PORTAL_ALLOWED_MODULES: tuple[str, ...] = tuple(code for code, _ in DEFAULT_PORTAL_PERMISSIONS)
 DEFAULT_RESET_TOKEN_TTL_MINUTES = 60
 
 SUPERADMIN_SEED: dict[str, str | bool | list[str]] = {
@@ -810,6 +843,154 @@ def _permisos_from_text(raw: str | None) -> list[str]:
     return [str(p).strip().lower() for p in data if isinstance(p, str)]
 
 
+def _normalize_permission_code(value: str) -> str:
+    text = re.sub(r"[^a-z0-9_]+", "_", (value or "").strip().lower())
+    text = re.sub(r"_+", "_", text)
+    return text.strip("_")
+
+
+def _ensure_default_portal_permissions(conn: sqlite3.Connection) -> None:
+    """Guarantee that baseline permissions exist in the catalog."""
+
+    with _portal_cursor(conn, write=True) as (_, cur):
+        cur.execute(_portal_sql("SELECT code FROM portal_permissions"))
+        existing = {row[0] for row in cur.fetchall()}
+        for code, label in DEFAULT_PORTAL_PERMISSIONS:
+            if code in existing:
+                continue
+            cur.execute(
+                _portal_sql(
+                    """
+                    INSERT INTO portal_permissions(code, label, description)
+                    VALUES(?,?,?)
+                    """
+                ),
+                (code, label, None),
+            )
+
+
+def _portal_permission_codes(conn: sqlite3.Connection) -> set[str]:
+    with _portal_cursor(conn) as (_, cur):
+        cur.execute(_portal_sql("SELECT code FROM portal_permissions"))
+        return {row[0] for row in cur.fetchall()}
+
+
+def _filter_known_permissions(
+    conn: sqlite3.Connection, raw_permissions: Sequence[str] | None
+) -> list[str]:
+    """Return unique, valid permission codes preserving order."""
+
+    if not raw_permissions:
+        return []
+    allowed = _portal_permission_codes(conn)
+    filtered: list[str] = []
+    for value in raw_permissions:
+        code = (value or "").strip().lower()
+        if code and code in allowed and code not in filtered:
+            filtered.append(code)
+    return filtered
+
+
+def portal_list_permissions(conn: sqlite3.Connection) -> list[dict]:
+    """Return metadata for the configured portal permissions."""
+
+    with _portal_cursor(conn) as (_, cur):
+        cur.execute(
+            _portal_sql(
+                """
+                SELECT id, code, label, description, created_at, updated_at
+                FROM portal_permissions
+                ORDER BY LOWER(label)
+                """
+            )
+        )
+        rows = cur.fetchall()
+        columns = [col[0] for col in cur.description] if cur.description else []
+    return [dict(zip(columns, row)) for row in rows]
+
+
+def portal_create_permission(
+    conn: sqlite3.Connection, *, code: str, label: str, description: str | None = None
+) -> None:
+    normalized_code = _normalize_permission_code(code)
+    display_label = (label or "").strip()
+    desc = (description or "").strip() or None
+    if not normalized_code:
+        raise ValueError("El codigo interno es obligatorio.")
+    if not display_label:
+        raise ValueError("El nombre visible es obligatorio.")
+
+    with _portal_cursor(conn, write=True) as (_, cur):
+        cur.execute(
+            _portal_sql(
+                """
+                INSERT INTO portal_permissions(code, label, description)
+                VALUES(?,?,?)
+                """
+            ),
+            (normalized_code, display_label, desc),
+        )
+
+
+def portal_update_permission(
+    conn: sqlite3.Connection, permission_id: int, *, label: str, description: str | None = None
+) -> None:
+    display_label = (label or "").strip()
+    desc = (description or "").strip() or None
+    if not display_label:
+        raise ValueError("El nombre visible es obligatorio.")
+
+    with _portal_cursor(conn, write=True) as (_, cur):
+        cur.execute(
+            _portal_sql(
+                """
+                UPDATE portal_permissions
+                SET label=?, description=?, updated_at=CURRENT_TIMESTAMP
+                WHERE id=?
+                """
+            ),
+            (display_label, desc, permission_id),
+        )
+        if cur.rowcount == 0:
+            raise ValueError("Permiso no encontrado.")
+
+
+def portal_delete_permission(conn: sqlite3.Connection, permission_id: int) -> None:
+    with _portal_cursor(conn, write=True) as (_, cur):
+        cur.execute(
+            _portal_sql("SELECT code FROM portal_permissions WHERE id=?"),
+            (permission_id,),
+        )
+        row = cur.fetchone()
+        if not row:
+            raise ValueError("Permiso no encontrado.")
+        code = row[0]
+        if code == "admin":
+            raise ValueError("No es posible eliminar el permiso de administracion.")
+
+        cur.execute(
+            _portal_sql("DELETE FROM portal_permissions WHERE id=?"),
+            (permission_id,),
+        )
+        cur.execute(_portal_sql("SELECT id, permisos FROM portal_users"))
+        users = cur.fetchall()
+        for user_id, permisos_raw in users:
+            permisos = _permisos_from_text(permisos_raw)
+            if code not in permisos:
+                continue
+            updated = [p for p in permisos if p != code]
+            cur.execute(
+                _portal_sql(
+                    """
+                    UPDATE portal_users
+                    SET permisos=?, updated_at=CURRENT_TIMESTAMP
+                    WHERE id=?
+                    """
+                ),
+                (_permisos_to_text(updated), user_id),
+            )
+
+
 def ensure_portal_admin(conn: sqlite3.Connection) -> None:
     """Crea el super administrador configurado si no existe."""
 
@@ -873,9 +1054,9 @@ def portal_create_user(
     norm_rfc = _normalize_rfc(rfc)
     if not norm_rfc:
         raise ValueError("RFC obligatorio")
-    permisos_list = list(permisos or [])
+    permisos_list = _filter_known_permissions(conn, permisos or [])
     if not permisos_list:
-        permisos_list = ["traslados"]
+        raise ValueError("Selecciona al menos un permiso valido.")
     permisos_text = _permisos_to_text(permisos_list)
     password_hash = _hash_password(password or norm_rfc)
     with _portal_cursor(conn, write=True) as (_, cur):
@@ -945,11 +1126,11 @@ def portal_update_user(
             _set('email', email)
         if telefono is not None:
             _set('telefono', telefono)
-        if permisos is not None:
-            permisos_list = list(permisos)
-            if not permisos_list:
-                permisos_list = ['traslados']
-            _set('permisos', _permisos_to_text(permisos_list))
+    if permisos is not None:
+        permisos_list = _filter_known_permissions(conn, permisos)
+        if not permisos_list:
+            raise ValueError("Selecciona al menos un permiso valido.")
+        _set('permisos', _permisos_to_text(permisos_list))
         if must_change_password is not None:
             _set('must_change_password', bool(must_change_password))
 
