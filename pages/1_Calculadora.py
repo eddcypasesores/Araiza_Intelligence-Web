@@ -144,6 +144,21 @@ st.markdown(
       div[data-testid="stVerticalBlock"]:has(.calc-form-toggle-marker) .stButton>button:hover {
         background:#c7d2fe;
       }
+      .calc-card {
+        border:1px solid rgba(148,163,184,.25);
+        border-top:none;
+        border-radius:0 0 26px 26px;
+        background:#ffffff;
+        padding:24px clamp(18px,2.4vw,36px) clamp(18px,2vw,28px);
+        box-shadow:0 20px 44px rgba(15,23,42,0.12);
+        margin-top:-12px;
+      }
+      .top-form__meta {
+        margin-top:1rem;
+      }
+      .top-form__field {
+        margin-top:.75rem;
+      }
       body[data-top-form-collapsed="true"] .top-form {
         max-height:0;
         opacity:0;
@@ -178,10 +193,6 @@ st.markdown(
         background:#ffffff;
         box-shadow:0 20px 44px rgba(15,23,42,0.12);
         overflow:hidden;
-      }
-      div[data-testid="stVerticalBlock"]:has(> .calc-card__header)
-        > div[data-testid="stVerticalBlock"] {
-        padding:32px 36px 36px;
       }
     </style>
     """,
@@ -673,8 +684,13 @@ st.markdown(
     "<div class='calc-card__header'><span class='calc-card__title'>COSTOS DE TRASLADO</span></div>",
     unsafe_allow_html=True,
 )
+st.markdown("<div class='calc-card'>", unsafe_allow_html=True)
 
 collapsed_state = bool(st.session_state.get(TOP_FORM_COLLAPSE_KEY, False))
+origen: dict[str, Any] | None = None
+destino: dict[str, Any] | None = None
+parada: dict[str, Any] | None = None
+current_show_stop = False
 with st.container():
     st.markdown("<span class='calc-form-toggle-marker'></span>", unsafe_allow_html=True)
     toggle_label = "MOSTRAR DATOS" if collapsed_state else "OCULTAR DATOS"
@@ -877,63 +893,72 @@ with st.container():
                 st.markdown("</div>", unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
 
-        meta_cols = st.columns(3, gap="medium")
-        with meta_cols[0]:
-            clase = st.selectbox("CLASE (TIPO DE AUTO)", clases, index=default_idx, key="top_clase")
-        with meta_cols[1]:
-            viaticos_mxn = st.number_input(
-                "VIATICOS (MXN)",
-                min_value=0.0,
-                value=float(st.session_state.get("viat_input_main", 0.0)),
-                step=50.0,
-                format="%.2f",
-                key="viat_input_main",
-            )
-        with meta_cols[2]:
-            distancia_base = float(st.session_state.get("maps_distance_km") or 0.0)
-            dias_sugeridos = _normalize_estimated_days(distancia_base / 600.0)
-            target_dias = float(dias_sugeridos)
-            stored_raw = st.session_state.get("dias_estimados_input")
-            try:
-                stored_val = float(stored_raw) if stored_raw is not None else None
-            except (TypeError, ValueError):
-                stored_val = None
-
-            current_manual = bool(st.session_state.get(dias_manual_flag_key, False))
-            current_dias = _normalize_estimated_days(stored_val if stored_val is not None else target_dias)
-            if not current_manual and abs(current_dias - target_dias) > 1e-9:
-                st.session_state["dias_estimados_input"] = target_dias
-            elif stored_val is None:
-                st.session_state["dias_estimados_input"] = current_dias
-
-            dias_est = st.number_input(
-                "DIAS ESTIMADOS",
-                min_value=1.0,
-                step=0.5,
-                format="%.2f",
-                key="dias_estimados_input",
-                on_change=_mark_dias_manual,
-                help="Calculado como kilometros totales / 600 km por dia y redondeado a incrementos de 0.5.",
-            )
-            sanitized_input = _normalize_estimated_days(dias_est)
-            if abs(sanitized_input - dias_est) > 1e-9:
-                st.session_state["dias_estimados_input"] = sanitized_input
-                dias_est = sanitized_input
-
-        origen = st.session_state.get("top_origen_data")
-        destino = st.session_state.get("top_destino_data")
-        parada = st.session_state.get("top_parada_data") if show_stop else None
-
-        current_conductor = st.session_state.get("conductor_select", trab_opc[0])
-        default_conductor_idx = trab_opc.index(current_conductor) if current_conductor in trab_opc else 0
-        trab_show = st.selectbox(
-            "SELECCIONAR CONDUCTOR",
-            trab_opc,
-            index=default_conductor_idx,
-            key="conductor_select",
-        )
-
         st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("<div class='top-form__meta'>", unsafe_allow_html=True)
+    meta_cols = st.columns(3, gap="medium")
+    with meta_cols[0]:
+        clase = st.selectbox("CLASE (TIPO DE AUTO)", clases, index=default_idx, key="top_clase")
+    with meta_cols[1]:
+        viaticos_mxn = st.number_input(
+            "VIATICOS (MXN)",
+            min_value=0.0,
+            value=float(st.session_state.get("viat_input_main", 0.0)),
+            step=50.0,
+            format="%.2f",
+            key="viat_input_main",
+        )
+    with meta_cols[2]:
+        distancia_base = float(st.session_state.get("maps_distance_km") or 0.0)
+        dias_sugeridos = _normalize_estimated_days(distancia_base / 600.0)
+        target_dias = float(dias_sugeridos)
+        stored_raw = st.session_state.get("dias_estimados_input")
+        try:
+            stored_val = float(stored_raw) if stored_raw is not None else None
+        except (TypeError, ValueError):
+            stored_val = None
+
+        current_manual = bool(st.session_state.get(dias_manual_flag_key, False))
+        current_dias = _normalize_estimated_days(stored_val if stored_val is not None else target_dias)
+        if not current_manual and abs(current_dias - target_dias) > 1e-9:
+            st.session_state["dias_estimados_input"] = target_dias
+        elif stored_val is None:
+            st.session_state["dias_estimados_input"] = current_dias
+
+        dias_est = st.number_input(
+            "DIAS ESTIMADOS",
+            min_value=1.0,
+            step=0.5,
+            format="%.2f",
+            key="dias_estimados_input",
+            on_change=_mark_dias_manual,
+            help="Calculado como kilometros totales / 600 km por dia y redondeado a incrementos de 0.5.",
+        )
+        sanitized_input = _normalize_estimated_days(dias_est)
+        if abs(sanitized_input - dias_est) > 1e-9:
+            st.session_state["dias_estimados_input"] = sanitized_input
+            dias_est = sanitized_input
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("<div class='top-form__field'>", unsafe_allow_html=True)
+    current_conductor = st.session_state.get("conductor_select", trab_opc[0])
+    default_conductor_idx = trab_opc.index(current_conductor) if current_conductor in trab_opc else 0
+    trab_show = st.selectbox(
+        "SELECCIONAR CONDUCTOR",
+        trab_opc,
+        index=default_conductor_idx,
+        key="conductor_select",
+    )
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    origen = st.session_state.get("top_origen_data")
+    destino = st.session_state.get("top_destino_data")
+    parada = st.session_state.get("top_parada_data") if show_stop else None
+    current_show_stop = show_stop
+
+st.markdown("</div>", unsafe_allow_html=True)
 
 total_banner = st.container()
 

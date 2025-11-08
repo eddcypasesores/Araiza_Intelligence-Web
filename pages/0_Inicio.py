@@ -174,6 +174,9 @@ st.markdown(dedent("""
   background: linear-gradient(180deg, color-mix(in srgb, var(--azul) 16%, #fff) 0%, #fff 60%);
   border:1px solid color-mix(in srgb, var(--azul) 25%, var(--line));
   box-shadow: 0 10px 28px rgba(2,6,23,.07) inset, 0 8px 22px rgba(2,6,23,.06);
+  opacity:1 !important;
+  transition:none !important;
+  transform:none !important;
 }
 
 /* ===== GRID — TARJETAS MÁS ANGOSTAS (solo ancho) ===== */
