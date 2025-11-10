@@ -8,7 +8,7 @@ from pages.components.tarifas import render_agregar, select_via_plaza
 
 def main() -> None:
     conn = init_admin_section(
-        page_title="Tarifas — Agregar",
+        page_title="Tarifas - Agregar",
         active_top="tarifas",
         active_child="agregar",
     )
@@ -17,9 +17,9 @@ def main() -> None:
     if selection is None:
         return
 
-    _, via_nombre, plaza_id, plaza_nombre = selection
-    st.title("➕ Agregar tarifa")
-    st.caption(f"Vía seleccionada: **{via_nombre}** · Plaza: **{plaza_nombre}**")
+    _, _, plaza_id, plaza_nombre = selection
+    st.title("Agregar tarifa")
+    st.caption(f"Plaza seleccionada: **{plaza_nombre}**")
     render_agregar(conn, plaza_id)
 
 

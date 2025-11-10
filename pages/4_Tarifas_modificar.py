@@ -1,4 +1,4 @@
-"""Modificación masiva de tarifas."""
+"""Modificacion masiva de tarifas."""
 
 import streamlit as st
 
@@ -8,7 +8,7 @@ from pages.components.tarifas import render_modificar, select_via_plaza
 
 def main() -> None:
     conn = init_admin_section(
-        page_title="Tarifas — Modificar",
+        page_title="Tarifas - Modificar",
         active_top="tarifas",
         active_child="modificar",
     )
@@ -17,9 +17,9 @@ def main() -> None:
     if selection is None:
         return
 
-    _, via_nombre, plaza_id, plaza_nombre = selection
-    st.title("✏️ Modificar tarifas")
-    st.caption(f"Vía seleccionada: **{via_nombre}** · Plaza: **{plaza_nombre}**")
+    _, _, plaza_id, plaza_nombre = selection
+    st.title("Modificar tarifas")
+    st.caption(f"Plaza seleccionada: **{plaza_nombre}**")
     render_modificar(conn, plaza_id)
 
 

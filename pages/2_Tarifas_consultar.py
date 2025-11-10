@@ -8,7 +8,7 @@ from pages.components.tarifas import render_consulta, select_via_plaza
 
 def main() -> None:
     conn = init_admin_section(
-        page_title="Tarifas — Consultar",
+        page_title="Tarifas - Consultar",
         active_top="tarifas",
         active_child="consultar",
     )
@@ -17,9 +17,9 @@ def main() -> None:
     if selection is None:
         return
 
-    _, via_nombre, plaza_id, plaza_nombre = selection
-    st.title("📊 Consultar tarifas")
-    st.caption(f"Vía seleccionada: **{via_nombre}** · Plaza: **{plaza_nombre}**")
+    _, _, plaza_id, plaza_nombre = selection
+    st.title("Consultar tarifas")
+    st.caption(f"Plaza seleccionada: **{plaza_nombre}**")
     render_consulta(conn, plaza_id)
 
 

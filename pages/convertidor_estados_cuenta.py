@@ -7,7 +7,9 @@ from pathlib import Path
 
 import streamlit as st
 
-from core.auth import ensure_session_from_token, persist_login
+from urllib.parse import urlencode
+
+from core.auth import ensure_session_from_token, persist_login, auth_query_params
 from core.db import authenticate_portal_user, ensure_schema, get_conn
 from core.flash import consume_flash
 from core.login_ui import render_login_header, render_token_reset_section
@@ -206,14 +208,18 @@ st.markdown(
 
 st.write("")
 
+_auth_params = auth_query_params()
+auth_qs = urlencode(_auth_params) if _auth_params else ""
+internal_suffix = f"?{auth_qs}" if auth_qs else ""
+
 banks = [
-    ("BanBajio",   ASSETS / "banks/banbajio.jpeg",  "https://extractor-banbajio-ebu4.onrender.com"),
-    ("Banorte",    ASSETS / "banks/banorte.jpeg",   "https://extractor-banorte-eyvv.onrender.com"),
+    ("BanBajio",   ASSETS / "banks/banbajio.jpeg",  f"./Extractor_BanBajio{internal_suffix}"),
+    ("Banorte",    ASSETS / "banks/banorte.jpeg",   f"./Extractor_Banorte{internal_suffix}"),
     ("Santander",  ASSETS / "banks/santander.jpeg", "https://extractor-santander.onrender.com/"),
-    ("BBVA",       ASSETS / "banks/bbva.jpeg",      "https://extractor-bbva-kulc.onrender.com/"),
-    ("Banamex",    ASSETS / "banks/banamex.jpeg",   "https://extractor-banamex.onrender.com"),
+    ("BBVA",       ASSETS / "banks/bbva.jpeg",      f"./Extractor_BBVA{internal_suffix}"),
+    ("Banamex",    ASSETS / "banks/banamex.jpeg",   f"./Extractor_Banamex{internal_suffix}"),
     ("Scotiabank", ASSETS / "banks/scotiabank.jpeg","https://extractor-scotiabank-bgz6.onrender.com/"),
-    ("Inbursa",    ASSETS / "banks/Inbursa.jpeg",   "https://extractor-inbursa-vlck.onrender.com/"),
+    ("Inbursa",    ASSETS / "banks/Inbursa.jpeg",   f"./Extractor_Inbursa{internal_suffix}"),
     ("American_Express", ASSETS / "banks/American_Express.jpeg", "https://extractor-amex-o2ye.onrender.com/"),
     ("HSBC",       ASSETS / "banks/HSBC.jpeg",      "https://extractor-hsbc-2x9v.onrender.com/"),
     ("BASE",       ASSETS / "banks/BASE.jpeg",      "#"),

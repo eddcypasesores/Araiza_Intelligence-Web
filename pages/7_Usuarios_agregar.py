@@ -6,14 +6,47 @@ from datetime import date
 
 import streamlit as st
 
-from core.streamlit_compat import rerun
+from core.flash import set_flash
 from pages.components.admin import init_admin_section
+
+CONSULT_PAGE = "pages/6_Usuarios_consultar.py"
+
+
+def _redirect_to_consulta(message: str, *, kind: str = "success") -> None:
+    set_flash(message, kind=kind)
+    try:
+        st.switch_page(CONSULT_PAGE)
+    except Exception:
+        renderer = {
+            "success": st.success,
+            "info": st.info,
+            "warning": st.warning,
+            "error": st.error,
+        }.get(kind, st.info)
+        renderer(message)
+        st.stop()
+
+
+def _format_db_error(exc: Exception) -> str:
+    text = str(exc)
+    if "UNIQUE constraint failed" in text and "numero_economico" in text:
+        return "No se pudo guardar: el número económico ya está registrado."
+    if "UNIQUE constraint failed" in text:
+        return "No se pudo guardar (registro duplicado)."
+    return f"No fue posible guardar el trabajador: {text}"
 
 
 def _insert_trabajador(conn, **kwargs) -> None:
+    nombre_legacy = " ".join(
+        part.strip()
+        for part in (kwargs.get("nombres", ""), kwargs.get("apellido_paterno", ""), kwargs.get("apellido_materno", ""))
+        if str(part).strip()
+    ).strip() or kwargs.get("nombres", "") or "SIN NOMBRE"
+
     conn.execute(
         """
         INSERT INTO trabajadores(
+            nombre,
             nombres,
             apellido_paterno,
             apellido_materno,
@@ -22,8 +55,9 @@ def _insert_trabajador(conn, **kwargs) -> None:
             numero_economico,
             fecha_registro,
             salario_diario
-        ) VALUES (?,?,?,?,?,?,?,?)
+        ) VALUES (?,?,?,?,?,?,?,?,?)
         ON CONFLICT(numero_economico) DO UPDATE SET
+            nombre=excluded.nombre,
             nombres=excluded.nombres,
             apellido_paterno=excluded.apellido_paterno,
             apellido_materno=excluded.apellido_materno,
@@ -33,6 +67,7 @@ def _insert_trabajador(conn, **kwargs) -> None:
             salario_diario=excluded.salario_diario
         """,
         (
+            nombre_legacy,
             kwargs["nombres"],
             kwargs["apellido_paterno"],
             kwargs["apellido_materno"],
@@ -106,10 +141,9 @@ def main() -> None:
             fecha_registro=fecha_registro.isoformat(),
             salario_diario=float(salario_diario),
         )
-        st.success("Trabajador registrado correctamente.")
-        rerun()
+        _redirect_to_consulta("Trabajador registrado correctamente.")
     except Exception as exc:
-        st.error(f"No fue posible guardar el trabajador: {exc}")
+        _redirect_to_consulta(_format_db_error(exc), kind="error")
 
 
 if __name__ == "__main__":

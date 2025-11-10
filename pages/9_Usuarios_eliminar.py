@@ -4,8 +4,25 @@ from __future__ import annotations
 
 import streamlit as st
 
-from core.streamlit_compat import rerun
+from core.flash import set_flash
 from pages.components.admin import init_admin_section
+
+CONSULT_PAGE = "pages/6_Usuarios_consultar.py"
+
+
+def _redirect_to_consulta(message: str, *, kind: str = "success") -> None:
+    set_flash(message, kind=kind)
+    try:
+        st.switch_page(CONSULT_PAGE)
+    except Exception:
+        renderer = {
+            "success": st.success,
+            "info": st.info,
+            "warning": st.warning,
+            "error": st.error,
+        }.get(kind, st.info)
+        renderer(message)
+        st.stop()
 
 
 def main() -> None:
@@ -41,10 +58,14 @@ def main() -> None:
             ids = [opciones[label] for label in seleccion]
             conn.executemany("DELETE FROM trabajadores WHERE id=?", [(i,) for i in ids])
             conn.commit()
-            st.success("Trabajadores eliminados correctamente.")
-            rerun()
+            count = len(ids)
+            if count == 1:
+                message = "Trabajador eliminado correctamente."
+            else:
+                message = f"{count} trabajadores eliminados correctamente."
+            _redirect_to_consulta(message)
         except Exception as exc:
-            st.error(f"No fue posible eliminar trabajadores: {exc}")
+            _redirect_to_consulta(f"No fue posible eliminar trabajadores: {exc}", kind="error")
 
 
 if __name__ == "__main__":

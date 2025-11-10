@@ -23,7 +23,7 @@ from core.db import (
     authenticate_portal_user,
     portal_set_password,
 )
-from core.config import GOOGLE_MAPS_API_KEY
+from core.config import GOOGLE_MAPS_API_KEY, INEGI_ROUTING_BASE_URL, INEGI_ROUTING_TOKEN
 from core.rutas import (
     load_routes,
     plazas_catalog,
@@ -34,6 +34,7 @@ from core.tarifas import tarifa_por_plaza
 from core.driver_costs import read_trabajadores, costo_diario_trabajador_auto
 from core.params import read_params
 from core.maps import GoogleMapsClient, GoogleMapsError
+from core.inegi_routing import InegiRoutingClient, InegiRoutingError
 from core.navigation import render_nav
 from core.flash import consume_flash, set_flash
 from core.login_ui import render_login_header, render_token_reset_section
@@ -122,28 +123,6 @@ st.markdown(
       .top-form .meta-row { display:flex; gap:1rem; }
       .top-form .meta-row > div[data-testid="column"] { display:flex; }
       .top-form .meta-row > div[data-testid="column"] > div { flex:1; }
-      .calc-form-toggle-marker { display:none; }
-      div[data-testid="stVerticalBlock"]:has(.calc-form-toggle-marker) {
-        display:flex;
-        justify-content:flex-end;
-        margin:-18px 36px 6px;
-        padding:0;
-      }
-      div[data-testid="stVerticalBlock"]:has(.calc-form-toggle-marker) .stButton { margin:0; }
-      div[data-testid="stVerticalBlock"]:has(.calc-form-toggle-marker) .stButton>button {
-        border-radius:999px;
-        padding:.35rem 1.4rem;
-        font-size:.78rem;
-        letter-spacing:.12em;
-        text-transform:uppercase;
-        font-weight:800;
-        border:1px solid rgba(59,130,246,.35);
-        background:#e0e7ff;
-        color:#1d4ed8;
-      }
-      div[data-testid="stVerticalBlock"]:has(.calc-form-toggle-marker) .stButton>button:hover {
-        background:#c7d2fe;
-      }
       .calc-card {
         border:1px solid rgba(148,163,184,.25);
         border-top:none;
@@ -158,20 +137,6 @@ st.markdown(
       }
       .top-form__field {
         margin-top:.75rem;
-      }
-      body[data-top-form-collapsed="true"] .top-form {
-        max-height:0;
-        opacity:0;
-        overflow:hidden;
-        pointer-events:none;
-        transition:max-height .45s ease, opacity .35s ease;
-      }
-      body[data-top-form-collapsed="true"] div[data-testid="stVerticalBlock"]:has(> .calc-card__header):hover .top-form,
-      body[data-top-form-collapsed="true"] div[data-testid="stVerticalBlock"]:has(> .calc-card__header):focus-within .top-form,
-      body[data-top-form-collapsed="false"] .top-form {
-        max-height:4000px;
-        opacity:1;
-        pointer-events:auto;
       }
       .calc-card__header {
         padding:26px 32px;
@@ -198,32 +163,6 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-
-TOP_FORM_COLLAPSE_KEY = "calc_form_collapsed"
-TOP_FORM_USER_INTENT_KEY = "top_form_manual_state"
-
-if TOP_FORM_COLLAPSE_KEY not in st.session_state:
-    st.session_state[TOP_FORM_COLLAPSE_KEY] = False
-if TOP_FORM_USER_INTENT_KEY not in st.session_state:
-    st.session_state[TOP_FORM_USER_INTENT_KEY] = "auto"
-
-
-def _sync_top_form_collapse_attr() -> None:
-    collapsed = bool(st.session_state.get(TOP_FORM_COLLAPSE_KEY, False))
-    components_html(
-        f"""
-        <script>
-        const body = window.parent?.document?.body;
-        if (body) {{
-            body.setAttribute('data-top-form-collapsed', '{str(collapsed).lower()}');
-        }}
-        </script>
-        """,
-        height=0,
-    )
-
-
-_sync_top_form_collapse_attr()
 
 # ===============================
 # Sesion y permisos
@@ -678,6 +617,200 @@ def _calculate_route(
 
 
 # ===============================
+# API de ruteo INEGI (preparación)
+# ===============================
+def _parse_coord_value(value: Any) -> float | None:
+    if value is None:
+        return None
+    try:
+        text = str(value).strip()
+    except Exception:
+        return None
+    if not text:
+        return None
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return None
+
+
+def _format_coord_value(value: Any) -> str:
+    coord = _parse_coord_value(value)
+    if coord is None:
+        return ""
+    return f"{coord:.6f}"
+
+
+def _build_point(lat_value: Any, lng_value: Any) -> tuple[float, float] | None:
+    lat = _parse_coord_value(lat_value)
+    lng = _parse_coord_value(lng_value)
+    if lat is None or lng is None:
+        return None
+    return (lat, lng)
+
+
+def _format_duration_label(seconds: float | None) -> str:
+    total = max(0.0, float(seconds or 0.0))
+    hours = int(total // 3600)
+    minutes = int((total % 3600) // 60)
+    return f"{hours:02d}:{minutes:02d} h"
+
+
+def _sync_inegi_inputs(origen: dict[str, Any] | None, destino: dict[str, Any] | None) -> None:
+    def _update(prefix: str, data: dict[str, Any] | None) -> None:
+        pid_key = f"_inegi_{prefix}_pid"
+        lat_key = f"inegi_{prefix}_lat"
+        lng_key = f"inegi_{prefix}_lng"
+        new_pid = (data or {}).get("place_id")
+        if st.session_state.get(pid_key) != new_pid:
+            st.session_state[pid_key] = new_pid
+            st.session_state[lat_key] = _format_coord_value((data or {}).get("lat"))
+            st.session_state[lng_key] = _format_coord_value((data or {}).get("lng"))
+        st.session_state.setdefault(lat_key, "")
+        st.session_state.setdefault(lng_key, "")
+
+    _update("origin", origen)
+    _update("destination", destino)
+
+
+def _render_inegi_routing_section(origen: dict[str, Any] | None, destino: dict[str, Any] | None) -> None:
+    st.divider()
+    _sync_inegi_inputs(origen, destino)
+    with st.expander("Preparación API de ruteo INEGI", expanded=False):
+        configured = bool(INEGI_ROUTING_TOKEN)
+        base_url = INEGI_ROUTING_BASE_URL or "Configura INEGI_ROUTING_BASE_URL"
+        st.caption("Define token y coordenadas para probar el endpoint de ruteo oficial del INEGI.")
+        st.markdown(
+            f"- Token global configurado: {'sí' if configured else 'no'}\n"
+            f"- Endpoint base: `{base_url}`"
+        )
+
+        with st.form("inegi_routing_form", clear_on_submit=False):
+            token_input = st.text_input(
+                "Token INEGI (opcional)",
+                key="inegi_token_override",
+                type="password",
+                help="Si lo dejas vacío se utilizará INEGI_ROUTING_TOKEN definido en secrets o entorno.",
+            )
+            origin_cols = st.columns(2)
+            origin_cols[0].text_input(
+                "Latitud origen",
+                key="inegi_origin_lat",
+                placeholder="19.432608",
+            )
+            origin_cols[1].text_input(
+                "Longitud origen",
+                key="inegi_origin_lng",
+                placeholder="-99.133209",
+            )
+
+            dest_cols = st.columns(2)
+            dest_cols[0].text_input(
+                "Latitud destino",
+                key="inegi_destination_lat",
+                placeholder="20.673590",
+            )
+            dest_cols[1].text_input(
+                "Longitud destino",
+                key="inegi_destination_lng",
+                placeholder="-103.344000",
+            )
+
+            profile_cols = st.columns(2)
+            profile = profile_cols[0].selectbox(
+                "Perfil",
+                ["driving", "driving-car", "driving-heavy", "foot-walking"],
+                index=0,
+                key="inegi_profile_select",
+            )
+            geometry_fmt = profile_cols[1].selectbox(
+                "Geometría",
+                ["geojson", "polyline"],
+                index=0,
+                key="inegi_geometry_select",
+            )
+
+            options_cols = st.columns(3)
+            alternatives = int(
+                options_cols[0].number_input(
+                    "Alternativas",
+                    min_value=0,
+                    max_value=3,
+                    value=0,
+                    step=1,
+                    format="%d",
+                    key="inegi_alternatives",
+                )
+            )
+            include_steps = options_cols[1].checkbox(
+                "Incluir pasos",
+                value=True,
+                key="inegi_steps",
+            )
+            include_annotations = options_cols[2].checkbox(
+                "Anotaciones",
+                value=False,
+                key="inegi_annotations",
+            )
+
+            continue_straight = st.checkbox(
+                "Continuar recto en bifurcaciones",
+                value=False,
+                key="inegi_continue_straight",
+            )
+
+            submitted = st.form_submit_button("Probar ruteo INEGI", use_container_width=True)
+
+        if not submitted:
+            return
+
+        token = (token_input or "").strip() or INEGI_ROUTING_TOKEN
+        if not token:
+            st.error("No hay token configurado. Define INEGI_ROUTING_TOKEN o ingrésalo en el formulario.")
+            return
+
+        origin_point = _build_point(
+            st.session_state.get("inegi_origin_lat"),
+            st.session_state.get("inegi_origin_lng"),
+        )
+        destination_point = _build_point(
+            st.session_state.get("inegi_destination_lat"),
+            st.session_state.get("inegi_destination_lng"),
+        )
+        if origin_point is None or destination_point is None:
+            st.error("Verifica las coordenadas de origen y destino (latitud y longitud).")
+            return
+
+        try:
+            with InegiRoutingClient(token=token, base_url=INEGI_ROUTING_BASE_URL) as client:
+                summary = client.route(
+                    [origin_point, destination_point],
+                    profile=profile,
+                    alternatives=alternatives,
+                    steps=include_steps,
+                    annotations=include_annotations,
+                    geometries=geometry_fmt,
+                    continue_straight=continue_straight,
+                )
+        except InegiRoutingError as exc:
+            st.error(f"INEGI no devolvió una ruta válida: {exc}")
+            return
+        except Exception as exc:  # pragma: no cover - defensivo
+            st.error(f"Error inesperado al contactar la API de ruteo: {exc}")
+            return
+
+        distance_km = summary.distance_m / 1000.0
+        result_cols = st.columns(2)
+        result_cols[0].metric("Distancia (km)", f"{distance_km:,.2f}")
+        result_cols[1].metric("Duración estimada", _format_duration_label(summary.duration_s))
+        st.caption(
+            f"Legs devueltos: {len(summary.legs)} | Puntos de geometría: {len(summary.coordinates)}"
+        )
+        with st.expander("Respuesta JSON INEGI", expanded=False):
+            st.json(summary.raw)
+
+
+# ===============================
 # Encabezado + Selecciones TOP (orden solicitado)
 # ===============================
 st.markdown(
@@ -686,22 +819,11 @@ st.markdown(
 )
 st.markdown("<div class='calc-card'>", unsafe_allow_html=True)
 
-collapsed_state = bool(st.session_state.get(TOP_FORM_COLLAPSE_KEY, False))
-origen: dict[str, Any] | None = None
-destino: dict[str, Any] | None = None
-parada: dict[str, Any] | None = None
-current_show_stop = False
 with st.container():
-    st.markdown("<span class='calc-form-toggle-marker'></span>", unsafe_allow_html=True)
-    toggle_label = "MOSTRAR DATOS" if collapsed_state else "OCULTAR DATOS"
-    toggle_help = (
-        "Haz clic para {} la tarjeta de origen/parada/destino (tambien puedes pasar el cursor sobre la tarjeta)."
-    ).format("mostrar" if collapsed_state else "ocultar")
-    if st.button(toggle_label, key="top_form_toggle_btn", help=toggle_help):
-        collapsed_state = not collapsed_state
-        st.session_state[TOP_FORM_COLLAPSE_KEY] = collapsed_state
-        st.session_state[TOP_FORM_USER_INTENT_KEY] = "open" if not collapsed_state else "closed"
-        _sync_top_form_collapse_attr()
+    origen: dict[str, Any] | None = None
+    destino: dict[str, Any] | None = None
+    parada: dict[str, Any] | None = None
+    current_show_stop = False
 
 clases = ["MOTO", "AUTOMOVIL", "B2", "B3", "B4", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9"]
 default_idx = clases.index("T5")
@@ -1149,6 +1271,8 @@ if getattr(route_summary, "warnings", None):
     for warn in route_summary.warnings:
         st.warning(f"{prefix}: {warn}")
 
+# Sección temporalmente oculta mientras se resuelve el error con la API de ruteo INEGI.
+
 # ===============================
 # 1) PEAJE
 # ===============================
@@ -1569,16 +1693,6 @@ with total_banner:
         unsafe_allow_html=True,
     )
 
-manual_state = st.session_state.get(TOP_FORM_USER_INTENT_KEY, "auto")
-was_collapsed = bool(st.session_state.get(TOP_FORM_COLLAPSE_KEY, False))
-if manual_state != "open":
-    if not was_collapsed:
-        st.session_state[TOP_FORM_COLLAPSE_KEY] = True
-        st.session_state[TOP_FORM_USER_INTENT_KEY] = "auto"
-        _sync_top_form_collapse_attr()
-        rerun()
-    else:
-        st.session_state[TOP_FORM_USER_INTENT_KEY] = "auto"
 pdf_sections = [(sec.title, sec.total, sec.breakdown) for sec in section_outputs]
 
 # PDF

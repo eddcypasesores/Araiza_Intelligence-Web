@@ -127,35 +127,24 @@ render_brand_logout_nav(MODULE_TITLE)
 st.title("RIESGOS FISCALES")
 
 # ===================== Inputs arriba =====================
-form_cols = st.columns([1.4, 1.2, 0.6])
-with form_cols[0]:
-    regimen_fiscal_correcto = st.text_input("Régimen fiscal correcto", value="", placeholder="Ej. 601")
-with form_cols[1]:
-    cp_val = st.text_input("CP", value="", placeholder="Ej. 50903")
-with form_cols[2]:
-    if "uploader_key" not in st.session_state:
-        st.session_state["uploader_key"] = 0
-    st.markdown("&nbsp;", unsafe_allow_html=True)
-    if st.button("Limpiar", use_container_width=True):
-        st.session_state["uploader_key"] += 1
-        st.rerun()
-
-# ===== Uploader debajo =====
-uploaded = None
-uploader_cols = st.columns([0.5, 3, 0.5])
-with uploader_cols[1]:
-    st.markdown("<div class='uploader-label uploader-centered'>Subir XML</div>", unsafe_allow_html=True)
-    uploaded = st.file_uploader(
-        "",
-        type=["xml", "zip"],
-        accept_multiple_files=True,
-        key=f"xml_uploader_{st.session_state['uploader_key']}",
-        label_visibility="collapsed",
-    )
-
 st.markdown(
     """
     <style>
+      .riesgos-card {
+        border:1px solid #e2e8f0;
+        border-radius:24px;
+        padding:20px clamp(16px,2vw,28px);
+        background:#fff;
+        box-shadow:0 18px 40px rgba(15,23,42,.08);
+        margin-bottom:1.2rem;
+      }
+      .riesgos-card h3 {
+        margin-top:0;
+        font-size:1rem;
+        font-weight:800;
+        letter-spacing:.08em;
+        color:#0f172a;
+      }
       .uploader-label {
         font-size:.9rem;
         font-weight:600;
@@ -182,6 +171,33 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
+st.markdown("<div class='riesgos-card'>", unsafe_allow_html=True)
+form_cols = st.columns([1.4, 1.2, 0.6])
+with form_cols[0]:
+    regimen_fiscal_correcto = st.text_input("Régimen fiscal correcto", value="", placeholder="Ej. 601")
+with form_cols[1]:
+    cp_val = st.text_input("CP", value="", placeholder="Ej. 50903")
+with form_cols[2]:
+    if "uploader_key" not in st.session_state:
+        st.session_state["uploader_key"] = 0
+    st.markdown("&nbsp;", unsafe_allow_html=True)
+    if st.button("Limpiar", use_container_width=True):
+        st.session_state["uploader_key"] += 1
+        st.rerun()
+
+uploaded = None
+uploader_cols = st.columns([0.5, 3, 0.5])
+with uploader_cols[1]:
+    st.markdown("<div class='uploader-label uploader-centered'>Subir XML</div>", unsafe_allow_html=True)
+    uploaded = st.file_uploader(
+        "",
+        type=["xml", "zip"],
+        accept_multiple_files=True,
+        key=f"xml_uploader_{st.session_state['uploader_key']}",
+        label_visibility="collapsed",
+    )
+st.markdown("</div>", unsafe_allow_html=True)
 
 # ===================== Columnas base =====================
 base_cols = [

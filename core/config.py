@@ -88,10 +88,26 @@ def _parse_env_key(raw: str, key: str) -> str:
     return ""
 
 
-def _load_google_maps_key() -> str:
-    key = os.getenv("GOOGLE_MAPS_API_KEY", "").strip()
-    if key:
-        return key
+def _load_secret_value(key: str) -> str:
+    direct = os.getenv(key, "").strip()
+    if direct:
+        return direct
+
+    # Intentar leer de st.secrets si se ejecuta dentro de Streamlit
+    try:
+        import streamlit as st  # type: ignore
+
+        secrets_obj = getattr(st, "secrets", None)
+    except Exception:  # pragma: no cover - defensivo
+        secrets_obj = None
+
+    if secrets_obj:
+        try:
+            value = secrets_obj.get(key, "")  # type: ignore[call-arg]
+        except Exception:  # pragma: no cover - defensivo
+            value = ""
+        if isinstance(value, str) and value.strip():
+            return value.strip()
 
     secrets_candidates = []
     secrets_env = os.getenv("STREAMLIT_SECRETS_FILE", "").strip()
@@ -105,18 +121,25 @@ def _load_google_maps_key() -> str:
     )
 
     secrets_raw = _read_first_existing_text(secrets_candidates)
-    key = _parse_toml_key(secrets_raw, "GOOGLE_MAPS_API_KEY").strip()
-    if key:
-        return key
+    value = _parse_toml_key(secrets_raw, key).strip()
+    if value:
+        return value
 
     env_candidates = [
         BASE_DIR / ".env",
         Path.cwd() / ".env",
     ]
     env_raw = _read_first_existing_text(env_candidates)
-    key = _parse_env_key(env_raw, "GOOGLE_MAPS_API_KEY").strip()
-    return key
+    return _parse_env_key(env_raw, key).strip()
+
+
+def _load_google_maps_key() -> str:
+    return _load_secret_value("GOOGLE_MAPS_API_KEY")
 
 
 # Google Maps key (required para autocompletado y rutas)
 GOOGLE_MAPS_API_KEY = _load_google_maps_key()
+INEGI_ROUTING_TOKEN = _load_secret_value("INEGI_ROUTING_TOKEN")
+INEGI_ROUTING_BASE_URL = (
+    os.getenv("INEGI_ROUTING_BASE_URL", "").strip() or "https://gaia.inegi.org.mx/sigwebservices/api/ruteo/route/v1"
+)
