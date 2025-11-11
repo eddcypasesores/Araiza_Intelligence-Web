@@ -101,7 +101,7 @@ def _load_secret_value(key: str) -> str:
     except Exception:  # pragma: no cover - defensivo
         secrets_obj = None
 
-    if secrets_obj:
+    if secrets_obj is not None:
         try:
             value = secrets_obj.get(key, "")  # type: ignore[call-arg]
         except Exception:  # pragma: no cover - defensivo
