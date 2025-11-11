@@ -13,8 +13,8 @@ from core.custom_nav import _NAV_CSS as BRAND_NAV_CSS, _navbar_logo_data
 from core.extractor_inbursa import extraer_inbursa
 
 ASSETS_DIR = next((p for p in (Path("Assets"), Path("assets")) if p.exists()), Path("."))
-LOGO_LEFT = ASSETS_DIR / "logo1.jpeg"
-LOGO_RIGHT = ASSETS_DIR / "logo2.jpg"
+LOGO_LEFT = ASSETS_DIR / "logo.jpg"
+LOGO_RIGHT = ASSETS_DIR / "banks/Inbursa.jpeg"
 
 
 def _back_href() -> str:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import os
+import io
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlencode
@@ -10,14 +10,11 @@ import streamlit as st
 
 from core.auth import ensure_session_from_token, auth_query_params
 from core.custom_nav import _NAV_CSS as BRAND_NAV_CSS, _navbar_logo_data
-from core.extractor_banorte import procesar_pdf
-
+from core.extractor_american_express import extraer_american_express
 
 ASSETS_DIR = next((p for p in (Path("Assets"), Path("assets")) if p.exists()), Path("."))
 LOGO_LEFT = ASSETS_DIR / "logo.jpg"
-LOGO_RIGHT = ASSETS_DIR / "banks/banorte.jpeg"
-OUTPUT_DIR = Path("output")
-OUTPUT_DIR.mkdir(exist_ok=True)
+LOGO_RIGHT = ASSETS_DIR / "banks/American_Express.jpeg"
 
 
 def _back_href() -> str:
@@ -44,7 +41,7 @@ def _render_nav() -> None:
     st.markdown(nav_html, unsafe_allow_html=True)
 
 
-st.set_page_config(page_title="Extractor Banorte", layout="centered")
+st.set_page_config(page_title="Extractor American Express", layout="centered")
 ensure_session_from_token()
 _render_nav()
 st.markdown(
@@ -68,7 +65,10 @@ with col1:
     if LOGO_LEFT.exists():
         st.image(str(LOGO_LEFT), width=110)
 with col2:
-    st.markdown("<h2 style='text-align:center;margin:0;'>Extractor de Estado de Cuenta Banorte</h2>", unsafe_allow_html=True)
+    st.markdown(
+        "<h2 style='text-align:center;margin:0;'>Extractor de Estado de Cuenta American Express</h2>",
+        unsafe_allow_html=True,
+    )
 with col3:
     st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
     if LOGO_RIGHT.exists():
@@ -76,38 +76,40 @@ with col3:
 
 st.markdown("<div style='margin-top:10px'></div>", unsafe_allow_html=True)
 
-archivo = st.file_uploader("Sube tu estado de cuenta en PDF", type=["pdf"])
+uploaded = st.file_uploader("PDF de American Express", type=["pdf"])
 
-if archivo:
-    tmp_path = OUTPUT_DIR / archivo.name
-    tmp_path.write_bytes(archivo.read())
-    st.success("Archivo cargado correctamente. Procesando...")
-
-    try:
-        path_excel, df = procesar_pdf(tmp_path.as_posix())
-
-        for col in ["Cargo", "Abono"]:
-            df[col] = pd.to_numeric(df[col], errors="coerce").fillna(0)
-
-        total_cargo = df["Cargo"].sum()
-        total_abono = df["Abono"].sum()
-
-        st.success(f"Extracción completada. Movimientos detectados: {len(df)}")
-        tot1, tot2 = st.columns(2)
-        tot1.metric("Total Cargos", f"${total_cargo:,.2f}")
-        tot2.metric("Total Abonos", f"${total_abono:,.2f}")
-
-        with st.expander("Ver movimientos extraídos"):
-            st.dataframe(df, use_container_width=True)
-
-        with open(path_excel, "rb") as fh:
-            st.download_button(
-                label="Descargar Excel",
-                data=fh,
-                file_name=Path(path_excel).name,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
-    except Exception as exc:
-        st.error(f"Ocurrió un error al procesar el archivo: {exc}")
-else:
+if uploaded is None:
     st.info("Sube un PDF para comenzar.")
+    st.stop()
+
+uploaded.seek(0)
+with st.spinner("Extrayendo movimientos..."):
+    df = extraer_american_express(uploaded)
+
+if df.empty:
+    st.warning("No se detectaron movimientos v?lidos en el documento.")
+    st.stop()
+
+cargos_total = pd.to_numeric(df.get("Cargo"), errors="coerce").fillna(0).sum()
+abonos_total = pd.to_numeric(df.get("Abono"), errors="coerce").fillna(0).sum()
+
+st.success(f"Extracci?n completada. Movimientos detectados: {len(df)}")
+tot1, tot2 = st.columns(2)
+tot1.metric("Total cargos", f"${cargos_total:,.2f}")
+tot2.metric("Total abonos", f"${abonos_total:,.2f}")
+
+with st.expander("Ver movimientos extra?dos"):
+    st.dataframe(df, use_container_width=True, height=500)
+
+buffer = io.BytesIO()
+with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+    df.to_excel(writer, sheet_name="American Express", index=False)
+buffer.seek(0)
+
+filename = f"american_express_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
+st.download_button(
+    "Descargar Excel",
+    data=buffer,
+    file_name=filename,
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+)

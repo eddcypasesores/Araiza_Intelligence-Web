@@ -23,7 +23,7 @@ RESET_SLUG = "convertidor"
 
 ASSETS = Path("assets")
 BANKS_DIR = ASSETS / "banks"
-LOGO_PATH = ASSETS / "logo_al.jpeg"
+LOGO_PATH = ASSETS / "logo.jpg"
 
 
 st.set_page_config(
@@ -215,14 +215,14 @@ internal_suffix = f"?{auth_qs}" if auth_qs else ""
 banks = [
     ("BanBajio",   ASSETS / "banks/banbajio.jpeg",  f"./Extractor_BanBajio{internal_suffix}"),
     ("Banorte",    ASSETS / "banks/banorte.jpeg",   f"./Extractor_Banorte{internal_suffix}"),
-    ("Santander",  ASSETS / "banks/santander.jpeg", "https://extractor-santander.onrender.com/"),
+    ("Santander",  ASSETS / "banks/santander.jpeg", f"./Extractor_Santander{internal_suffix}"),
     ("BBVA",       ASSETS / "banks/bbva.jpeg",      f"./Extractor_BBVA{internal_suffix}"),
     ("Banamex",    ASSETS / "banks/banamex.jpeg",   f"./Extractor_Banamex{internal_suffix}"),
-    ("Scotiabank", ASSETS / "banks/scotiabank.jpeg","https://extractor-scotiabank-bgz6.onrender.com/"),
+    ("Scotiabank", ASSETS / "banks/scotiabank.jpeg",   f"./Extractor_Scotiabank{internal_suffix}"),
     ("Inbursa",    ASSETS / "banks/Inbursa.jpeg",   f"./Extractor_Inbursa{internal_suffix}"),
-    ("American_Express", ASSETS / "banks/American_Express.jpeg", "https://extractor-amex-o2ye.onrender.com/"),
-    ("HSBC",       ASSETS / "banks/HSBC.jpeg",      "https://extractor-hsbc-2x9v.onrender.com/"),
-    ("BASE",       ASSETS / "banks/BASE.jpeg",      "#"),
+    ("American_Express", ASSETS / "banks/American_Express.jpeg", f"./Extractor_American_Express{internal_suffix}"),
+    ("HSBC",       ASSETS / "banks/HSBC.jpeg",      f"./Extractor_HSBC{internal_suffix}"),
+    ("BASE",       ASSETS / "banks/BASE.jpeg",      f"./Extractor_BASE{internal_suffix}"),
 ]
 
 SLOTS_PER_ROW = 5
