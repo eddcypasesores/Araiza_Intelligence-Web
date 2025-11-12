@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import base64
 from pathlib import Path
+from urllib.parse import urlencode
 
 import streamlit as st
 
-from core.auth import ensure_session_from_token, persist_login
+from core.auth import ensure_session_from_token, persist_login, auth_query_params
 from core.db import authenticate_portal_user, ensure_schema, get_conn
 from core.flash import consume_flash
 from core.login_ui import render_login_header, render_token_reset_section
@@ -108,6 +109,13 @@ if not (st.session_state.get("usuario") and _has_permission()):
     st.stop()
 
 
+def _card_href(label: str) -> str:
+    params = {"page": "pages/Generador_polizas_blank.py", "origin": label}
+    params.update(auth_query_params())
+    query = urlencode(params, doseq=False)
+    return f"/?{query}"
+
+
 # ---------------- Navegacion ----------------
 render_brand_logout_nav("Generador de polizas contables")
 
@@ -203,18 +211,18 @@ st.markdown(
 st.write("")
 
 policies = [
-    ("Pólizas Dr Ventas sin IVA", "https://polizas-dr-sin-iva-202p.onrender.com/"),
-    ("Pólizas Dr Ventas con IVA", "https://polizas-dr-ingresos-iva-xi5m.onrender.com"),
-    ("Pólizas Dr Ventas con IVA Coordinados", "https://polizas-dr-ingresos-con-retencion-iva.onrender.com"),
-    ("Pólizas Dr Ventas Combinadas", "https://polizas-dr-ventas-combinadas.onrender.com/"),
-    ("Pólizas Dr Egresos", "https://polizas-dr-egresos-psdm.onrender.com/"),
-    ("Pólizas Ig Cobranza sin IVA", "https://polizas-ig-cobranza-sin-iva.onrender.com/"),
-    ("Pólizas Ig Cobranza con IVA", "https://polizas-ig-cobranza-con-iva-befx.onrender.com/"),
-    ("Pólizas Ig Cobranza sin IVA Coordinados", "https://polizas-ig-cobranza-sin-iva-coordinados.onrender.com/"),
-    ("Pólizas Ig Cobranza con IVA Coordinados", "https://polizas-ig-cobranza-con-iva-coordinados.onrender.com/"),
-    ("Pólizas Ig Cobranza con IVA y Retención Coordinados", "https://poliza-ig-cobranza-con-iva-coordinados.onrender.com/"),
-    ("Pólizas Ig Cobranza Combinadas", "https://polizas-ig-combinadas-kke2.onrender.com/"),
-    ("Pólizas Eg", "https://polizas-eg-pago-provee.onrender.com/"),
+    ("Pólizas Dr Ventas sin IVA"),
+    ("Pólizas Dr Ventas con IVA"),
+    ("Pólizas Dr Ventas con IVA Coordinados"),
+    ("Pólizas Dr Ventas Combinadas"),
+    ("Pólizas Dr Egresos"),
+    ("Pólizas Ig Cobranza sin IVA"),
+    ("Pólizas Ig Cobranza con IVA"),
+    ("Pólizas Ig Cobranza sin IVA Coordinados"),
+    ("Pólizas Ig Cobranza con IVA Coordinados"),
+    ("Pólizas Ig Cobranza con IVA y Retención Coordinados"),
+    ("Pólizas Ig Cobranza Combinadas"),
+    ("Pólizas Eg"),
 ]
 
 SLOTS_PER_ROW = 5
@@ -227,7 +235,8 @@ for start in range(0, policy_total, SLOTS_PER_ROW):
         idx = start + i
         with cols[i]:
             if idx < len(policies):
-                label, url = policies[idx]
+                label = policies[idx]
+                url = _card_href(label)
                 st.markdown(
                     f'<a class="card policy" href="{url}" target="_self" rel="noopener noreferrer">{label}</a>',
                     unsafe_allow_html=True,

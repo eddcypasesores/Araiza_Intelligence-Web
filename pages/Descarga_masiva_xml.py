@@ -1,15 +1,16 @@
 # pages/Descarga_masiva_xml.py — Exportar CFDI (XML) a Excel
 from __future__ import annotations
 
-from io import BytesIO
 from datetime import datetime
+from io import BytesIO
 import xml.etree.ElementTree as ET
 
 import pandas as pd
 import streamlit as st
+from urllib.parse import urlencode
 
 # Núcleo
-from core.auth import ensure_session_from_token
+from core.auth import ensure_session_from_token, auth_query_params
 from core.db import get_conn
 from core.custom_nav import handle_logout_request, render_brand_logout_nav
 
@@ -40,11 +41,21 @@ footer{visibility:hidden}
 # Helpers query params
 # -----------------------------------------------------------------------------
 def _get_params() -> dict[str, str]:
+    """Return flattened query params compatible with both Streamlit APIs."""
+
     try:
-        return dict(st.query_params)  # Streamlit >=1.31
+        raw_params = st.query_params  # Streamlit >=1.31
     except Exception:
-        q = st.experimental_get_query_params()
-        return {k: (v[-1] if isinstance(v, list) and v else v) for k, v in q.items()}
+        raw_params = st.experimental_get_query_params()
+
+    flattened: dict[str, str] = {}
+    for key, value in raw_params.items():
+        if isinstance(value, list):
+            value = value[-1] if value else None
+        if value is None:
+            continue
+        flattened[key] = str(value)
+    return flattened
 
 def _set_params(**kwargs) -> None:
     try:
@@ -53,6 +64,32 @@ def _set_params(**kwargs) -> None:
         merged = _get_params()
         merged.update({k: str(v) for k, v in kwargs.items()})
         st.experimental_set_query_params(**merged)
+
+
+def _back_href(target: str) -> str:
+    params = {"goto": target}
+    params.update(auth_query_params())
+    query = urlencode(params, doseq=False)
+    return f"?{query}"
+
+
+def _handle_pending_navigation() -> None:
+    params = _get_params()
+    goto = params.pop("goto", None)
+    if not goto:
+        return
+    try:
+        st.query_params.clear()
+        if params:
+            st.query_params.update(params)
+    except Exception:
+        st.experimental_set_query_params(**params)
+    try:
+        st.switch_page(goto)
+    except Exception:
+        st.stop()
+    st.stop()
+
 
 def _to_login():
     _set_params(next="pages/Descarga_masiva_xml.py")
@@ -65,6 +102,7 @@ def _to_login():
 # Auth / permisos
 # -----------------------------------------------------------------------------
 ensure_session_from_token()
+_handle_pending_navigation()
 _ = get_conn()  # si lo usas más adelante
 
 usuario = st.session_state.get("usuario")
@@ -79,7 +117,13 @@ if "descarga_masiva" not in permisos and "admin" not in permisos:
 # -----------------------------------------------------------------------------
 # Barra superior consistente
 # -----------------------------------------------------------------------------
-render_brand_logout_nav("Descarga masiva de XML")
+back_href = _back_href("pages/Descarga_masiva_inicio.py")
+render_brand_logout_nav(
+    "pages/Descarga_masiva_xml.py",
+    brand="Descarga masiva",
+    action_label="Atrás",
+    action_href=back_href,
+)
 
 # -----------------------------------------------------------------------------
 # === Parser CFDI (tu lógica) ===

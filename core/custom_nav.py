@@ -99,18 +99,28 @@ def _logout_href(page_param: str) -> str:
     return f"?{query}"
 
 
-def render_brand_logout_nav(page_param: str, *, brand: str = "Araiza Intelligence") -> None:
-    """Render the fixed navigation pill with brand logo and logout action."""
+def render_brand_logout_nav(
+    page_param: str,
+    *,
+    brand: str = "Araiza Intelligence",
+    action_label: str | None = None,
+    action_href: str | None = None,
+) -> None:
+    """Render the fixed navigation pill with brand logo and a configurable action button."""
 
     # Reinyecta el CSS en cada renderizado para evitar que se pierda tras un rerun.
     st.markdown(_NAV_CSS, unsafe_allow_html=True)
 
     logo_src = _navbar_logo_data()
-    logout_href = html.escape(_logout_href(page_param), quote=True)
+    if action_href:
+        action_url = html.escape(action_href, quote=True)
+    else:
+        action_url = html.escape(_logout_href(page_param), quote=True)
+    button_label = html.escape(action_label or "Cerrar sesión", quote=False)
     nav_html = (
         f'<div class="custom-nav">'
         f'<div class="nav-brand"><img src="{logo_src}" alt="Araiza logo"><span>{brand}</span></div>'
-        f'<div class="nav-actions"><a href="{logout_href}" target="_self">Cerrar sesi&oacute;n</a></div>'
+        f'<div class="nav-actions"><a href="{action_url}" target="_self">{button_label}</a></div>'
         f'</div>'
     )
     st.markdown(nav_html, unsafe_allow_html=True)

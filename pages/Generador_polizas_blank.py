@@ -1,0 +1,83 @@
+"""Placeholder page for Generador de pólizas cards."""
+
+from __future__ import annotations
+
+from urllib.parse import urlencode
+
+import streamlit as st
+
+from core.auth import ensure_session_from_token, auth_query_params
+from core.custom_nav import handle_logout_request, render_brand_logout_nav
+
+
+st.set_page_config(
+    page_title="Generador de pólizas | Próximamente",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+handle_logout_request()
+ensure_session_from_token()
+
+
+def _get_params() -> dict[str, str]:
+    try:
+        raw = st.query_params
+    except Exception:
+        raw = st.experimental_get_query_params()
+
+    flattened: dict[str, str] = {}
+    for key, value in raw.items():
+        if isinstance(value, list):
+            value = value[-1] if value else None
+        if value is None:
+            continue
+        flattened[key] = str(value)
+    return flattened
+
+
+def _back_href() -> str:
+    params = {"page": "pages/generador_polizas.py"}
+    params.update(auth_query_params())
+    query = urlencode(params, doseq=False)
+    return f"/?{query}"
+
+
+PAGE_CSS = """
+<style>
+#MainMenu, header[data-testid="stHeader"], footer, div[data-testid="stToolbar"], [data-testid="stSidebar"] {
+  display:none !important;
+}
+.block-container {
+  padding-top: 120px !important;
+  max-width: 900px !important;
+}
+body, [data-testid="stAppViewContainer"] {
+  background:#f5f6fb !important;
+}
+.placeholder-wrap {
+  min-height: 50vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  color:#0f172a;
+  font-size:1rem;
+}
+</style>
+"""
+st.markdown(PAGE_CSS, unsafe_allow_html=True)
+
+params = _get_params()
+origin = params.get("origin")
+
+render_brand_logout_nav(
+    "pages/generador_polizas.py",
+    brand="Generador de pólizas",
+    action_label="Atrás",
+    action_href=_back_href(),
+)
+
+with st.container():
+    st.markdown(
+        f'<div class="placeholder-wrap">{origin or "Continuará..."}</div>',
+        unsafe_allow_html=True,
+    )
