@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from io import BytesIO
+import unicodedata
 import xml.etree.ElementTree as ET
 from urllib.parse import urlencode
 
@@ -93,10 +94,20 @@ NOMINA_NS = {"nomina12": "http://www.sat.gob.mx/nomina12"}
 PERCEPCION_LABELS = {
     "001": "Sueldos y salarios",
     "002": "Aguinaldo",
-    "003": "Comisiones",
+    "020": "Prima Dominical",
+    "028": "Comisiones",
     "045": "Asimilado a salario",
+    "046": "Asimilado a salario",
 }
 INFONAVIT_TYPES = {"050", "051", "052", "053", "054"}
+PERCEPTION_COLUMNS: tuple[str, ...] = (
+    "Sueldos y salarios",
+    "Asimilado a salario",
+    "Aguinaldo",
+    "Comisiones",
+    "Prima Dominical",
+)
+
 PAYROLL_COLUMNS: tuple[str, ...] = (
     "RFC_Receptor",
     "Nombre_Receptor",
@@ -115,10 +126,7 @@ PAYROLL_COLUMNS: tuple[str, ...] = (
     "TotalOtrosPagos",
     "UUID",
     "FechaTimbrado",
-    "Sueldos y salarios",
-    "Asimilado a salario",
-    "Aguinaldo",
-    "Comisiones",
+    *PERCEPTION_COLUMNS,
     "Retención ISR",
     "ISR Aguinaldo",
     "Cuota IMSS",
@@ -133,10 +141,7 @@ NUMERIC_PAYROLL_COLUMNS: tuple[str, ...] = (
     "TotalPercepciones",
     "TotalDeducciones",
     "TotalOtrosPagos",
-    "Sueldos y salarios",
-    "Asimilado a salario",
-    "Aguinaldo",
-    "Comisiones",
+    *PERCEPTION_COLUMNS,
     "Retención ISR",
     "ISR Aguinaldo",
     "Cuota IMSS",
@@ -175,6 +180,30 @@ def _iter_children(parent: ET.Element | None, local_name: str) -> list[ET.Elemen
     if parent is None:
         return []
     return [child for child in parent if _local_name(child.tag) == local_name]
+
+
+def _normalize_text(text: str | None) -> str:
+    if not text:
+        return ""
+    normalized = unicodedata.normalize("NFKD", text)
+    return "".join(ch for ch in normalized if not unicodedata.combining(ch)).lower()
+
+
+def _resolve_perception_label(percepcion: ET.Element) -> str | None:
+    tipo = percepcion.attrib.get("TipoPercepcion")
+    label = PERCEPCION_LABELS.get(tipo)
+    if label:
+        return label
+    concepto = _normalize_text(percepcion.attrib.get("Concepto"))
+    if "comision" in concepto:
+        return "Comisiones"
+    if "asimil" in concepto:
+        return "Asimilado a salario"
+    if "prima dominical" in concepto:
+        return "Prima Dominical"
+    if "aguinaldo" in concepto:
+        return "Aguinaldo"
+    return None
 
 
 def parse_cfdi_xml(file_bytes: bytes) -> tuple[dict[str, str | float | None], list[dict[str, str | None]]]:
@@ -221,15 +250,14 @@ def parse_cfdi_xml(file_bytes: bytes) -> tuple[dict[str, str | float | None], li
             payroll_row["Departamento"] = nomina_receptor.attrib.get("Departamento")
             payroll_row["NumEmpleado"] = nomina_receptor.attrib.get("NumEmpleado")
 
-        percepcion_totals = {label: 0.0 for label in PERCEPCION_LABELS.values()}
+        percepcion_totals = {label: 0.0 for label in PERCEPTION_COLUMNS}
         percepciones_node = _find_child(nomina_node, "Percepciones")
         if percepciones_node is not None:
             for percepcion in _iter_children(percepciones_node, "Percepcion"):
-                tipo = percepcion.attrib.get("TipoPercepcion")
                 total = _to_decimal(percepcion.attrib.get("ImporteGravado")) + _to_decimal(
                     percepcion.attrib.get("ImporteExento")
                 )
-                label = PERCEPCION_LABELS.get(tipo)
+                label = _resolve_perception_label(percepcion)
                 if label:
                     percepcion_totals[label] += total
         for label, value in percepcion_totals.items():

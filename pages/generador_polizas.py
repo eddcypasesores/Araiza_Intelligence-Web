@@ -145,7 +145,22 @@ if not (st.session_state.get("usuario") and _has_permission()):
 
 
 def _card_href(label: str) -> str:
-    params = {"goto": "pages/Generador_polizas_blank.py", "origin": label}
+    special_targets = {
+        "Pólizas Dr Egresos": "pages/Generador_polizas_dr_egresos.py",
+        "Pólizas Dr Ventas Combinadas": "pages/Generador_polizas_dr_ventas_combinadas.py",
+        "Pólizas Dr Ventas con IVA Coordinados": "pages/Generador_polizas_dr_ventas_iva_coordinados.py",
+        "Pólizas Dr Ventas con IVA": "pages/Generador_polizas_dr_ventas_iva.py",
+        "Pólizas Dr Ventas sin IVA": "pages/Generador_polizas_dr_ventas_sin_iva.py",
+        "Pólizas Eg": "pages/Generador_polizas_eg.py",
+        "Pólizas Ig Cobranza sin IVA": "pages/Generador_polizas_ig_cobranza_sin_iva.py",
+        "Pólizas Ig Cobranza con IVA": "pages/Generador_polizas_ig_cobranza_con_iva.py",
+        "Pólizas Ig Cobranza sin IVA Coordinados": "pages/Generador_polizas_ig_cobranza_sin_iva_coordinados.py",
+        "Pólizas Ig Cobranza con IVA Coordinados": "pages/Generador_polizas_ig_cobranza_con_iva_coordinados.py",
+    }
+    target = special_targets.get(label, "pages/Generador_polizas_blank.py")
+    params = {"goto": target}
+    if target.endswith("Generador_polizas_blank.py"):
+        params["origin"] = label
     params.update(auth_query_params())
     query = urlencode(params, doseq=False)
     return f"?{query}"
