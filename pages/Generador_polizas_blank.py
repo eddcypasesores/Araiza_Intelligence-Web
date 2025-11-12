@@ -36,10 +36,28 @@ def _get_params() -> dict[str, str]:
 
 
 def _back_href() -> str:
-    params = {"page": "pages/generador_polizas.py"}
+    params = {"goto": "pages/generador_polizas.py"}
     params.update(auth_query_params())
     query = urlencode(params, doseq=False)
-    return f"/?{query}"
+    return f"?{query}"
+
+
+def _handle_pending_navigation() -> None:
+    params = _get_params()
+    goto = params.pop("goto", None)
+    if not goto:
+        return
+    try:
+        st.query_params.clear()
+        if params:
+            st.query_params.update(params)
+    except Exception:
+        st.experimental_set_query_params(**params)
+    try:
+        st.switch_page(goto)
+    except Exception:
+        st.stop()
+    st.stop()
 
 
 PAGE_CSS = """
@@ -66,6 +84,7 @@ body, [data-testid="stAppViewContainer"] {
 """
 st.markdown(PAGE_CSS, unsafe_allow_html=True)
 
+_handle_pending_navigation()
 params = _get_params()
 origin = params.get("origin")
 

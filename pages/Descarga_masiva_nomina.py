@@ -119,7 +119,8 @@ PAYROLL_COLUMNS: tuple[str, ...] = (
     "Asimilado a salario",
     "Aguinaldo",
     "Comisiones",
-    "Retención ISR (Retencion ISR mas ISR Aginaldo)",
+    "Retención ISR",
+    "ISR Aguinaldo",
     "Cuota IMSS",
     "Crédito Infonavit",
     "SubsidioEntregado",
@@ -136,7 +137,8 @@ NUMERIC_PAYROLL_COLUMNS: tuple[str, ...] = (
     "Asimilado a salario",
     "Aguinaldo",
     "Comisiones",
-    "Retención ISR (Retencion ISR mas ISR Aginaldo)",
+    "Retención ISR",
+    "ISR Aguinaldo",
     "Cuota IMSS",
     "Crédito Infonavit",
     "SubsidioEntregado",
@@ -233,20 +235,24 @@ def parse_cfdi_xml(file_bytes: bytes) -> tuple[dict[str, str | float | None], li
         for label, value in percepcion_totals.items():
             payroll_row[label] = value
 
-        ded_isr = ded_imss = ded_infonavit = 0.0
+        ded_isr_regular = ded_isr_aguinaldo = ded_imss = ded_infonavit = 0.0
         deducciones_node = _find_child(nomina_node, "Deducciones")
         if deducciones_node is not None:
             for deduccion in _iter_children(deducciones_node, "Deduccion"):
                 tipo = (deduccion.attrib.get("TipoDeduccion") or "").strip()
                 concepto = (deduccion.attrib.get("Concepto") or "").lower()
                 importe = _to_decimal(deduccion.attrib.get("Importe"))
-                if tipo == "002" or "isr" in concepto:
-                    ded_isr += importe
+                if tipo == "002" or "isr" in concepto or "retencion" in concepto:
+                    if "aguinaldo" in concepto:
+                        ded_isr_aguinaldo += importe
+                    else:
+                        ded_isr_regular += importe
                 if tipo == "001" or "imss" in concepto:
                     ded_imss += importe
                 if tipo in INFONAVIT_TYPES or "infonavit" in concepto:
                     ded_infonavit += importe
-        payroll_row["Retención ISR (Retencion ISR mas ISR Aginaldo)"] = ded_isr
+        payroll_row["Retención ISR"] = ded_isr_regular
+        payroll_row["ISR Aguinaldo"] = ded_isr_aguinaldo
         payroll_row["Cuota IMSS"] = ded_imss
         payroll_row["Crédito Infonavit"] = ded_infonavit
 

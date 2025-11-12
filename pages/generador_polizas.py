@@ -23,6 +23,40 @@ ASSETS = Path("assets")
 LOGO_PATH = ASSETS / "logo_al.jpeg"
 
 
+def _get_params() -> dict[str, str]:
+    try:
+        raw = st.query_params
+    except Exception:
+        raw = st.experimental_get_query_params()
+
+    flattened: dict[str, str] = {}
+    for key, value in raw.items():
+        if isinstance(value, list):
+            value = value[-1] if value else None
+        if value is None:
+            continue
+        flattened[key] = str(value)
+    return flattened
+
+
+def _handle_pending_navigation() -> None:
+    params = _get_params()
+    goto = params.pop("goto", None)
+    if not goto:
+        return
+    try:
+        st.query_params.clear()
+        if params:
+            st.query_params.update(params)
+    except Exception:
+        st.experimental_set_query_params(**params)
+    try:
+        st.switch_page(goto)
+    except Exception:
+        st.stop()
+    st.stop()
+
+
 st.set_page_config(
     page_title="Generador de Pólizas - Araiza Intelligence",
     page_icon=str(LOGO_PATH),
@@ -30,6 +64,7 @@ st.set_page_config(
 )
 ensure_session_from_token()
 handle_logout_request()
+_handle_pending_navigation()
 
 
 def _has_permission() -> bool:
@@ -110,10 +145,10 @@ if not (st.session_state.get("usuario") and _has_permission()):
 
 
 def _card_href(label: str) -> str:
-    params = {"page": "pages/Generador_polizas_blank.py", "origin": label}
+    params = {"goto": "pages/Generador_polizas_blank.py", "origin": label}
     params.update(auth_query_params())
     query = urlencode(params, doseq=False)
-    return f"/?{query}"
+    return f"?{query}"
 
 
 # ---------------- Navegacion ----------------

@@ -127,7 +127,7 @@ with col_cfdi:
         st.switch_page("pages/Descarga_masiva_xml.py")
 
 with col_nomina:
-    st.write("Prepárate para exportar XML de nómina (muy pronto).")
+    st.write("Genera reportes en Excel a partir de tus archivos XML de nómina.")
     # El botón ahora usa el estilo por defecto de Streamlit (secundario/gris)
     if st.button(
         "Exportar XML Nómina",
