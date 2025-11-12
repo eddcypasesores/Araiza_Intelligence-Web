@@ -80,7 +80,7 @@ ensure_session_from_token()
 conn = get_conn()
 
 params = _get_params()
-NEXT_DEFAULT = "pages/Descarga_masiva_xml.py"
+NEXT_DEFAULT = "pages/Descarga_masiva_inicio.py"
 next_target = params.get("next") or NEXT_DEFAULT
 
 def go_to_target():
