@@ -6,6 +6,7 @@ from contextlib import closing
 
 import streamlit as st
 
+from core.theme import apply_theme
 from core.auth import ensure_session_from_token, persist_login
 from core.db import authenticate_portal_user, ensure_schema, get_conn
 from core.flash import consume_flash, set_flash
@@ -17,6 +18,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+apply_theme()
 
 ensure_session_from_token()
 consume_flash()

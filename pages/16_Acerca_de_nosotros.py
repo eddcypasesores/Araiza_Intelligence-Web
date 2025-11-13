@@ -4,10 +4,12 @@ from pathlib import Path
 import base64
 import streamlit as st
 
+from core.theme import apply_theme
 from core.auth import ensure_session_from_token
 from core.navigation import render_nav
 
 st.set_page_config(page_title="Acerca de Nosotros | Araiza Intelligence", layout="wide")
+apply_theme()
 
 ensure_session_from_token()
 render_nav(active_top="acerca", active_child="acerca_resumen")

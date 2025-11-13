@@ -9,6 +9,7 @@ from typing import Optional
 
 import streamlit as st
 
+from core.theme import apply_theme
 from core.auth import ensure_session_from_token
 from core.db import ensure_schema, get_conn
 from core.navigation import CEDULA_TOPS, DIOT_TOPS, MONITOREO_TOPS, TRASLADOS_TOPS, render_nav
@@ -68,6 +69,7 @@ def _configure_page(page_title: str, layout: str) -> None:
 
     if not st.session_state.get("_admin_page_configured"):
         st.set_page_config(page_title=page_title, layout=layout)
+        apply_theme()
         st.session_state["_admin_page_configured"] = True
 
 

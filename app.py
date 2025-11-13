@@ -7,9 +7,11 @@ from typing import Mapping
 
 import streamlit as st
 
+from core.theme import apply_theme
 from core.navigation import PAGE_PARAM_NAMES
 
 st.set_page_config(page_title="Araiza Intelligence", layout="wide")
+apply_theme()
 
 
 def _normalize(value) -> str | None:

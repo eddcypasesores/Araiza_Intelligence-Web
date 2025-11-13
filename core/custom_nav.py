@@ -24,49 +24,94 @@ DEFAULT_NAV_LOGO = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAA
 
 _NAV_CSS = """
 <style>
+:root {
+  color-scheme: light dark;
+  --nav-bg:var(--ai-surface-bg, #ffffff);
+  --nav-text:var(--ai-page-text, #0f172a);
+  --nav-muted:rgba(15,23,42,0.65);
+  --nav-border:rgba(15,23,42,0.08);
+  --nav-shadow:0 20px 45px rgba(15,23,42,0.16);
+  --nav-btn-bg:#2563eb;
+  --nav-btn-text:#f8fafc;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --nav-bg:var(--ai-surface-bg, #0f172a);
+    --nav-text:var(--ai-page-text, #f8fafc);
+    --nav-muted:rgba(248,250,252,0.75);
+    --nav-border:rgba(15,23,42,0.45);
+    --nav-shadow:0 25px 55px rgba(0,0,0,0.55);
+    --nav-btn-bg:#3b82f6;
+    --nav-btn-text:#f8fafc;
+  }
+}
 .custom-nav{
   position:fixed;
-  top:0;
+  top:12px;
   left:50%;
   transform:translateX(-50%);
   width:min(1100px,100%);
   z-index:1000;
-  background:#ffffff;
-  color:#0f172a;
-  padding:10px 22px;
+  background:var(--nav-bg);
+  color:var(--nav-text);
+  padding:12px 28px;
   border-radius:999px;
   display:flex;
   align-items:center;
   justify-content:space-between;
   gap:16px;
-  box-shadow:0 18px 32px rgba(15,23,42,0.18);
-  border:1px solid rgba(148,163,184,0.25);
+  box-shadow:var(--nav-shadow);
+  border:1px solid var(--nav-border);
+  backdrop-filter:blur(18px);
 }
 .nav-brand{
-  display:inline-flex;
+  display:flex;
   align-items:center;
-  gap:10px;
-  font-weight:700;
-  font-size:1rem;
-  text-transform:uppercase;
-  letter-spacing:0.05em;
+  gap:14px;
 }
 .nav-brand img{
-  height:28px;
+  height:30px;
   width:auto;
   display:block;
+}
+.nav-brand-text{
+  display:flex;
+  flex-direction:column;
+  line-height:1.1;
+  font-family:"Inter","Segoe UI",system-ui,-apple-system,sans-serif;
+}
+.nav-brand-text span{
+  text-transform:none;
+  letter-spacing:0;
+}
+.nav-brand-text .brand-parent{
+  font-size:0.78rem;
+  font-weight:600;
+  color:var(--nav-muted);
+}
+.nav-brand-text .brand-product{
+  font-size:1rem;
+  font-weight:600;
+  color:var(--nav-text);
 }
 .nav-actions a{
   display:inline-flex;
   align-items:center;
   justify-content:center;
-  padding:6px 20px;
+  padding:8px 22px;
   border-radius:999px;
-  background:#0d3c74;
-  color:#fff !important;
+  background:var(--nav-btn-bg);
+  color:var(--nav-btn-text) !important;
   font-weight:600;
+  letter-spacing:0.01em;
   text-decoration:none;
-  box-shadow:0 6px 16px rgba(13,60,116,0.25);
+  box-shadow:0 10px 25px rgba(37,99,235,0.35);
+  border:1px solid transparent;
+  transition:filter 120ms ease, transform 120ms ease;
+}
+.nav-actions a:hover{
+  filter:brightness(1.05);
+  transform:translateY(-1px);
 }
 </style>
 """
@@ -99,6 +144,23 @@ def _logout_href(page_param: str) -> str:
     return f"?{query}"
 
 
+def _brand_markup(logo_src: str, product_label: str | None) -> str:
+    company = "Araiza Intelligence"
+    product = (product_label or "").strip()
+    product_line = ""
+    if product and product.lower() != company.lower():
+        product_line = f'<span class="brand-product">{html.escape(product, quote=False)}</span>'
+    return (
+        '<div class="nav-brand">'
+        f'<img src="{logo_src}" alt="Araiza Intelligence logo">'
+        '<div class="nav-brand-text">'
+        f'<span class="brand-parent">{company}</span>'
+        f"{product_line}"
+        "</div>"
+        "</div>"
+    )
+
+
 def render_brand_logout_nav(
     page_param: str,
     *,
@@ -112,17 +174,33 @@ def render_brand_logout_nav(
     st.markdown(_NAV_CSS, unsafe_allow_html=True)
 
     logo_src = _navbar_logo_data()
+
     if action_href:
+
         action_url = html.escape(action_href, quote=True)
+
     else:
+
         action_url = html.escape(_logout_href(page_param), quote=True)
+
     button_label = html.escape(action_label or "Cerrar sesión", quote=False)
+
+    brand_block = _brand_markup(logo_src, brand)
+
     nav_html = (
+
         f'<div class="custom-nav">'
-        f'<div class="nav-brand"><img src="{logo_src}" alt="Araiza logo"><span>{brand}</span></div>'
+
+        f"{brand_block}"
+
         f'<div class="nav-actions"><a href="{action_url}" target="_self">{button_label}</a></div>'
+
         f'</div>'
+
     )
+
+
+
     st.markdown(nav_html, unsafe_allow_html=True)
 
 

@@ -7,6 +7,7 @@ import xml.etree.ElementTree as ET
 
 import pandas as pd
 import streamlit as st
+from core.theme import apply_theme
 from urllib.parse import urlencode
 
 # Núcleo
@@ -23,6 +24,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+apply_theme()
 handle_logout_request()
 
 st.markdown(

@@ -1,168 +1,193 @@
 from __future__ import annotations
 
+import base64
+import mimetypes
 import os
+import tempfile
 from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import urlencode
-import tempfile
 
 import pandas as pd
 import streamlit as st
 
+from core.theme import apply_theme
 from core.auth import ensure_session_from_token, auth_query_params
-from core.custom_nav import _NAV_CSS as BRAND_NAV_CSS, _navbar_logo_data
+from core.custom_nav import render_brand_logout_nav
 from extractor import extraer_datos_banamex_formato_final
 
 ASSETS_DIR = next((p for p in (Path("Assets"), Path("assets")) if p.exists()), Path("."))
-LOGO_LEFT = ASSETS_DIR / "logo.jpg"
-LOGO_RIGHT = ASSETS_DIR / "banks/banamex.jpeg"
+LEFT_LOGO = ASSETS_DIR / "logo.jpg"
+RIGHT_LOGO = ASSETS_DIR / "banks/banamex.jpeg"
+OUTPUT_DIR = Path("output")
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def _build_back_href() -> str:
+def _back_href() -> str:
     params = auth_query_params()
     query = urlencode(params) if params else ""
     base = "./convertidor_estados_cuenta"
     return f"{base}?{query}" if query else base
 
 
-def _render_back_nav() -> None:
-    st.markdown(BRAND_NAV_CSS, unsafe_allow_html=True)
-    logo_src = _navbar_logo_data()
-    back_href = _build_back_href()
-    nav_html = (
-        '<div class="custom-nav">'
-        '<div class="nav-brand">'
-        f'<img src="{logo_src}" alt="Araiza Intelligence" />'
-        "<span>Araiza Intelligence</span>"
-        "</div>"
-        '<div class="nav-actions">'
-        f'<a href="{back_href}" target="_self">&larr; Regresar</a>'
-        "</div>"
-        "</div>"
+def _img_to_data_uri(path: Path) -> str | None:
+    if not path.exists():
+        return None
+    mime, _ = mimetypes.guess_type(path.name)
+    mime = mime or "image/png"
+    encoded = base64.b64encode(path.read_bytes()).decode()
+    return f"data:{mime};base64,{encoded}"
+
+
+def _df_to_excel_bytes(df: pd.DataFrame) -> bytes:
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Banamex")
+    buf.seek(0)
+    return buf.getvalue()
+
+
+def _totals(df: pd.DataFrame) -> dict[str, float]:
+    cargos = pd.to_numeric(df.get("Cargo"), errors="coerce").fillna(0).sum()
+    abonos = pd.to_numeric(df.get("Abono"), errors="coerce").fillna(0).sum()
+    saldos = pd.to_numeric(df.get("Saldo"), errors="coerce").dropna()
+    saldo_final = float(saldos.iloc[-1]) if not saldos.empty else cargos - abonos
+    return {"cargos": float(cargos), "abonos": float(abonos), "saldo": saldo_final}
+
+
+def _render_nav() -> None:
+    render_brand_logout_nav(
+        "pages/convertidor_estados_cuenta.py",
+        brand="Extractor Banamex",
+        action_label="Atrás",
+        action_href=_back_href(),
     )
-    st.markdown(nav_html, unsafe_allow_html=True)
 
 
-st.set_page_config(page_title="Extractor Banamex", layout="centered")
+st.set_page_config(page_title="Extractor Banamex", layout="wide")
+apply_theme()
 ensure_session_from_token()
-_render_back_nav()
+_render_nav()
+
 st.markdown(
     """
     <style>
-    [data-testid="stSidebar"],
-    header[data-testid="stHeader"],
-    div[data-testid="stToolbar"],
-    #MainMenu,
-    [data-testid="collapsedControl"] { display:none !important; }
-    #root > div:nth-child(1) > div[data-testid="stSidebarNav"] { display:none !important; }
-    body, html, [data-testid="stAppViewContainer"] { background:#f5f6fb !important; }
-    .block-container { padding-top:80px !important; }
+      [data-testid="stSidebar"],
+      header[data-testid="stHeader"],
+      div[data-testid="stToolbar"],
+      #MainMenu,
+      [data-testid="collapsedControl"],
+      #root > div:nth-child(1) > div[data-testid="stSidebarNav"] {
+        display:none !important;
+      }
+      body, html, [data-testid="stAppViewContainer"] {
+        background:#f5f6fb !important;
+      }
+      .block-container{
+        max-width:100% !important;
+        padding:80px 2rem 2rem;
+      }
+      .brand-title{
+        margin:0;
+        text-align:center;
+        font-weight:800;
+        letter-spacing:.5px;
+        line-height:1.1;
+        font-size:clamp(34px,4vw,56px);
+      }
+      .header-flex{
+        display:flex; align-items:center; justify-content:space-between;
+        gap:2rem; margin-bottom:.75rem;
+      }
+      hr.header-sep{
+        margin:.75rem 0 1rem; border:none; height:1px; background:rgba(0,0,0,.08);
+      }
+      .hint {
+        background:#eaf2ff;
+        border:1px solid #d9e6ff;
+        border-radius:8px;
+        padding:14px 16px;
+        color:#0f1d40;
+        margin-top:10px;
+      }
+      [data-testid="stMetric"]{ background:#f8f9fa; border-radius:12px; padding:.75rem; }
+      [data-testid="stFileUploader"] section{ padding:0 !important; }
+      [data-testid="stFileUploader"] button {
+        background-color:#579EF7; color:#fff; border-radius:8px; padding:8px 16px;
+      }
+      [data-testid="stFileUploader"] button:hover { background-color:#3f89e0; }
     </style>
     """,
     unsafe_allow_html=True,
 )
 
+left_logo_src = _img_to_data_uri(LEFT_LOGO)
+right_logo_src = _img_to_data_uri(RIGHT_LOGO)
 
-def _find_col(df: pd.DataFrame, candidates: list[str]) -> str | None:
-    lower_map = {c.lower(): c for c in df.columns}
-    for cand in candidates:
-        key = cand.lower()
-        if key in lower_map:
-            return lower_map[key]
-    for column in df.columns:
-        if any(cand.lower() in column.lower() for cand in candidates):
-            return column
-    return None
+c1, c2, c3 = st.columns([1.2, 5, 1.2], gap="large")
+with c1:
+    if left_logo_src:
+        st.markdown(f'<img src="{left_logo_src}" alt="Logo Araiza" style="height:180px;object-fit:contain;">', unsafe_allow_html=True)
+with c2:
+    st.markdown("<h2 class='brand-title'>EXTRACTOR BANAMEX</h2>", unsafe_allow_html=True)
+with c3:
+    if right_logo_src:
+        st.markdown(f'<img src="{right_logo_src}" alt="Logo Banamex" style="height:180px;object-fit:contain;">', unsafe_allow_html=True)
 
+st.markdown("<hr class='header-sep'/>", unsafe_allow_html=True)
 
-def _to_float_series(series: pd.Series | None) -> pd.Series:
-    if series is None:
-        return pd.Series(dtype=float)
-    cleaned = (
-        series.astype(str)
-        .str.strip()
-        .str.replace("$", "", regex=False)
-        .str.replace(",", "", regex=False)
-    )
-    cleaned = cleaned.str.replace(r"^\(([\d\.]+)\)$", r"-\1", regex=True)
-    return pd.to_numeric(cleaned, errors="coerce").fillna(0.0)
+uploaded_file = st.file_uploader("Sube tu PDF de Banamex", type=["pdf"])
 
-
-col1, col2, col3 = st.columns([1, 4, 1])
-with col1:
-    if LOGO_LEFT.exists():
-        st.image(str(LOGO_LEFT), width=110)
-with col2:
-    st.markdown(
-        "<h2 style='text-align:center;margin:0;'>Extractor de Estados de Cuenta Banamex</h2>",
-        unsafe_allow_html=True,
-    )
-with col3:
-    st.markdown("<div style='margin-top:12px'></div>", unsafe_allow_html=True)
-    if LOGO_RIGHT.exists():
-        st.image(str(LOGO_RIGHT), width=140)
-
-st.markdown("<div style='margin-top:10px'></div>", unsafe_allow_html=True)
-
-archivo = st.file_uploader("Selecciona tu estado de cuenta en PDF", type=["pdf"])
-
-if archivo is None:
-    st.info("Sube un PDF para comenzar.")
-    st.stop()
-
-with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
-    tmp.write(archivo.read())
-    tmp_path = Path(tmp.name)
-
-st.info("Procesando archivo PDF...")
-
-try:
-    df = extraer_datos_banamex_formato_final(str(tmp_path))
-    if df is None or df.empty:
-        st.warning("No se detectaron movimientos validos en el documento.")
-    else:
-        cargos_col = _find_col(df, ["cargo", "cargos", "debitos", "debito"])
-        abonos_col = _find_col(df, ["abono", "abonos", "creditos", "credito"])
-
-        total_cargo = float(_to_float_series(df[cargos_col]).sum()) if cargos_col else 0.0
-        total_abono = float(_to_float_series(df[abonos_col]).sum()) if abonos_col else 0.0
-
-        st.success(f"Extraccion completada con exito. Movimientos detectados: {len(df)}")
-        st.subheader("Totales")
-        tot1, tot2 = st.columns(2)
-        tot1.metric("Total cargos", f"${total_cargo:,.2f}")
-        tot2.metric("Total abonos", f"${total_abono:,.2f}")
-
-        with st.expander("Ver movimientos extraidos"):
-            st.caption(f"Tabla completa de {len(df)} filas.")
-            st.dataframe(df, use_container_width=True, height=500)
-
-        output_dir = Path("output")
-        output_dir.mkdir(parents=True, exist_ok=True)
-        output_name = output_dir / f"banamex_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
-
-        try:
-            df.to_excel(output_name, index=False)
-            download_data = output_name.read_bytes()
-            filename = output_name.name
-        except Exception:
-            buffer = BytesIO()
-            df.to_excel(buffer, index=False)
-            buffer.seek(0)
-            download_data = buffer.getvalue()
-            filename = f"banamex_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
-
-        st.download_button(
-            label="Descargar Excel",
-            data=download_data,
-            file_name=filename,
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        )
-except Exception as exc:
-    st.error(f"Ocurrio un error al extraer datos: {exc}")
-finally:
+if uploaded_file is None:
+    st.info("👆 Sube un PDF para comenzar.")
+else:
+    tmp_path = None
     try:
-        os.remove(tmp_path)
-    except Exception:
-        pass
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp:
+            tmp.write(uploaded_file.read())
+            tmp_path = tmp.name
+
+        st.info("⏳ Procesando archivo PDF...")
+        df = extraer_datos_banamex_formato_final(tmp_path)
+
+        if df is None or df.empty:
+            st.warning("⚠ No se detectaron movimientos válidos en el archivo.")
+        else:
+            st.success("✅ ¡Extracción completada con éxito!")
+
+            st.subheader("📋 Vista previa de movimientos")
+            st.caption(f"Mostrando hasta 100 filas de {len(df)} en total.")
+            st.dataframe(df.head(100), use_container_width=True)
+
+            summary = _totals(df)
+            m1, m2, m3 = st.columns(3)
+            m1.metric("💸 Total Cargos", f"${summary['cargos']:,.2f}")
+            m2.metric("💰 Total Abonos", f"${summary['abonos']:,.2f}")
+            m3.metric("📊 Saldo final estimado", f"${summary['saldo']:,.2f}")
+
+            with st.expander("🔎 Ver tabla completa"):
+                st.dataframe(df, use_container_width=True, height=520)
+
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = OUTPUT_DIR / f"banamex_{timestamp}.xlsx"
+            data_xlsx = _df_to_excel_bytes(df)
+            filename.write_bytes(data_xlsx)
+
+            st.download_button(
+                "📥 Descargar Excel",
+                data_xlsx,
+                file_name=filename.name,
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+            st.caption(f"Archivo guardado también en: {filename}")
+
+    except Exception as exc:
+        st.error(f"❌ Ocurrió un error al extraer datos: {exc}")
+    finally:
+        if tmp_path and os.path.exists(tmp_path):
+            try:
+                os.remove(tmp_path)
+            except OSError:
+                pass

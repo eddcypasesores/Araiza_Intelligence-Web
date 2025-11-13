@@ -8,8 +8,9 @@ from urllib.parse import urlencode
 import pandas as pd
 import streamlit as st
 
+from core.theme import apply_theme
 from core.auth import ensure_session_from_token, auth_query_params
-from core.custom_nav import _NAV_CSS as BRAND_NAV_CSS, _navbar_logo_data
+from core.custom_nav import render_brand_logout_nav
 from core.extractor_hsbc import extraer_hsbc
 
 ASSETS_DIR = next((p for p in (Path("Assets"), Path("assets")) if p.exists()), Path("."))
@@ -25,23 +26,16 @@ def _back_href() -> str:
 
 
 def _render_nav() -> None:
-    st.markdown(BRAND_NAV_CSS, unsafe_allow_html=True)
-    logo_src = _navbar_logo_data()
-    nav_html = (
-        '<div class="custom-nav">'
-        '<div class="nav-brand">'
-        f'<img src="{logo_src}" alt="Araiza Intelligence" />'
-        "<span>Araiza Intelligence</span>"
-        "</div>"
-        '<div class="nav-actions">'
-        f'<a href="{_back_href()}" target="_self">&larr; Regresar</a>'
-        "</div>"
-        "</div>"
+    render_brand_logout_nav(
+        "pages/convertidor_estados_cuenta.py",
+        brand="Extractor HSBC",
+        action_label="Atras",
+        action_href=_back_href(),
     )
-    st.markdown(nav_html, unsafe_allow_html=True)
 
 
 st.set_page_config(page_title="Extractor HSBC", layout="centered")
+apply_theme()
 ensure_session_from_token()
 _render_nav()
 st.markdown(

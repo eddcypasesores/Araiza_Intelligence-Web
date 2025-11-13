@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from core.theme import apply_theme
 from core.db import (
     ensure_schema,
     get_conn,
@@ -14,6 +15,7 @@ from core.db import (
 from core.streamlit_compat import set_query_params
 
 st.set_page_config(page_title="Restablecer contrasena", layout="centered")
+apply_theme()
 
 
 def _resolve_token_param() -> str:

@@ -8,6 +8,7 @@ from typing import Any, Optional
 from urllib.parse import urlencode
 
 import streamlit as st
+from core.theme import apply_theme
 from openpyxl import Workbook, load_workbook
 
 from core.auth import ensure_session_from_token, auth_query_params
@@ -61,6 +62,7 @@ def _back_href() -> str:
 
 
 st.set_page_config(page_title="Pólizas Dr Egresos", layout="wide", initial_sidebar_state="collapsed")
+apply_theme()
 ensure_session_from_token()
 handle_logout_request()
 _handle_pending_navigation()

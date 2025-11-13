@@ -8,6 +8,7 @@ from contextlib import closing
 import pandas as pd
 import streamlit as st
 
+from core.theme import apply_theme
 from core.auth import ensure_session_from_token
 from core.db import (
     ensure_schema,
@@ -131,6 +132,7 @@ def _render_edit_section(conn: sqlite3.Connection, records: list[dict]) -> None:
 
 def main() -> None:
     st.set_page_config(page_title="Administrar productos", layout="wide")
+apply_theme()
     ensure_session_from_token()
     render_nav(active_top="admin_products", show_inicio=True)
 

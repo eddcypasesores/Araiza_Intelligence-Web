@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from pathlib import Path
 import pandas as pd
 import streamlit as st
+from core.theme import apply_theme
 from streamlit.components.v1 import html as components_html
 
 # --- Utilidades / Proyecto
@@ -44,6 +45,7 @@ from core.streamlit_compat import rerun, set_query_params, normalize_page_path
 # Configuracion de pagina + CSS
 # ===============================
 st.set_page_config(page_title="Costos de traslado", layout="wide", initial_sidebar_state="expanded")
+apply_theme()
 inject_css("styles.css")
 
 

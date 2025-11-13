@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from core.theme import apply_theme
 from core.auth import ensure_session_from_token, persist_login
 from core.db import ensure_schema, get_conn, authenticate_portal_user
 from core.streamlit_compat import rerun, set_query_params, normalize_page_path
@@ -11,6 +12,7 @@ from core.flash import consume_flash, set_flash
 from core.login_ui import render_login_header, render_token_reset_section
 
 st.set_page_config(page_title="Monitoreo especializado de EFOS | Araiza Intelligence", layout="wide")
+apply_theme()
 
 ensure_session_from_token()
 

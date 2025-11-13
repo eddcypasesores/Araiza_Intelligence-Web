@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from core.theme import apply_theme
 # Núcleo (tus módulos reales)
 from core.auth import ensure_session_from_token, persist_login
 from core.db import get_conn, authenticate_portal_user
@@ -17,6 +18,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+apply_theme()
 
 # -----------------------------------------------------------------------------
 # Estilos mínimos coherentes (opcional)

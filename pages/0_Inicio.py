@@ -7,6 +7,7 @@ from textwrap import dedent
 import html
 import streamlit as st
 
+from core.theme import apply_theme
 # --- Proyecto
 from core.auth import ensure_session_from_token
 from core.navigation import render_nav
@@ -21,6 +22,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+apply_theme()
 
 ensure_session_from_token()
 inject_hero_css()
@@ -182,48 +184,56 @@ st.markdown(dedent("""
 /* ===== GRID — TARJETAS MÁS ANGOSTAS (solo ancho) ===== */
 .cards-grid{
   display:grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 260px));
-  justify-content: center;
-  gap: clamp(14px, 2.2vw, 18px);
+  grid-template-columns: repeat(auto-fit, minmax(210px, 240px));
+  justify-content:center;
+  gap:clamp(12px, 2vw, 16px);
 }
 
 /* ===== Tarjeta vertical COMPACTA Y BAJA ===== */
 .card-vertical{
   position:relative; display:flex; flex-direction:column;
   border:1px solid var(--line); border-radius:14px; background:var(--card);
-  box-shadow:0 6px 18px rgba(2,6,23,.06); overflow:hidden; isolation:isolate;
-  transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease; cursor:pointer;
-  min-height:auto;
+  box-shadow:0 4px 14px rgba(2,6,23,.05); overflow:hidden; isolation:isolate;
+  transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease, background .16s ease;
+  cursor:pointer; min-height:200px;
+}
+.card-vertical::after{
+  content:""; position:absolute; inset:0;
+  background:linear-gradient(145deg, rgba(37,99,235,.08), rgba(37,99,235,.02));
+  opacity:0; transition:opacity .16s ease; pointer-events:none;
 }
 /* Hover real se activa con .ai-ready (ver abajo) */
-.card-vertical:hover{ transform:none; box-shadow:0 6px 18px rgba(2,6,23,.06); }
+.card-vertical:hover::after{ opacity:1; }
 
 /* Imagen baja */
 .card-media{
   width:100%; background:#F8FAFC; display:flex; align-items:center; justify-content:center;
-  overflow:hidden; aspect-ratio:16/9; max-height:70px;
+  overflow:hidden; aspect-ratio:16/9; max-height:110px; padding:6px;
 }
-@media (max-width: 1400px){ .card-media{ max-height:72px; } }
-@media (max-width: 980px){ .card-media{ max-height:78px; } }
-@media (max-width: 640px){ .card-media{ max-height:74px; } }
-.card-media img{ width:80%; height:80%; object-fit:contain; }
+@media (max-width: 980px){ .card-media{ max-height:100px; } }
+@media (max-width: 640px){ .card-media{ max-height:90px; } }
+.card-media img{ width:90%; height:90%; object-fit:contain; }
 
 /* ===== Texto mostrado al pasar el cursor ===== */
-.card-copy{ padding:14px 12px; position:relative; min-height:120px; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; transition:transform .18s ease; }
+.card-copy{
+  padding:12px 10px; position:relative; min-height:105px;
+  display:flex; flex-direction:column; justify-content:center; align-items:center;
+  text-align:center; gap:4px; transition:transform .18s ease;
+}
 .card-title{
   margin:0;
   font-weight:800;
   color:var(--ink);
-  font-size:.82rem;
-  line-height:1.1;
+  font-size:.72rem;
+  line-height:1.05;
   letter-spacing:.005em;
 }
 .card-desc,
 .card-list{
-  margin:10px 0 0;
+  margin:6px 0 0;
   color:var(--muted);
-  font-size:.68rem;
-  line-height:1rem;
+  font-size:.6rem;
+  line-height:.9rem;
   overflow:hidden;
   max-height:0;
   opacity:0;
@@ -242,23 +252,23 @@ st.markdown(dedent("""
 .card-vertical:hover .card-copy{align-items:flex-start; text-align:left;}
 .card-vertical:hover .card-desc,
 .card-vertical:hover .card-list{
-  max-height:160px;
+  max-height:130px;
   opacity:1;
 }
 .card-title{
   margin:0;
   font-weight:800;
   color:var(--ink);
-  font-size:.78rem;
-  line-height:1.08;
+  font-size:.72rem;
+  line-height:1.05;
   letter-spacing:.005em;
 }
 .card-desc,
 .card-list{
   margin:6px 0 0;
   color:var(--muted);
-  font-size:.68rem;
-  line-height:1rem;
+  font-size:.6rem;
+  line-height:.9rem;
   overflow:hidden;
   max-height:0;
   opacity:0;
@@ -274,20 +284,19 @@ st.markdown(dedent("""
   padding-left:1rem;
 }
 .card-vertical{
-  transition:transform .2s ease, box-shadow .2s ease;
   transform-origin:center;
 }
 .card-vertical:hover{
-  transform:translateY(-6px) scale(1.05);
-  box-shadow:0 20px 40px rgba(15,23,42,.18);
+  transform:translateY(-4px);
+  box-shadow:0 16px 40px rgba(37,99,235,.25);
   z-index:10;
 }
 .card-vertical:hover .card-title{
-  transform:translateY(-4px);
+  transform:translateY(-2px);
 }
 .card-vertical:hover .card-desc,
 .card-vertical:hover .card-list{
-  max-height:160px;
+  max-height:130px;
   opacity:1;
 }
 .card-list li{ margin:0 0 .16rem; }
@@ -323,9 +332,10 @@ window.addEventListener('load', () => {
 </script>
 <style>
 .ai-ready .card-vertical:hover{
-  transform: translateY(-2px);
-  box-shadow: 0 12px 26px rgba(2,6,23,.10);
-  border-color: color-mix(in srgb, var(--azul) 18%, var(--line));
+  transform: translateY(-4px);
+  box-shadow: 0 16px 40px rgba(37,99,235,.25);
+  border-color: color-mix(in srgb, var(--azul) 35%, var(--line));
+  background: color-mix(in srgb, var(--azul-50) 55%, #fff);
 }
 </style>
 """, unsafe_allow_html=True)

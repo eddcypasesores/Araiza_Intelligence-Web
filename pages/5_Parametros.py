@@ -3,6 +3,7 @@ import sqlite3
 import pandas as pd
 import streamlit as st
 
+from core.theme import apply_theme
 from core.auth import ensure_session_from_token
 from core.db import (
     get_conn,
@@ -17,6 +18,7 @@ from core.streamlit_compat import rerun, set_query_params
 
 
 st.set_page_config(page_title="Parámetros de Costeo", layout="wide")
+apply_theme()
 ensure_session_from_token()
 
 # Seguridad

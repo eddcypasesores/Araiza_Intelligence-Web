@@ -5,32 +5,25 @@ from __future__ import annotations
 import io
 from copy import copy  # clonar estilos (evitar StyleProxy)
 from pathlib import Path
-from textwrap import dedent
 from typing import Dict, List
 
 import pandas as pd
 import streamlit as st
+from core.theme import apply_theme
 from openpyxl import load_workbook
 from openpyxl.cell.cell import MergedCell  # ⬅️ NUEVO: detectar celdas merged
 from openpyxl.utils import column_index_from_string, get_column_letter
 import re as _re
 
-import base64
 from urllib.parse import quote
 
 from core.auth import ensure_session_from_token
+from core.custom_nav import render_brand_logout_nav
 from core.streamlit_compat import set_query_params
 
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
-NAV_LOGO_CANDIDATES = (
-    ASSETS_DIR / "logo_nav.png",
-    ASSETS_DIR / "Araiza Intelligence logo-04.png",
-    ASSETS_DIR / "Araiza Intelligence logo-04.jpg",
-    ASSETS_DIR / "logo.png",
-    ASSETS_DIR / "logo.jpg",
-)
-NAV_CSS = """
+NAV_LAYOUT_CSS = """
 <style>
   [data-testid="stSidebar"],
   [data-testid="collapsedControl"],
@@ -41,70 +34,11 @@ NAV_CSS = """
   #root > div:nth-child(1) > div[data-testid="stSidebarNav"] {
     display: none !important;
   }
-  .custom-nav {
-    position: fixed;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    width: min(1100px, 100%);
-    z-index: 1000;
-    background: #ffffff;
-    color: #0f172a;
-    padding: 10px 22px;
-    border-radius: 999px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    box-shadow: 0 18px 32px rgba(15, 23, 42, 0.18);
-    border: 1px solid rgba(148, 163, 184, 0.25);
-  }
-  .nav-brand {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    font-weight: 700;
-    font-size: 1rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: inherit;
-  }
-  .nav-brand img {
-    height: 28px;
-    width: auto;
-    display: block;
-  }
-  .nav-actions a {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 6px 20px;
-    border-radius: 999px;
-    background: #0d3c74;
-    color: #fff;
-    font-weight: 600;
-    text-decoration: none;
-    box-shadow: 0 6px 16px rgba(13, 60, 116, 0.25);
-  }
-  .nav-actions a:hover {
-    filter: brightness(0.95);
-  }
   .nav-spacer {
-    height: 70px;
+    height: 78px;
   }
 </style>
 """
-
-
-def _navbar_logo_data() -> str | None:
-    for path in NAV_LOGO_CANDIDATES:
-        if path.exists():
-            try:
-                encoded = base64.b64encode(path.read_bytes()).decode()
-                return f"data:image/png;base64,{encoded}"
-            except Exception:
-                continue
-    return None
 
 
 def _auth_query_param() -> str | None:
@@ -117,28 +51,23 @@ def _auth_query_param() -> str | None:
     return token if isinstance(token, str) and token else None
 
 
-def render_fixed_nav() -> None:
-    logo_src = _navbar_logo_data()
-    auth = _auth_query_param()
+def _back_href() -> str:
     href = "?goto=pages/Cedula_Impuestos_inicio.py"
+    auth = _auth_query_param()
     if auth:
         href += f"&auth={quote(auth)}"
-    brand_img = f'<img src="{logo_src}" alt="Araiza logo">' if logo_src else ""
-    nav_markup = dedent(
-        f"""
-        <div class="custom-nav">
-          <div class="nav-brand">
-            {brand_img}
-            <span>Araiza</span>
-          </div>
-          <div class="nav-actions">
-            <a href="{href}" target="_self">&larr; Atr&aacute;s</a>
-          </div>
-        </div>
-        <div class="nav-spacer"></div>
-        """
-    ).strip()
-    st.markdown(f"{NAV_CSS}{nav_markup}", unsafe_allow_html=True)
+    return href
+
+
+def render_fixed_nav() -> None:
+    st.markdown(NAV_LAYOUT_CSS, unsafe_allow_html=True)
+    render_brand_logout_nav(
+        "pages/Cedula_Impuestos_inicio.py",
+        brand="Cédulas · Pérdidas",
+        action_label="Atrás",
+        action_href=_back_href(),
+    )
+    st.markdown('<div class="nav-spacer"></div>', unsafe_allow_html=True)
 
 
 def _handle_pending_navigation() -> None:
@@ -733,6 +662,7 @@ def main() -> None:
 
     ensure_session_from_token()
     st.set_page_config(page_title="Actualización y Amortización de Pérdidas", layout="wide")
+apply_theme()
     _handle_pending_navigation()
     render_fixed_nav()
 

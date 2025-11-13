@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import base64
 from pathlib import Path
 
 import streamlit as st
 
+from core.theme import apply_theme
 from urllib.parse import urlencode
 
 from core.auth import ensure_session_from_token, persist_login, auth_query_params
@@ -31,6 +31,7 @@ st.set_page_config(
     page_icon=str(LOGO_PATH),
     layout="wide",
 )
+apply_theme()
 ensure_session_from_token()
 handle_logout_request()
 
@@ -38,10 +39,6 @@ handle_logout_request()
 def _has_permission() -> bool:
     permisos = set(st.session_state.get("permisos") or [])
     return MODULE_PERMISSION in permisos or "admin" in permisos
-
-
-def _b64(img_path: Path) -> str:
-    return base64.b64encode(img_path.read_bytes()).decode()
 
 
 def _render_login() -> None:
@@ -116,7 +113,6 @@ if not (st.session_state.get("usuario") and _has_permission()):
 render_brand_logout_nav("Convertidor de estados de cuenta")
 
 # ---------------- UI principal ----------------
-logo_b64 = _b64(LOGO_PATH) if LOGO_PATH.exists() else ""
 
 st.markdown(
     """
@@ -141,28 +137,23 @@ div[data-testid="stToolbar"],
 }
 .block-container { padding-top:0 !important; }
 .hero-row {
-  display: grid; grid-template-columns: 4fr 1fr; gap: 24px; align-items: stretch;
   margin: 10px 0 6px 0;
 }
 .hero {
-  background:#000; color:#fff; border-radius: var(--cardRadius);
+  background:#0b5ff3; color:#fff; border-radius: var(--cardRadius);
   min-height: var(--heroH); padding: 24px 40px;
   display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:10px;
+  box-shadow:0 18px 45px rgba(11,95,243,0.28);
 }
 .hero h1 {
   margin:0; font-family:'Poppins',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-  font-weight:800; font-size:clamp(36px,6.2vw,76px); letter-spacing:.6px;
+  font-weight:800; font-size:clamp(30px,4.5vw,52px); letter-spacing:.55px;
+  color:#ffffff !important;
 }
 .hero p {
   margin:0; font-family:'Montserrat',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
-  font-weight:600; font-size:clamp(16px,2.4vw,34px); opacity:.95;
+  font-weight:600; font-size:clamp(14px,2vw,22px); color:#ffffff !important;
 }
-.logo-card {
-  border-radius:var(--cardRadius); min-height:var(--heroH); background:#000;
-  box-shadow:0 4px 14px rgba(0,0,0,.08);
-  display:flex; align-items:center; justify-content:center; overflow:hidden;
-}
-.logo-card img { max-height:100%; max-width:100%; object-fit:contain; }
 .card {
   display:block; border:1px solid #e6e6e6; border-radius:16px; padding:22px;
   background:#fff; text-align:center;
@@ -192,14 +183,11 @@ div[data-testid="stToolbar"],
 )
 
 st.markdown(
-    f"""
+    """
 <div class="hero-row">
   <div class="hero">
     <h1>CONVERTIDOR DE ESTADOS DE CUENTA</h1>
     <p>Selecciona tu banco para continuar</p>
-  </div>
-  <div class="logo-card">
-    <img src="data:image/jpeg;base64,{logo_b64}" alt="Araiza Intelligence" />
   </div>
 </div>
 """,

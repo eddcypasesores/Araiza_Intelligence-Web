@@ -7,16 +7,19 @@ from typing import List
 
 import pandas as pd
 import streamlit as st
+from core.theme import apply_theme
+from core.custom_nav import render_brand_logout_nav
 from openpyxl import load_workbook
 
-# ─────────────────────────────
+# âââââââââââââââââââââââââââââ
 # Config
-# ─────────────────────────────
+# âââââââââââââââââââââââââââââ
 st.set_page_config(
-    page_title="Cédula de deducción anual",
+    page_title="CÃ©dula de deducciÃ³n anual",
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+apply_theme()
 
 ASSETS_DIR = Path(__file__).resolve().parent.parent / "assets"
 TPL_CEDULA = (
@@ -25,9 +28,9 @@ TPL_CEDULA = (
     else Path("Cedula_Deduccion_Anual_v8.xlsx")
 )
 
-# ─────────────────────────────
-# Redirección del botón "Atrás"
-# ─────────────────────────────
+# âââââââââââââââââââââââââââââ
+# RedirecciÃ³n del botÃ³n "AtrÃ¡s"
+# âââââââââââââââââââââââââââââ
 # Si la URL trae ?back=1, manda a Cedula_Impuestos_inicio
 try:
     qp = dict(st.query_params)  # Streamlit >= 1.32
@@ -41,9 +44,9 @@ if ("back" in qp) and (qp.get("back") in (["1"], "1", 1, True)):
         # En algunos entornos el slug puede variar; si falla, no rompemos la app.
         pass
 
-# ─────────────────────────────
+# âââââââââââââââââââââââââââââ
 # CSS GLOBAL: ocultar totalmente UI nativa de Streamlit + navbar
-# ─────────────────────────────
+# âââââââââââââââââââââââââââââ
 GLOBAL_CSS = """
 <style>
   [data-testid="stSidebar"], [data-testid="stSidebarNav"],
@@ -57,43 +60,25 @@ GLOBAL_CSS = """
   @media (min-width: 0px){
     section[data-testid="stSidebar"] + div[role="main"] { margin-left: 0 !important; }
   }
-  .custom-nav{
-    position: fixed; top: 0.5rem; left: 50%; transform: translateX(-50%);
-    width: min(1100px, 100%); z-index: 1000; background: #fff; color: #0f172a;
-    padding: 10px 22px; border-radius: 999px; display: flex; align-items: center;
-    justify-content: space-between; gap: 16px; box-shadow: 0 18px 32px rgba(15,23,42,.18);
-    border: 1px solid rgba(148,163,184,.25);
-    font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Helvetica Neue,Arial;
-  }
-  .nav-brand{font-weight:700; text-transform:uppercase; letter-spacing:.05em;}
-  .nav-actions a{
-    display:inline-flex; align-items:center; justify-content:center;
-    padding:6px 20px; border-radius:999px; background:#0d3c74; color:#fff;
-    font-weight:600; text-decoration:none; box-shadow:0 6px 16px rgba(13,60,116,.25);
-  }
-  .nav-actions a:hover{filter:brightness(.95);}
   .nav-spacer{ height: 90px; }
 </style>
 """
 st.markdown(GLOBAL_CSS, unsafe_allow_html=True)
 
-# ─────────────────────────────
+# âââââââââââââââââââââââââââââ
 # Navbar (link que dispara ?back=1)
-# ─────────────────────────────
-st.markdown(
-    """
-    <div class="custom-nav">
-      <div class="nav-brand">ARAIZA</div>
-      <div class="nav-actions"><a href="?back=1" target="_self">&larr; Atrás</a></div>
-    </div>
-    <div class="nav-spacer"></div>
-    """,
-    unsafe_allow_html=True
+# âââââââââââââââââââââââââââââ
+render_brand_logout_nav(
+    "pages/Cedula_Impuestos_inicio.py",
+    brand="C?dula deducci?n anual",
+    action_label="Atrás",
+    action_href="?back=1",
 )
+st.markdown('<div class="nav-spacer"></div>', unsafe_allow_html=True)
 
-# ─────────────────────────────
+# âââââââââââââââââââââââââââââ
 # Helpers
-# ─────────────────────────────
+# âââââââââââââââââââââââââââââ
 def _to_decimal_percent(val) -> float:
     """Acepta 10, '10', '10%' y los convierte a 0.10. Si ya es 0.10 lo deja igual."""
     if val is None or val == "":
@@ -112,31 +97,31 @@ def _to_decimal_percent(val) -> float:
     return num / 100.0 if num > 1.0 else num
 
 def _load_catalog_options_from_template() -> List[str]:
-    """Usa exactamente los nombres del catálogo para garantizar el match del % en la cédula."""
+    """Usa exactamente los nombres del catÃ¡logo para garantizar el match del % en la cÃ©dula."""
     if not TPL_CEDULA.exists():
         return []
     df_cat = pd.read_excel(TPL_CEDULA, sheet_name="Catalogo_Clasificacion")
-    if "Clasificación" in df_cat.columns:
-        return [str(x) for x in df_cat["Clasificación"].dropna().tolist()]
+    if "ClasificaciÃ³n" in df_cat.columns:
+        return [str(x) for x in df_cat["ClasificaciÃ³n"].dropna().tolist()]
     return []
 
-# ─────────────────────────────
+# âââââââââââââââââââââââââââââ
 # Interfaz sin datos precargados
-# ─────────────────────────────
-st.title("Cédula de deducción anual")
-st.caption("Agrega filas con “+ Add row”. Si dejas vacío el % fiscal, la cédula lo toma del catálogo.")
+# âââââââââââââââââââââââââââââ
+st.title("CÃ©dula de deducciÃ³n anual")
+st.caption("Agrega filas con â+ Add rowâ. Si dejas vacÃ­o el % fiscal, la cÃ©dula lo toma del catÃ¡logo.")
 
 CLASIFICACIONES = _load_catalog_options_from_template()
 
 columns_order = [
-    "Clasificación para el llenado de la declaración",
-    "Fecha de adquisición",
-    "Descripción",
+    "ClasificaciÃ³n para el llenado de la declaraciÃ³n",
+    "Fecha de adquisiciÃ³n",
+    "DescripciÃ³n",
     "MOI",
-    "Limite de la deducción",
-    "Depreciación acumulada",
+    "Limite de la deducciÃ³n",
+    "DepreciaciÃ³n acumulada",
     "Meses de Utilizacion",
-    "% de deducción fiscal (capturar como factor ejemplo 10% = 0.10)",
+    "% de deducciÃ³n fiscal (capturar como factor ejemplo 10% = 0.10)",
 ]
 df_empty = pd.DataFrame(columns=columns_order)
 
@@ -146,36 +131,36 @@ edited = st.data_editor(
     use_container_width=True,
     hide_index=True,
     column_config={
-        "Clasificación para el llenado de la declaración": st.column_config.SelectboxColumn(
-            label="Clasificación para el llenado de la declaración",
+        "ClasificaciÃ³n para el llenado de la declaraciÃ³n": st.column_config.SelectboxColumn(
+            label="ClasificaciÃ³n para el llenado de la declaraciÃ³n",
             options=CLASIFICACIONES,
             required=True
         ),
-        "Fecha de adquisición": st.column_config.DateColumn(label="Fecha de adquisición", format="YYYY-MM-DD"),
-        "Descripción": st.column_config.TextColumn(label="Descripción"),
+        "Fecha de adquisiciÃ³n": st.column_config.DateColumn(label="Fecha de adquisiciÃ³n", format="YYYY-MM-DD"),
+        "DescripciÃ³n": st.column_config.TextColumn(label="DescripciÃ³n"),
         "MOI": st.column_config.NumberColumn(label="MOI", format="%.2f", min_value=0.0, step=100.0),
-        "Limite de la deducción": st.column_config.NumberColumn(
-            label="Límite de la deducción (opcional)",
+        "Limite de la deducciÃ³n": st.column_config.NumberColumn(
+            label="LÃ­mite de la deducciÃ³n (opcional)",
             format="%.2f", min_value=0.0, step=100.0,
-            help="Déjalo vacío para que lo determine la plantilla."
+            help="DÃ©jalo vacÃ­o para que lo determine la plantilla."
         ),
-        "Depreciación acumulada": st.column_config.NumberColumn(label="Depreciación acumulada", format="%.2f", min_value=0.0, step=100.0),
-        "Meses de Utilizacion": st.column_config.NumberColumn(label="Meses de Utilización", min_value=0, max_value=12, step=1),
-        "% de deducción fiscal (capturar como factor ejemplo 10% = 0.10)": st.column_config.NumberColumn(
-            label="% de deducción fiscal (opcional)",
+        "DepreciaciÃ³n acumulada": st.column_config.NumberColumn(label="DepreciaciÃ³n acumulada", format="%.2f", min_value=0.0, step=100.0),
+        "Meses de Utilizacion": st.column_config.NumberColumn(label="Meses de UtilizaciÃ³n", min_value=0, max_value=12, step=1),
+        "% de deducciÃ³n fiscal (capturar como factor ejemplo 10% = 0.10)": st.column_config.NumberColumn(
+            label="% de deducciÃ³n fiscal (opcional)",
             format="%.2f %", min_value=0.0, step=0.01,
-            help="Captura 10 para 10%. Si lo dejas vacío, la cédula usará el catálogo."
+            help="Captura 10 para 10%. Si lo dejas vacÃ­o, la cÃ©dula usarÃ¡ el catÃ¡logo."
         ),
     }
 )
 
-# ─────────────────────────────
-# Generador: copiar plantilla y rellenar “Deduccion de Inversiones”
-# ─────────────────────────────
+# âââââââââââââââââââââââââââââ
+# Generador: copiar plantilla y rellenar âDeduccion de Inversionesâ
+# âââââââââââââââââââââââââââââ
 def _fill_template_with_data(df_in: pd.DataFrame) -> bytes:
     if not TPL_CEDULA.exists():
-        raise FileNotFoundError(f"No se encontró la plantilla: {TPL_CEDULA}")
-    wb = load_workbook(TPL_CEDULA, data_only=False)  # conserva fórmulas/formatos/hojas
+        raise FileNotFoundError(f"No se encontrÃ³ la plantilla: {TPL_CEDULA}")
+    wb = load_workbook(TPL_CEDULA, data_only=False)  # conserva fÃ³rmulas/formatos/hojas
     ws = wb["Deduccion de Inversiones"]
 
     headers = [ws.cell(row=1, column=c).value for c in range(1, ws.max_column + 1)]
@@ -196,7 +181,7 @@ def _fill_template_with_data(df_in: pd.DataFrame) -> bytes:
         r = start + i
         ws.insert_rows(r)
 
-        # Replicar fila 2 (ajustando referencias A2→Ar, ...)
+        # Replicar fila 2 (ajustando referencias A2âAr, ...)
         for c in range(1, ws.max_column + 1):
             base = base_row[c]
             if isinstance(base, str) and base.startswith("="):
@@ -208,30 +193,30 @@ def _fill_template_with_data(df_in: pd.DataFrame) -> bytes:
                 put(r, c, base)
 
         row = df_in.iloc[i]
-        if "Clasificación para el llenado de la declaración" in h2c:
-            put(r, h2c["Clasificación para el llenado de la declaración"], row.get("Clasificación para el llenado de la declaración"))
-        if "Fecha de adquisición" in h2c:
-            put(r, h2c["Fecha de adquisición"], row.get("Fecha de adquisición"))
-        if "Descripción" in h2c:
-            put(r, h2c["Descripción"], row.get("Descripción"))
+        if "ClasificaciÃ³n para el llenado de la declaraciÃ³n" in h2c:
+            put(r, h2c["ClasificaciÃ³n para el llenado de la declaraciÃ³n"], row.get("ClasificaciÃ³n para el llenado de la declaraciÃ³n"))
+        if "Fecha de adquisiciÃ³n" in h2c:
+            put(r, h2c["Fecha de adquisiciÃ³n"], row.get("Fecha de adquisiciÃ³n"))
+        if "DescripciÃ³n" in h2c:
+            put(r, h2c["DescripciÃ³n"], row.get("DescripciÃ³n"))
 
         if "MOI" in h2c:
             moi_val = row.get("MOI")
-            lim_val = row.get("Limite de la deducción")
+            lim_val = row.get("Limite de la deducciÃ³n")
             if (moi_val is None or moi_val == "") and (lim_val not in (None, "")):
                 moi_val = lim_val
             put(r, h2c["MOI"], moi_val)
 
-        if "Limite de la deducción" in h2c and row.get("Limite de la deducción") not in (None, ""):
-            put(r, h2c["Limite de la deducción"], row.get("Limite de la deducción"))
+        if "Limite de la deducciÃ³n" in h2c and row.get("Limite de la deducciÃ³n") not in (None, ""):
+            put(r, h2c["Limite de la deducciÃ³n"], row.get("Limite de la deducciÃ³n"))
 
-        if "Depreciación acumulada" in h2c:
-            put(r, h2c["Depreciación acumulada"], row.get("Depreciación acumulada"))
+        if "DepreciaciÃ³n acumulada" in h2c:
+            put(r, h2c["DepreciaciÃ³n acumulada"], row.get("DepreciaciÃ³n acumulada"))
 
-        if "Meses completos de utilización" in h2c:
-            put(r, h2c["Meses completos de utilización"], row.get("Meses de Utilizacion"))
+        if "Meses completos de utilizaciÃ³n" in h2c:
+            put(r, h2c["Meses completos de utilizaciÃ³n"], row.get("Meses de Utilizacion"))
 
-        h_col = "% de deducción fiscal (capturar como factor ejemplo 10% = 0.10)"
+        h_col = "% de deducciÃ³n fiscal (capturar como factor ejemplo 10% = 0.10)"
         if h_col in h2c and row.get(h_col) not in (None, ""):
             put(r, h2c[h_col], _to_decimal_percent(row.get(h_col)))
 
@@ -243,14 +228,14 @@ def _fill_template_with_data(df_in: pd.DataFrame) -> bytes:
     wb.save(buf)
     return buf.getvalue()
 
-# ─────────────────────────────
-# Un solo botón: genera y descarga
-# ─────────────────────────────
+# âââââââââââââââââââââââââââââ
+# Un solo botÃ³n: genera y descarga
+# âââââââââââââââââââââââââââââ
 xls_bytes = _fill_template_with_data(edited)
 file_name = f"Cedula_Deduccion_Anual_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 
 st.download_button(
-    "📥 Descargar Excel (Cédula de deducción anual)",
+    "ð¥ Descargar Excel (CÃ©dula de deducciÃ³n anual)",
     data=xls_bytes,
     file_name=file_name,
     mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

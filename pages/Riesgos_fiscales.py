@@ -10,6 +10,7 @@ from zipfile import BadZipFile, ZipFile
 import numpy as np
 import pandas as pd
 import streamlit as st
+from core.theme import apply_theme
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
@@ -22,6 +23,7 @@ from core.streamlit_compat import set_query_params
 
 # ===================== Config y controles de sesión =====================
 st.set_page_config(page_title="Riesgos Fiscales", layout="centered")
+apply_theme()
 
 ensure_session_from_token()
 handle_logout_request()

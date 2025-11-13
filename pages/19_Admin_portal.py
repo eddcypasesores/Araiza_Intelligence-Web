@@ -11,6 +11,7 @@ from typing import Sequence
 
 import streamlit as st
 
+from core.theme import apply_theme
 from core.db import (
     ensure_schema,
     get_conn,
@@ -486,6 +487,7 @@ def _manage_recovery_tokens(conn: sqlite3.Connection) -> None:
 
 def main() -> None:
     st.set_page_config(page_title="Administracion del portal", layout="wide")
+apply_theme()
     require_super_admin()
     render_nav(active_top="admin_portal", show_inicio=True)
 

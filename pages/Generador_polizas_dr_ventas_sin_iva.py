@@ -7,6 +7,7 @@ from io import BytesIO
 from urllib.parse import urlencode
 
 import streamlit as st
+from core.theme import apply_theme
 from openpyxl import Workbook, load_workbook
 from openpyxl.utils.datetime import from_excel
 
@@ -61,6 +62,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+apply_theme()
 ensure_session_from_token()
 handle_logout_request()
 _handle_pending_navigation()

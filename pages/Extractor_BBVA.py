@@ -9,8 +9,9 @@ from urllib.parse import urlencode
 import pandas as pd
 import streamlit as st
 
+from core.theme import apply_theme
 from core.auth import ensure_session_from_token, auth_query_params
-from core.custom_nav import _NAV_CSS as BRAND_NAV_CSS, _navbar_logo_data
+from core.custom_nav import render_brand_logout_nav
 from core.extractor_bbva import extract_bbva_pdf_to_df
 
 ASSETS_DIR = next((p for p in (Path("Assets"), Path("assets")) if p.exists()), Path("."))
@@ -18,7 +19,7 @@ LOGO_LEFT = ASSETS_DIR / "logo.jpg"
 LOGO_RIGHT = ASSETS_DIR / "banks/bbva.jpeg"
 
 
-def _nav_back_href() -> str:
+def _back_href() -> str:
     params = auth_query_params()
     query = urlencode(params) if params else ""
     base = "./convertidor_estados_cuenta"
@@ -26,24 +27,16 @@ def _nav_back_href() -> str:
 
 
 def _render_nav() -> None:
-    st.markdown(BRAND_NAV_CSS, unsafe_allow_html=True)
-    logo_src = _navbar_logo_data()
-    back_href = _nav_back_href()
-    nav_html = (
-        '<div class="custom-nav">'
-        '<div class="nav-brand">'
-        f'<img src="{logo_src}" alt="Araiza Intelligence" />'
-        "<span>Araiza Intelligence</span>"
-        "</div>"
-        '<div class="nav-actions">'
-        f'<a href="{back_href}" target="_self">&larr; Regresar</a>'
-        "</div>"
-        "</div>"
+    render_brand_logout_nav(
+        "pages/convertidor_estados_cuenta.py",
+        brand="Extractor BBVA",
+        action_label="Atras",
+        action_href=_back_href(),
     )
-    st.markdown(nav_html, unsafe_allow_html=True)
 
 
 st.set_page_config(page_title="Extractor BBVA", layout="centered")
+apply_theme()
 ensure_session_from_token()
 _render_nav()
 st.markdown(

@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import streamlit as st
 
+from core.theme import apply_theme
 import base64
-import html
 import json
 from contextlib import closing
 from pathlib import Path
 from urllib.parse import quote, urlencode
 
 from core.auth import forget_session
+from core.custom_nav import render_brand_logout_nav
 from core.db import (
     CEDULA_SHARED_SUBMODULES,
     cedula_get_payload,
@@ -23,14 +24,6 @@ from core.db import (
 from core.session import process_logout_flag
 from core.streamlit_compat import set_query_params
 
-
-NAV_LOGO_CANDIDATES = (
-    Path("assets/logo_nav.png"),
-    Path("assets/Araiza Intelligence logo-04.png"),
-    Path("assets/Araiza Intelligence logo-04.jpg"),
-    Path("assets/logo.png"),
-    Path("assets/logo.jpg"),
-)
 
 CEDULA_INICIO_PAGE_PARAM = "Cedula de impuestos - Inicio"
 
@@ -63,49 +56,8 @@ div[data-testid="stToolbar"],
 #stDecoration{
   display:none !important;
 }
-.custom-nav{
-  position:fixed;
-  top:0;
-  left:50%;
-  transform:translateX(-50%);
-  width:min(1100px,100%);
-  z-index:1000;
-  background:#ffffff;
-  color:#0f172a;
-  padding:10px 22px;
-  border-radius:999px;
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:16px;
-  box-shadow:0 18px 32px rgba(15,23,42,0.18);
-  border:1px solid rgba(148,163,184,0.25);
-}
-.nav-brand{
-  display:inline-flex;
-  align-items:center;
-  gap:10px;
-  font-weight:700;
-  font-size:1rem;
-  text-transform:uppercase;
-  letter-spacing:0.05em;
-}
-.nav-brand img{
-  height:28px;
-  width:auto;
-  display:block;
-}
-.nav-actions a{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  padding:6px 20px;
-  border-radius:999px;
-  background:#0d3c74;
-  color:#fff;
-  font-weight:600;
-  text-decoration:none;
-  box-shadow:0 6px 16px rgba(13,60,116,0.25);
+.nav-spacer{
+  height:90px;
 }
 .cedulas-wrapper{
   max-width:1100px;
@@ -397,32 +349,6 @@ def _render_shared_data(conn, selected_rfc: str | None) -> None:
                     st.experimental_rerun()
 
 
-def _navbar_logo_data() -> str:
-    for candidate in NAV_LOGO_CANDIDATES:
-        if candidate.exists():
-            try:
-                encoded = base64.b64encode(candidate.read_bytes()).decode()
-                return f"data:image/png;base64,{encoded}"
-            except Exception:
-                continue
-    return DEFAULT_NAV_LOGO
-
-
-def _logout_href() -> str:
-    params: dict[str, str] = {}
-    for key, value in st.query_params.items():
-        if key in {"goto", "logout"}:
-            continue
-        if isinstance(value, list):
-            value = value[-1] if value else None
-        if isinstance(value, str) and value:
-            params[key] = value
-    params.setdefault("page", CEDULA_INICIO_PAGE_PARAM)
-    params["logout"] = "1"
-    query = urlencode(params, doseq=False)
-    return f"?{query}"
-
-
 def _handle_logout_request() -> None:
     if process_logout_flag():
         forget_session()
@@ -431,15 +357,8 @@ def _handle_logout_request() -> None:
 
 
 def render_fixed_nav() -> None:
-    logo_src = _navbar_logo_data()
-    logout_href = html.escape(_logout_href(), quote=True)
-    nav_html = (
-        f'<div class="custom-nav">'
-        f'<div class="nav-brand"><img src="{logo_src}" alt="Araiza logo"><span>Araiza Intelligence</span></div>'
-        f'<div class="nav-actions"><a href="{logout_href}" target="_self">Cerrar sesi&oacute;n</a></div>'
-        f'</div>'
-    )
-    st.markdown(nav_html, unsafe_allow_html=True)
+    render_brand_logout_nav(CEDULA_INICIO_PAGE_PARAM, brand="Cédulas fiscales")
+    st.markdown('<div class="nav-spacer"></div>', unsafe_allow_html=True)
 
 
 def _handle_pending_navigation() -> None:
@@ -462,6 +381,7 @@ def _handle_pending_navigation() -> None:
 
 def main() -> None:
     st.set_page_config(page_title="Cedula de impuestos - Inicio", layout="wide")
+    apply_theme()
     _handle_logout_request()
     _handle_pending_navigation()
     st.markdown(f"<style>{CSS}</style>", unsafe_allow_html=True)

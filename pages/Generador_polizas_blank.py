@@ -6,6 +6,7 @@ from urllib.parse import urlencode
 
 import streamlit as st
 
+from core.theme import apply_theme
 from core.auth import ensure_session_from_token, auth_query_params
 from core.custom_nav import handle_logout_request, render_brand_logout_nav
 
@@ -15,6 +16,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+apply_theme()
 handle_logout_request()
 ensure_session_from_token()
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import streamlit as st
 
+from core.theme import apply_theme
 from core.auth import ensure_session_from_token, auth_query_params
 from core.custom_nav import handle_logout_request, render_brand_logout_nav
 
@@ -14,27 +15,59 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+apply_theme()
 handle_logout_request("pages/0_Inicio.py")
 
 
 PAGE_CSS = """
 <style>
-  html, body, .stApp {
-    background:#f5f6fb !important;
-    color:#0f172a !important;
-  }
-  #MainMenu, header, footer, div[data-testid="stToolbar"], section[data-testid="stSidebar"] {
-    display:none !important;
-  }
-  .stAppViewContainer, .block-container {
-    padding-top:5.5rem !important;
-  }
-  .block-container {
-    max-width:1100px !important;
-  }
-  *:not(i) {
-    color:#0f172a;
-  }
+.block-container {
+  padding-top:5.5rem !important;
+  max-width:1100px !important;
+  color:var(--ai-page-text) !important;
+}
+.stApp *:not(svg):not(path) {
+  color:inherit;
+}
+#MainMenu, header, footer, div[data-testid="stToolbar"], section[data-testid="stSidebar"] {
+  display:none !important;
+}
+.landing-surface {
+  background:var(--ai-surface-bg);
+  color:var(--ai-surface-text);
+  border-radius:32px;
+  padding:40px 48px;
+  box-shadow:var(--ai-card-shadow);
+  border:1px solid var(--ai-border-color);
+  backdrop-filter: blur(6px);
+}
+.landing-divider {
+  border:none;
+  border-top:1px solid var(--ai-border-color);
+  margin:20px 0 30px;
+}
+.landing-actions {
+  margin-top:20px;
+}
+.landing-actions .stButton {
+  width:100%;
+}
+.landing-actions .stButton button {
+  width:100%;
+  border-radius:18px;
+  font-weight:600;
+  padding:16px 18px;
+  border:1px solid transparent;
+  background:var(--ai-accent);
+  color:var(--ai-accent-contrast) !important;
+  box-shadow:0 12px 25px rgba(0,0,0,0.12);
+}
+.landing-actions .stButton button:hover {
+  filter:brightness(1.05);
+}
+.landing-description {
+  color:var(--ai-muted-text);
+}
 </style>
 """
 st.markdown(PAGE_CSS, unsafe_allow_html=True)
@@ -107,33 +140,29 @@ _ensure_auth_param()
 render_brand_logout_nav("pages/Descarga_masiva_inicio.py", brand="Descarga masiva")
 
 
-# --- INICIO DEL CONTENIDO SIMPLIFICADO ---
-# Usamos contenedores y markdown para estructurar el contenido simple
+with st.container():
+    st.markdown('<div class="landing-surface">', unsafe_allow_html=True)
+    st.title("Exporta tus CFDI de forma inteligente")
+    st.markdown(
+        '<p class="landing-description">Selecciona el flujo que deseas trabajar y te guiaremos paso a paso.</p>',
+        unsafe_allow_html=True,
+    )
+    st.markdown('<hr class="landing-divider">', unsafe_allow_html=True)
+    st.subheader("Accesos rápidos")
+    st.markdown('<div class="landing-actions">', unsafe_allow_html=True)
+    col_cfdi, col_nomina = st.columns(2, gap="large")
 
-# Eliminamos st.container() y las divs HTML
-st.title("Exporta tus CFDI de forma inteligente") # Título principal
-st.write("Selecciona el flujo que deseas trabajar y te guiaremos paso a paso.") # Párrafo introductorio
+    with col_cfdi:
+        st.write("Genera reportes en Excel a partir de tus archivos CFDI.")
+        if st.button("Exportar CFDI", use_container_width=True, key="btn_cfdi"):
+            st.switch_page("pages/Descarga_masiva_xml.py")
 
-# Separador visual
-st.divider()
-
-st.subheader("Accesos rápidos")
-col_cfdi, col_nomina = st.columns(2)
-
-with col_cfdi:
-    st.write("Genera reportes en Excel a partir de tus archivos CFDI.")
-    # El botón ahora usa el estilo 'primary' por defecto de Streamlit (azul)
-    if st.button("Exportar CFDI", type="primary", use_container_width=True, key="btn_cfdi"):
-        st.switch_page("pages/Descarga_masiva_xml.py")
-
-with col_nomina:
-    st.write("Genera reportes en Excel a partir de tus archivos XML de nómina.")
-    # El botón ahora usa el estilo por defecto de Streamlit (secundario/gris)
-    if st.button(
-        "Exportar XML Nómina",
-        use_container_width=True,
-        key="btn_nomina",
-    ):
-        st.switch_page("pages/Descarga_masiva_nomina.py")
-
-# Fin del contenido simplificado
+    with col_nomina:
+        st.write("Genera reportes en Excel a partir de tus archivos XML de nómina.")
+        if st.button(
+            "Exportar XML Nómina",
+            use_container_width=True,
+            key="btn_nomina",
+        ):
+            st.switch_page("pages/Descarga_masiva_nomina.py")
+    st.markdown("</div></div>", unsafe_allow_html=True)

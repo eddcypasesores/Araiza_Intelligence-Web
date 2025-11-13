@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 import pandas as pd
 import streamlit as st
 
+from core.theme import apply_theme
 from core.auth import ensure_session_from_token, auth_query_params
 from core.custom_nav import handle_logout_request, render_brand_logout_nav
 
@@ -20,17 +21,22 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+apply_theme()
 handle_logout_request()
 
 st.markdown(
     """
 <style>
-#MainMenu, header[data-testid="stHeader"], footer, div[data-testid="stToolbar"] {
-  visibility: hidden !important;
-  display: none !important;
-}
 .block-container {
-  padding-top: 110px !important;
+  padding-top:110px !important;
+  color:var(--ai-page-text) !important;
+}
+[data-testid="stSidebar"], #MainMenu, header[data-testid="stHeader"], footer, div[data-testid="stToolbar"] {
+  visibility:hidden !important;
+  display:none !important;
+}
+.stApp *:not(svg):not(path) {
+  color:inherit;
 }
 </style>
 """,
@@ -128,6 +134,7 @@ PAYROLL_COLUMNS: tuple[str, ...] = (
     "FechaTimbrado",
     *PERCEPTION_COLUMNS,
     "Retención ISR",
+    "ISR Asimilados",
     "ISR Aguinaldo",
     "Cuota IMSS",
     "Crédito Infonavit",
@@ -143,6 +150,7 @@ NUMERIC_PAYROLL_COLUMNS: tuple[str, ...] = (
     "TotalOtrosPagos",
     *PERCEPTION_COLUMNS,
     "Retención ISR",
+    "ISR Asimilados",
     "ISR Aguinaldo",
     "Cuota IMSS",
     "Crédito Infonavit",
@@ -191,6 +199,8 @@ def _normalize_text(text: str | None) -> str:
 
 def _resolve_perception_label(percepcion: ET.Element) -> str | None:
     tipo = percepcion.attrib.get("TipoPercepcion")
+    if tipo:
+        tipo = tipo.strip().zfill(3)
     label = PERCEPCION_LABELS.get(tipo)
     if label:
         return label
@@ -279,7 +289,13 @@ def parse_cfdi_xml(file_bytes: bytes) -> tuple[dict[str, str | float | None], li
                     ded_imss += importe
                 if tipo in INFONAVIT_TYPES or "infonavit" in concepto:
                     ded_infonavit += importe
-        payroll_row["Retención ISR"] = ded_isr_regular
+        asimilado_total = _to_decimal(payroll_row.get("Asimilado a salario"))
+        ret_isr_value = 0.0 if ded_isr_aguinaldo != 0 else ded_isr_regular
+        isr_asimilados_val = ret_isr_value if asimilado_total != 0 else 0.0
+        if isr_asimilados_val:
+            ret_isr_value = 0.0
+        payroll_row["Retención ISR"] = ret_isr_value
+        payroll_row["ISR Asimilados"] = isr_asimilados_val
         payroll_row["ISR Aguinaldo"] = ded_isr_aguinaldo
         payroll_row["Cuota IMSS"] = ded_imss
         payroll_row["Crédito Infonavit"] = ded_infonavit
