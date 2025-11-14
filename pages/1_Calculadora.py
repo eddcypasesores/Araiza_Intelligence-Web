@@ -6,10 +6,13 @@ from typing import Any
 import importlib.util
 import html
 import math
+import time
+import unicodedata
 from uuid import uuid4
 from types import SimpleNamespace
 from pathlib import Path
 import pandas as pd
+import requests
 import streamlit as st
 from core.theme import apply_theme
 from streamlit.components.v1 import html as components_html
@@ -35,11 +38,14 @@ from core.tarifas import tarifa_por_plaza
 from core.driver_costs import read_trabajadores, costo_diario_trabajador_auto
 from core.params import read_params
 from core.maps import GoogleMapsClient, GoogleMapsError
-from core.inegi_routing import InegiRoutingClient, InegiRoutingError
+from core.inegi_routing import InegiRoutingClient, InegiRoutingError, InegiRouteSummary
 from core.navigation import render_nav
 from core.flash import consume_flash, set_flash
 from core.login_ui import render_login_header, render_token_reset_section
 from core.streamlit_compat import rerun, set_query_params, normalize_page_path
+
+# Feature flags
+SHOW_INEGI_SECTION = False
 
 # ===============================
 # Configuracion de pagina + CSS
@@ -125,15 +131,6 @@ st.markdown(
       .top-form .meta-row { display:flex; gap:1rem; }
       .top-form .meta-row > div[data-testid="column"] { display:flex; }
       .top-form .meta-row > div[data-testid="column"] > div { flex:1; }
-      .calc-card {
-        border:1px solid rgba(148,163,184,.25);
-        border-top:none;
-        border-radius:0 0 26px 26px;
-        background:#ffffff;
-        padding:24px clamp(18px,2.4vw,36px) clamp(18px,2vw,28px);
-        box-shadow:0 20px 44px rgba(15,23,42,0.12);
-        margin-top:-12px;
-      }
       .top-form__meta {
         margin-top:1rem;
       }
@@ -155,11 +152,17 @@ st.markdown(
       }
       div[data-testid="stVerticalBlock"]:has(> .calc-card__header) {
         margin-top:1.4rem;
-        border:1px solid rgba(148,163,184,0.25);
-        border-radius:26px;
-        background:#ffffff;
-        box-shadow:0 20px 44px rgba(15,23,42,0.12);
+        border-radius:26px 26px 0 0;
         overflow:hidden;
+      }
+      div[data-testid="stVerticalBlock"]:has(.top-form) {
+        border:1px solid rgba(148,163,184,.25);
+        border-top:none;
+        border-radius:0 0 26px 26px;
+        background:#ffffff;
+        padding:24px clamp(18px,2.4vw,36px) clamp(18px,2vw,28px);
+        box-shadow:0 20px 44px rgba(15,23,42,0.12);
+        margin-top:-12px;
       }
     </style>
     """,
@@ -621,36 +624,6 @@ def _calculate_route(
 # ===============================
 # API de ruteo INEGI (preparación)
 # ===============================
-def _parse_coord_value(value: Any) -> float | None:
-    if value is None:
-        return None
-    try:
-        text = str(value).strip()
-    except Exception:
-        return None
-    if not text:
-        return None
-    try:
-        return float(text)
-    except (TypeError, ValueError):
-        return None
-
-
-def _format_coord_value(value: Any) -> str:
-    coord = _parse_coord_value(value)
-    if coord is None:
-        return ""
-    return f"{coord:.6f}"
-
-
-def _build_point(lat_value: Any, lng_value: Any) -> tuple[float, float] | None:
-    lat = _parse_coord_value(lat_value)
-    lng = _parse_coord_value(lng_value)
-    if lat is None or lng is None:
-        return None
-    return (lat, lng)
-
-
 def _format_duration_label(seconds: float | None) -> str:
     total = max(0.0, float(seconds or 0.0))
     hours = int(total // 3600)
@@ -658,160 +631,191 @@ def _format_duration_label(seconds: float | None) -> str:
     return f"{hours:02d}:{minutes:02d} h"
 
 
-def _sync_inegi_inputs(origen: dict[str, Any] | None, destino: dict[str, Any] | None) -> None:
-    def _update(prefix: str, data: dict[str, Any] | None) -> None:
-        pid_key = f"_inegi_{prefix}_pid"
-        lat_key = f"inegi_{prefix}_lat"
-        lng_key = f"inegi_{prefix}_lng"
-        new_pid = (data or {}).get("place_id")
-        if st.session_state.get(pid_key) != new_pid:
-            st.session_state[pid_key] = new_pid
-            st.session_state[lat_key] = _format_coord_value((data or {}).get("lat"))
-            st.session_state[lng_key] = _format_coord_value((data or {}).get("lng"))
-        st.session_state.setdefault(lat_key, "")
-        st.session_state.setdefault(lng_key, "")
 
-    _update("origin", origen)
-    _update("destination", destino)
+def _safe_float(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _strip_accents(text: str) -> str:
+    normalized = unicodedata.normalize("NFKD", text or "")
+    return "".join(ch for ch in normalized if not unicodedata.combining(ch))
+
+
+def _destination_query_candidates(place: dict[str, Any]) -> list[str]:
+    raw_sources: list[str] = []
+    for key in ("matched_plaza", "description", "address"):
+        val = place.get(key)
+        if isinstance(val, str) and val.strip():
+            raw_sources.append(val.strip())
+
+    candidates: list[str] = []
+    seen: set[str] = set()
+    replacements = {
+        "Méx.": "Mexico",
+        "Méx": "Mexico",
+        "CDMX": "Ciudad de Mexico",
+    }
+
+    for base in raw_sources:
+        variants = [base]
+        ascii_variant = _strip_accents(base)
+        if ascii_variant != base:
+            variants.append(ascii_variant)
+
+        for variant in list(variants):
+            if "," in variant:
+                variants.append(variant.split(",", 1)[0])
+
+        for variant in variants:
+            cleaned = variant
+            for src, dst in replacements.items():
+                cleaned = cleaned.replace(src, dst)
+            cleaned = " ".join(cleaned.split())
+            if cleaned and cleaned not in seen:
+                seen.add(cleaned)
+                candidates.append(cleaned)
+
+    return candidates
+
+
+def _resolve_destination_from_place(
+    client: InegiRoutingClient,
+    place: dict[str, Any] | None,
+    label: str,
+) -> tuple[int, dict[str, Any]]:
+    if not place:
+        raise InegiRoutingError(f"Selecciona un {label} antes de consultar INEGI.")
+
+    lat = _safe_float(place.get("lat"))
+    lng = _safe_float(place.get("lng"))
+    candidates = _destination_query_candidates(place)
+    if not candidates:
+        raise InegiRoutingError(f"No hay descripcion para el {label}.")
+
+    last_error: InegiRoutingError | None = None
+    for candidate in candidates:
+        try:
+            return client.resolve_destination(candidate, lat=lat, lng=lng)
+        except InegiRoutingError as exc:
+            last_error = exc
+            continue
+
+    raise last_error or InegiRoutingError(
+        f"No se pudieron resolver destinos para el {label}."
+    )
+
+
+def _route_destinos_with_retry(
+    client: InegiRoutingClient,
+    *,
+    tipo: str,
+    dest_i: int,
+    dest_f: int,
+    vehicle: int,
+    axes: int = 0,
+    attempts: int = 3,
+) -> InegiRouteSummary:
+    last_exc: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return client.route_destinos(
+                tipo=tipo,
+                dest_i=dest_i,
+                dest_f=dest_f,
+                vehicle=vehicle,
+                axes=axes,
+            )
+        except InegiRoutingError:
+            raise
+        except requests.exceptions.Timeout as exc:
+            last_exc = exc
+        except requests.exceptions.RequestException as exc:
+            last_exc = exc
+            break
+
+        time.sleep(0.8 * attempt)
+
+    if last_exc:
+        raise InegiRoutingError(
+            f"No fue posible obtener la ruta (reintentos agotados): {last_exc}"
+        ) from last_exc
+
+    raise InegiRoutingError("No fue posible obtener la ruta después de varios intentos.")
 
 
 def _render_inegi_routing_section(origen: dict[str, Any] | None, destino: dict[str, Any] | None) -> None:
     st.divider()
-    _sync_inegi_inputs(origen, destino)
-    with st.expander("Preparación API de ruteo INEGI", expanded=False):
-        configured = bool(INEGI_ROUTING_TOKEN)
-        base_url = INEGI_ROUTING_BASE_URL or "Configura INEGI_ROUTING_BASE_URL"
-        st.caption("Define token y coordenadas para probar el endpoint de ruteo oficial del INEGI.")
-        st.markdown(
-            f"- Token global configurado: {'sí' if configured else 'no'}\n"
-            f"- Endpoint base: `{base_url}`"
+    st.markdown("#### Ruta oficial INEGI (cuota)")
+    base_url = INEGI_ROUTING_BASE_URL or "Configura INEGI_ROUTING_BASE_URL"
+
+    token_input = st.text_input(
+        "Token INEGI (opcional)",
+        key="inegi_token_override",
+        type="password",
+        help="Si lo dejas vacio se utilizara INEGI_ROUTING_TOKEN configurado en secrets o entorno.",
+    )
+    st.caption(f"Endpoint base: `{base_url}`")
+
+    if not origen or not destino:
+        st.info("Selecciona un origen y destino para consultar la ruta de cuota del INEGI.")
+        return
+
+    effective_token = (token_input or "").strip() or INEGI_ROUTING_TOKEN
+    if not effective_token:
+        st.error("No hay token configurado. Define INEGI_ROUTING_TOKEN o ingresalo en el campo anterior.")
+        return
+
+    cols = st.columns(2)
+    cols[0].markdown(f"**Origen seleccionado:** {origen.get('description', 'Sin descripcion')}")
+    cols[1].markdown(f"**Destino seleccionado:** {destino.get('description', 'Sin descripcion')}")
+
+    accion = st.button("Calcular ruta (cuota INEGI)", use_container_width=True)
+    if not accion:
+        return
+
+    try:
+        with InegiRoutingClient(token=effective_token, base_url=INEGI_ROUTING_BASE_URL) as client:
+            origin_id, origin_match = _resolve_destination_from_place(client, origen, "origen")
+            dest_id, dest_match = _resolve_destination_from_place(client, destino, "destino")
+            summary = _route_destinos_with_retry(
+                client,
+                tipo="cuota",
+                dest_i=origin_id,
+                dest_f=dest_id,
+                vehicle=1,
+            )
+    except InegiRoutingError as exc:
+        st.error(f"INEGI no devolvio una ruta valida: {exc}")
+        return
+    except Exception as exc:
+        st.error(f"Error inesperado al consultar la API de INEGI: {exc}")
+        return
+
+    distance_km = summary.distance_m / 1000.0
+    result_cols = st.columns(3)
+    result_cols[0].metric("Distancia (km)", f"{distance_km:,.2f}")
+    result_cols[1].metric("Duracion estimada", _format_duration_label(summary.duration_s))
+    result_cols[2].metric("Costo casetas", f"${summary.toll_cost:,.2f}")
+
+    if summary.axes_cost:
+        st.caption(f"Costo por ejes excedentes: ${summary.axes_cost:,.2f}")
+
+    st.caption(
+        f"INEGI (cuota) | Origen: {origin_match.get('nombre', 'N/D')} | Destino: {dest_match.get('nombre', 'N/D')}"
+    )
+    with st.expander("Detalle de respuesta INEGI", expanded=False):
+        st.json(
+            {
+                "origen_match": origin_match,
+                "destino_match": dest_match,
+                "route": summary.raw,
+            }
         )
-
-        with st.form("inegi_routing_form", clear_on_submit=False):
-            token_input = st.text_input(
-                "Token INEGI (opcional)",
-                key="inegi_token_override",
-                type="password",
-                help="Si lo dejas vacío se utilizará INEGI_ROUTING_TOKEN definido en secrets o entorno.",
-            )
-            origin_cols = st.columns(2)
-            origin_cols[0].text_input(
-                "Latitud origen",
-                key="inegi_origin_lat",
-                placeholder="19.432608",
-            )
-            origin_cols[1].text_input(
-                "Longitud origen",
-                key="inegi_origin_lng",
-                placeholder="-99.133209",
-            )
-
-            dest_cols = st.columns(2)
-            dest_cols[0].text_input(
-                "Latitud destino",
-                key="inegi_destination_lat",
-                placeholder="20.673590",
-            )
-            dest_cols[1].text_input(
-                "Longitud destino",
-                key="inegi_destination_lng",
-                placeholder="-103.344000",
-            )
-
-            profile_cols = st.columns(2)
-            profile = profile_cols[0].selectbox(
-                "Perfil",
-                ["driving", "driving-car", "driving-heavy", "foot-walking"],
-                index=0,
-                key="inegi_profile_select",
-            )
-            geometry_fmt = profile_cols[1].selectbox(
-                "Geometría",
-                ["geojson", "polyline"],
-                index=0,
-                key="inegi_geometry_select",
-            )
-
-            options_cols = st.columns(3)
-            alternatives = int(
-                options_cols[0].number_input(
-                    "Alternativas",
-                    min_value=0,
-                    max_value=3,
-                    value=0,
-                    step=1,
-                    format="%d",
-                    key="inegi_alternatives",
-                )
-            )
-            include_steps = options_cols[1].checkbox(
-                "Incluir pasos",
-                value=True,
-                key="inegi_steps",
-            )
-            include_annotations = options_cols[2].checkbox(
-                "Anotaciones",
-                value=False,
-                key="inegi_annotations",
-            )
-
-            continue_straight = st.checkbox(
-                "Continuar recto en bifurcaciones",
-                value=False,
-                key="inegi_continue_straight",
-            )
-
-            submitted = st.form_submit_button("Probar ruteo INEGI", use_container_width=True)
-
-        if not submitted:
-            return
-
-        token = (token_input or "").strip() or INEGI_ROUTING_TOKEN
-        if not token:
-            st.error("No hay token configurado. Define INEGI_ROUTING_TOKEN o ingrésalo en el formulario.")
-            return
-
-        origin_point = _build_point(
-            st.session_state.get("inegi_origin_lat"),
-            st.session_state.get("inegi_origin_lng"),
-        )
-        destination_point = _build_point(
-            st.session_state.get("inegi_destination_lat"),
-            st.session_state.get("inegi_destination_lng"),
-        )
-        if origin_point is None or destination_point is None:
-            st.error("Verifica las coordenadas de origen y destino (latitud y longitud).")
-            return
-
-        try:
-            with InegiRoutingClient(token=token, base_url=INEGI_ROUTING_BASE_URL) as client:
-                summary = client.route(
-                    [origin_point, destination_point],
-                    profile=profile,
-                    alternatives=alternatives,
-                    steps=include_steps,
-                    annotations=include_annotations,
-                    geometries=geometry_fmt,
-                    continue_straight=continue_straight,
-                )
-        except InegiRoutingError as exc:
-            st.error(f"INEGI no devolvió una ruta válida: {exc}")
-            return
-        except Exception as exc:  # pragma: no cover - defensivo
-            st.error(f"Error inesperado al contactar la API de ruteo: {exc}")
-            return
-
-        distance_km = summary.distance_m / 1000.0
-        result_cols = st.columns(2)
-        result_cols[0].metric("Distancia (km)", f"{distance_km:,.2f}")
-        result_cols[1].metric("Duración estimada", _format_duration_label(summary.duration_s))
-        st.caption(
-            f"Legs devueltos: {len(summary.legs)} | Puntos de geometría: {len(summary.coordinates)}"
-        )
-        with st.expander("Respuesta JSON INEGI", expanded=False):
-            st.json(summary.raw)
-
-
 # ===============================
 # Encabezado + Selecciones TOP (orden solicitado)
 # ===============================
@@ -819,7 +823,6 @@ st.markdown(
     "<div class='calc-card__header'><span class='calc-card__title'>COSTOS DE TRASLADO</span></div>",
     unsafe_allow_html=True,
 )
-st.markdown("<div class='calc-card'>", unsafe_allow_html=True)
 
 with st.container():
     origen: dict[str, Any] | None = None
@@ -1082,7 +1085,8 @@ with st.container():
     parada = st.session_state.get("top_parada_data") if show_stop else None
     current_show_stop = show_stop
 
-st.markdown("</div>", unsafe_allow_html=True)
+if SHOW_INEGI_SECTION:
+    _render_inegi_routing_section(origen, destino)
 
 total_banner = st.container()
 

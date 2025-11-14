@@ -105,6 +105,7 @@ def _render_login() -> None:
 st.markdown(
     """
     <style>
+      :root { color-scheme: light !important; }
       html, body, .stApp, .block-container { background:#ffffff !important; color:#111 !important; }
       #MainMenu, header, footer, div[data-testid=\"stToolbar\"] { display:none !important; }
       .block-container { padding-top: 1rem; }
@@ -168,6 +169,12 @@ st.markdown(
       div[data-testid="stFileUploader"] div[data-testid="stFileUploaderDropzone"] > div {
         justify-content:center;
         width:100%;
+      }
+      button[kind="secondary"]{
+        color:#ffffff !important;
+      }
+      .riesgos-card button {
+        color:#ffffff !important;
       }
     </style>
     """,

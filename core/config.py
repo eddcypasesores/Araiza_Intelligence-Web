@@ -141,5 +141,6 @@ def _load_google_maps_key() -> str:
 GOOGLE_MAPS_API_KEY = _load_google_maps_key()
 INEGI_ROUTING_TOKEN = _load_secret_value("INEGI_ROUTING_TOKEN")
 INEGI_ROUTING_BASE_URL = (
-    os.getenv("INEGI_ROUTING_BASE_URL", "").strip() or "https://gaia.inegi.org.mx/sigwebservices/api/ruteo/route/v1"
+    os.getenv("INEGI_ROUTING_BASE_URL", "").strip()
+    or "https://gaia.inegi.org.mx/sakbe_v3.1"
 )

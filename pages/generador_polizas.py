@@ -224,6 +224,50 @@ div[data-testid="stToolbar"],
   font-weight:600; font-size:clamp(14px,1.3vw,18px);
   text-decoration:none !important; color:#111 !important;
 }
+.card.policy.split-card{
+  position:relative;
+  overflow:hidden;
+  flex-direction:column;
+  gap:8px;
+  transition:transform .2s ease, box-shadow .2s ease;
+}
+.card.policy.split-card:hover{
+  transform:scale(1.05);
+  box-shadow:0 12px 26px rgba(52,83,212,0.25);
+}
+.split-label{
+  transition:opacity .15s ease;
+}
+.split-card:hover .split-label{
+  opacity:0;
+}
+.split-options{
+  display:none;
+  width:100%;
+  flex-direction:row;
+  gap:10px;
+  flex:1;
+  align-items:stretch;
+  height:100%;
+}
+.split-card:hover .split-options{
+  display:flex;
+}
+.split-option{
+  flex:1;
+  height:100%;
+  border:none;
+  border-radius:12px;
+  padding:14px;
+  font-size:clamp(14px,1.3vw,20px);
+  font-weight:600;
+  color:#0f172a !important;
+  background:#ffffff;
+  text-decoration:none !important;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
 .placeholder { height: var(--policyH); }
 .divider {
   height:var(--dividerH); background:#000; border-radius:999px;
@@ -250,20 +294,32 @@ st.markdown(
 st.write("")
 
 policies = [
-    ("Pólizas Dr Ventas sin IVA"),
-    ("Pólizas Dr Ventas con IVA"),
+    ("Pólizas Dr Ventas"),
     ("Pólizas Dr Ventas con IVA Coordinados"),
     ("Pólizas Dr Ventas Combinadas"),
     ("Pólizas Dr Egresos"),
-    ("Pólizas Ig Cobranza sin IVA"),
-    ("Pólizas Ig Cobranza con IVA"),
-    ("Pólizas Ig Cobranza sin IVA Coordinados"),
-    ("Pólizas Ig Cobranza con IVA Coordinados"),
+    ("Pólizas Ig Cobranza"),
+    ("Pólizas Ig Cobranza Coordinados"),
     ("Pólizas Ig Cobranza con IVA y Retención Coordinados"),
     ("Pólizas Ig Cobranza Combinadas"),
     ("Pólizas Eg"),
     ("Generador de Polizas Contables Nomina"),
 ]
+
+SPLIT_CARD_OPTIONS = {
+    "Pólizas Dr Ventas": [
+        ("Sin IVA", "Pólizas Dr Ventas sin IVA"),
+        ("Con IVA", "Pólizas Dr Ventas con IVA"),
+    ],
+    "Pólizas Ig Cobranza": [
+        ("Sin IVA", "Pólizas Ig Cobranza sin IVA"),
+        ("Con IVA", "Pólizas Ig Cobranza con IVA"),
+    ],
+    "Pólizas Ig Cobranza Coordinados": [
+        ("Sin IVA", "Pólizas Ig Cobranza sin IVA Coordinados"),
+        ("Con IVA", "Pólizas Ig Cobranza con IVA Coordinados"),
+    ],
+}
 
 SLOTS_PER_ROW = 5
 policy_missing = (SLOTS_PER_ROW - (len(policies) % SLOTS_PER_ROW)) % SLOTS_PER_ROW
@@ -276,11 +332,32 @@ for start in range(0, policy_total, SLOTS_PER_ROW):
         with cols[i]:
             if idx < len(policies):
                 label = policies[idx]
-                url = _card_href(label)
-                st.markdown(
-                    f'<a class="card policy" href="{url}" target="_self" rel="noopener noreferrer">{label}</a>',
-                    unsafe_allow_html=True,
-                )
+                if label in SPLIT_CARD_OPTIONS:
+                    opts = SPLIT_CARD_OPTIONS[label]
+                    opt_markup = ""
+                    for opt_label, opt_target in opts:
+                        url = _card_href(opt_target)
+                        opt_markup += (
+                            f'<a class="split-option" href="{url}" target="_self" '
+                            f'rel="noopener noreferrer">{opt_label}</a>'
+                        )
+                    st.markdown(
+                        f"""
+                        <div class="card policy split-card">
+                          <div class="split-label">{label}</div>
+                          <div class="split-options">
+                            {opt_markup}
+                          </div>
+                        </div>
+                        """,
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    url = _card_href(label)
+                    st.markdown(
+                        f'<a class="card policy" href="{url}" target="_self" rel="noopener noreferrer">{label}</a>',
+                        unsafe_allow_html=True,
+                    )
             else:
                 st.markdown('<div class="card placeholder"></div>', unsafe_allow_html=True)
 
