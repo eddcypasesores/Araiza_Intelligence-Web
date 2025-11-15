@@ -79,18 +79,18 @@ with st.spinner("Extrayendo movimientos..."):
     df = extraer_base(uploaded)
 
 if df.empty:
-    st.warning("No se detectaron movimientos v?lidos en el documento.")
+    st.warning("No se detectaron movimientos válidos en el documento.")
     st.stop()
 
 cargos_total = pd.to_numeric(df.get("Cargo"), errors="coerce").fillna(0).sum()
 abonos_total = pd.to_numeric(df.get("Abono"), errors="coerce").fillna(0).sum()
 
-st.success(f"Extracci?n completada. Movimientos detectados: {len(df)}")
+st.success(f"Extracción completada. Movimientos detectados: {len(df)}")
 tot1, tot2 = st.columns(2)
 tot1.metric("Total cargos", f"${cargos_total:,.2f}")
 tot2.metric("Total abonos", f"${abonos_total:,.2f}")
 
-with st.expander("Ver movimientos extra?dos"):
+with st.expander("Ver movimientos extraídos"):
     st.dataframe(df, use_container_width=True, height=500)
 
 buffer = io.BytesIO()

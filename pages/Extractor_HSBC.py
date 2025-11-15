@@ -11,7 +11,7 @@ import streamlit as st
 from core.theme import apply_theme
 from core.auth import ensure_session_from_token, auth_query_params
 from core.custom_nav import render_brand_logout_nav
-from core.extractor_hsbc import extraer_hsbc
+from core.extractor_hsbc import OCRUnavailableError, extraer_hsbc
 
 ASSETS_DIR = next((p for p in (Path("Assets"), Path("assets")) if p.exists()), Path("."))
 LOGO_LEFT = ASSETS_DIR / "logo.jpg"
@@ -71,6 +71,10 @@ with col3:
 st.markdown("<div style='margin-top:10px'></div>", unsafe_allow_html=True)
 
 uploaded = st.file_uploader("PDF de HSBC", type=["pdf"])
+st.caption(
+    "Los estados de cuenta escaneados se procesan con OCR. "
+    "Asegurate de tener instalado Tesseract con los idiomas espanol e ingles."
+)
 
 if uploaded is None:
     st.info("Sube un PDF para comenzar.")
@@ -78,21 +82,28 @@ if uploaded is None:
 
 uploaded.seek(0)
 with st.spinner("Extrayendo movimientos..."):
-    df = extraer_hsbc(uploaded)
+    try:
+        df = extraer_hsbc(uploaded)
+    except OCRUnavailableError as exc:
+        st.error(f"No se pudo procesar el PDF escaneado: {exc}")
+        st.stop()
+    except Exception as exc:
+        st.error(f"Ocurrio un error al extraer los movimientos: {exc}")
+        st.stop()
 
 if df.empty:
-    st.warning("No se detectaron movimientos v?lidos en el documento.")
+    st.warning("No se detectaron movimientos válidos en el documento.")
     st.stop()
 
 cargos_total = pd.to_numeric(df.get("Cargo"), errors="coerce").fillna(0).sum()
 abonos_total = pd.to_numeric(df.get("Abono"), errors="coerce").fillna(0).sum()
 
-st.success(f"Extracci?n completada. Movimientos detectados: {len(df)}")
+st.success(f"Extracción completada. Movimientos detectados: {len(df)}")
 tot1, tot2 = st.columns(2)
 tot1.metric("Total cargos", f"${cargos_total:,.2f}")
 tot2.metric("Total abonos", f"${abonos_total:,.2f}")
 
-with st.expander("Ver movimientos extra?dos"):
+with st.expander("Ver movimientos extraídos"):
     st.dataframe(df, use_container_width=True, height=500)
 
 buffer = io.BytesIO()
@@ -100,7 +111,13 @@ with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
     df.to_excel(writer, sheet_name="HSBC", index=False)
 buffer.seek(0)
 
-filename = f"hsbc_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
+
+period_label = df.attrs.get("period_label")
+if period_label:
+    safe_label = period_label.lower().replace("/", "-")
+    filename = f"hsbc {safe_label}.xlsx"
+else:
+    filename = f"hsbc_{datetime.now():%Y%m%d_%H%M%S}.xlsx"
 st.download_button(
     "Descargar Excel",
     data=buffer,

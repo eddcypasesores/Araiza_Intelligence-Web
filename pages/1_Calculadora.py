@@ -45,7 +45,7 @@ from core.login_ui import render_login_header, render_token_reset_section
 from core.streamlit_compat import rerun, set_query_params, normalize_page_path
 
 # Feature flags
-SHOW_INEGI_SECTION = False
+SHOW_INEGI_SECTION = True
 
 # ===============================
 # Configuracion de pagina + CSS
@@ -425,6 +425,14 @@ class SectionOutput:
     breakdown: list[tuple[str, str]]
 
 
+@dataclass
+class InegiFallbackResult:
+    summary: SimpleNamespace
+    route_name: str
+    df: pd.DataFrame
+    metadata: dict[str, Any]
+
+
 def section(title: str, total_value: float | None, body_fn=None) -> SectionOutput:
     """Renderiza una seccion en formato compacto."""
 
@@ -641,6 +649,12 @@ def _safe_float(value: Any) -> float | None:
         return None
 
 
+def _inegi_vehicle_code(clase: str | None) -> int:
+    if not isinstance(clase, str):
+        return 1
+    return INEGI_VEHICLE_CODES.get(clase.upper(), 1)
+
+
 def _strip_accents(text: str) -> str:
     normalized = unicodedata.normalize("NFKD", text or "")
     return "".join(ch for ch in normalized if not unicodedata.combining(ch))
@@ -748,7 +762,135 @@ def _route_destinos_with_retry(
     raise InegiRoutingError("No fue posible obtener la ruta después de varios intentos.")
 
 
-def _render_inegi_routing_section(origen: dict[str, Any] | None, destino: dict[str, Any] | None) -> None:
+def _route_detail_with_retry(
+    client: InegiRoutingClient,
+    *,
+    tipo: str,
+    dest_i: int,
+    dest_f: int,
+    vehicle: int,
+    axes: int = 0,
+    attempts: int = 3,
+) -> list[dict[str, Any]]:
+    last_exc: Exception | None = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return client.route_detail_destinos(
+                tipo=tipo,
+                dest_i=dest_i,
+                dest_f=dest_f,
+                vehicle=vehicle,
+                axes=axes,
+            )
+        except InegiRoutingError:
+            raise
+        except requests.exceptions.Timeout as exc:
+            last_exc = exc
+        except requests.exceptions.RequestException as exc:
+            last_exc = exc
+            break
+        time.sleep(0.8 * attempt)
+    if last_exc:
+        raise InegiRoutingError(
+            f"No fue posible obtener el detalle de casetas (reintentos agotados): {last_exc}"
+        ) from last_exc
+    raise InegiRoutingError("No fue posible obtener el detalle de casetas.")
+
+
+def _extract_casetas(detail_segments: list[dict[str, Any]] | None) -> list[dict[str, Any]]:
+    casetas: list[dict[str, Any]] = []
+    for segment in detail_segments or []:
+        try:
+            costo = float(segment.get("costo_caseta") or 0.0)
+        except (TypeError, ValueError):
+            costo = 0.0
+        if costo <= 0:
+            continue
+        nombre = segment.get("direccion") or segment.get("nombre") or "Caseta sin nombre"
+        casetas.append(
+            {
+                "nombre": nombre,
+                "monto": costo,
+            }
+        )
+    return casetas
+
+
+def _build_summary_from_inegi(route_summary: InegiRouteSummary, title: str) -> SimpleNamespace:
+    return SimpleNamespace(
+        distance_m=route_summary.distance_m,
+        duration_s=route_summary.duration_s,
+        polyline=None,
+        polyline_points=route_summary.coordinates or [],
+        legs=[],
+        summary=title,
+        warnings=[],
+        fare=None,
+        raw={"inegi": route_summary.raw},
+    )
+
+
+def _try_inegi_autofill(
+    origen: dict[str, Any] | None,
+    destino: dict[str, Any] | None,
+    clase: str,
+) -> tuple[InegiFallbackResult | None, str | None]:
+    if not origen or not destino:
+        return None, "Selecciona un origen y destino para consultar INEGI."
+    if not INEGI_ROUTING_TOKEN:
+        return None, "Configura INEGI_ROUTING_TOKEN para habilitar el fallback de INEGI."
+
+    vehicle_code = _inegi_vehicle_code(clase)
+    try:
+        with InegiRoutingClient(token=INEGI_ROUTING_TOKEN, base_url=INEGI_ROUTING_BASE_URL) as client:
+            origin_id, origin_match = _resolve_destination_from_place(client, origen, "origen")
+            dest_id, dest_match = _resolve_destination_from_place(client, destino, "destino")
+            route_summary = _route_destinos_with_retry(
+                client,
+                tipo="cuota",
+                dest_i=origin_id,
+                dest_f=dest_id,
+                vehicle=vehicle_code,
+            )
+            detail_segments = _route_detail_with_retry(
+                client,
+                tipo="cuota",
+                dest_i=origin_id,
+                dest_f=dest_id,
+                vehicle=vehicle_code,
+            )
+    except InegiRoutingError as exc:
+        return None, str(exc)
+
+    casetas = _extract_casetas(detail_segments)
+    rows = [
+        {"idx": idx, "plaza": caseta["nombre"], "tarifa": float(caseta["monto"])}
+        for idx, caseta in enumerate(casetas)
+    ]
+    df = pd.DataFrame(rows) if rows else pd.DataFrame(columns=["idx", "plaza", "tarifa"])
+
+    origin_name = origin_match.get("nombre") or origen.get("description") or "Origen"
+    dest_name = dest_match.get("nombre") or destino.get("description") or "Destino"
+    route_title = f"INEGI (cuota) · {origin_name} → {dest_name}"
+    summary_obj = _build_summary_from_inegi(route_summary, route_title)
+    metadata = {
+        "source": "inegi",
+        "vehicle_code": vehicle_code,
+        "origin_match": origin_match,
+        "destination_match": dest_match,
+        "casetas": casetas,
+        "toll_cost": route_summary.toll_cost,
+        "axes_cost": route_summary.axes_cost,
+    }
+    return InegiFallbackResult(summary_obj, route_title, df, metadata), None
+
+
+def _render_inegi_routing_section(
+    origen: dict[str, Any] | None,
+    destino: dict[str, Any] | None,
+    vehicle_code: int,
+    vehicle_label: str,
+) -> None:
     st.divider()
     st.markdown("#### Ruta oficial INEGI (cuota)")
     base_url = INEGI_ROUTING_BASE_URL or "Configura INEGI_ROUTING_BASE_URL"
@@ -770,13 +912,17 @@ def _render_inegi_routing_section(origen: dict[str, Any] | None, destino: dict[s
         st.error("No hay token configurado. Define INEGI_ROUTING_TOKEN o ingresalo en el campo anterior.")
         return
 
-    cols = st.columns(2)
+    cols = st.columns(3)
     cols[0].markdown(f"**Origen seleccionado:** {origen.get('description', 'Sin descripcion')}")
     cols[1].markdown(f"**Destino seleccionado:** {destino.get('description', 'Sin descripcion')}")
+    cols[2].markdown(f"**Tipo de vehiculo (INEGI):** {vehicle_label} · código {vehicle_code}")
 
     accion = st.button("Calcular ruta (cuota INEGI)", use_container_width=True)
     if not accion:
         return
+
+    casetas: list[dict[str, Any]] = []
+    detail_warning: str | None = None
 
     try:
         with InegiRoutingClient(token=effective_token, base_url=INEGI_ROUTING_BASE_URL) as client:
@@ -787,8 +933,19 @@ def _render_inegi_routing_section(origen: dict[str, Any] | None, destino: dict[s
                 tipo="cuota",
                 dest_i=origin_id,
                 dest_f=dest_id,
-                vehicle=1,
+                vehicle=vehicle_code,
             )
+            try:
+                detail_segments = _route_detail_with_retry(
+                    client,
+                    tipo="cuota",
+                    dest_i=origin_id,
+                    dest_f=dest_id,
+                    vehicle=vehicle_code,
+                )
+                casetas = _extract_casetas(detail_segments)
+            except InegiRoutingError as detail_exc:
+                detail_warning = str(detail_exc)
     except InegiRoutingError as exc:
         st.error(f"INEGI no devolvio una ruta valida: {exc}")
         return
@@ -805,6 +962,14 @@ def _render_inegi_routing_section(origen: dict[str, Any] | None, destino: dict[s
     if summary.axes_cost:
         st.caption(f"Costo por ejes excedentes: ${summary.axes_cost:,.2f}")
 
+    if casetas:
+        st.markdown("**Casetas detectadas (INEGI)**")
+        st.table(pd.DataFrame(casetas))
+    elif detail_warning:
+        st.warning(f"No fue posible obtener el detalle de casetas: {detail_warning}")
+    else:
+        st.caption("INEGI no reportó casetas específicas para esta ruta.")
+
     st.caption(
         f"INEGI (cuota) | Origen: {origin_match.get('nombre', 'N/D')} | Destino: {dest_match.get('nombre', 'N/D')}"
     )
@@ -814,6 +979,7 @@ def _render_inegi_routing_section(origen: dict[str, Any] | None, destino: dict[s
                 "origen_match": origin_match,
                 "destino_match": dest_match,
                 "route": summary.raw,
+                "casetas": casetas,
             }
         )
 # ===============================
@@ -832,6 +998,21 @@ with st.container():
 
 clases = ["MOTO", "AUTOMOVIL", "B2", "B3", "B4", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9"]
 default_idx = clases.index("T5")
+INEGI_VEHICLE_CODES = {
+    "MOTO": 0,
+    "AUTOMOVIL": 1,
+    "B2": 2,
+    "B3": 3,
+    "B4": 4,
+    "T2": 5,
+    "T3": 6,
+    "T4": 7,
+    "T5": 8,
+    "T6": 9,
+    "T7": 10,
+    "T8": 11,
+    "T9": 12,
+}
 
 trab_df = read_trabajadores(conn)
 trab_opc = ["(Sin conductor)"] + [f"{r['nombre_completo']}  {r['numero_economico']}" for _, r in trab_df.iterrows()]
@@ -1086,7 +1267,9 @@ with st.container():
     current_show_stop = show_stop
 
 if SHOW_INEGI_SECTION:
-    _render_inegi_routing_section(origen, destino)
+    selected_clase = clase or st.session_state.get("top_clase") or "AUTOMOVIL"
+    vehicle_code = _inegi_vehicle_code(selected_clase)
+    _render_inegi_routing_section(origen, destino, vehicle_code, selected_clase)
 
 total_banner = st.container()
 
@@ -1127,9 +1310,28 @@ def compute_route_data():
 
     if match:
         ruta_nombre, secuencia = match
+        st.session_state.pop("inegi_fallback_meta", None)
     else:
+        fallback_result, fallback_error = _try_inegi_autofill(origen, destino, clase)
+        if fallback_result:
+            summary = fallback_result.summary
+            ruta_nombre = fallback_result.route_name
+            df = fallback_result.df
+            st.session_state["gmaps_route"] = summary
+            st.session_state["maps_distance_km"] = float(summary.distance_m or 0.0) / 1000.0
+            st.session_state["maps_polyline_points"] = summary.polyline_points or []
+            st.session_state["maps_route_summary"] = ruta_nombre
+            st.session_state["detected_plazas"] = (
+                fallback_result.df["plaza"].tolist() if not fallback_result.df.empty else []
+            )
+            st.session_state["inegi_fallback_meta"] = fallback_result.metadata
+            st.info("Ruta fuera del catalogo; se usaron distancias y casetas de INEGI (cuota).")
+            return summary, ruta_nombre, df, None
         ruta_nombre = summary.summary or "Ruta Google Maps (sin coincidencia en catalogo)"
         secuencia = []
+        st.session_state.pop("inegi_fallback_meta", None)
+        if fallback_error:
+            st.warning(f"No se pudo obtener la ruta desde INEGI: {fallback_error}")
 
     rows = [
         {"idx": i, "plaza": plaza, "tarifa": tarifa_por_plaza(conn, plaza, clase)}

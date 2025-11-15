@@ -251,6 +251,38 @@ class InegiRoutingClient:
             route_type=endpoint,
         )
 
+    def route_detail_destinos(
+        self,
+        *,
+        tipo: str,
+        dest_i: int,
+        dest_f: int,
+        vehicle: int = 1,
+        axes: int = 0,
+        projection: str = "GRS80",
+        output: str = "json",
+    ) -> List[Dict[str, Any]]:
+        tipo = (tipo or "cuota").strip().lower()
+        endpoint_map = {"cuota": "detalle_c", "libre": "detalle_l", "optima": "detalle_o"}
+        endpoint = endpoint_map.get(tipo)
+        if not endpoint:
+            raise InegiRoutingError("Tipo de ruta no soportado para detalle.")
+
+        payload = {
+            "dest_i": int(dest_i),
+            "dest_f": int(dest_f),
+            "v": int(vehicle),
+            "e": int(max(axes, 0)),
+            "proj": projection,
+            "type": output,
+            "key": self.token,
+        }
+        data = self._post(endpoint, payload)
+        segments = data.get("data")
+        if isinstance(segments, list):
+            return segments
+        return []
+
     def close(self) -> None:
         self.session.close()
 
